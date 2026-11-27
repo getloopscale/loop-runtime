@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -9,7 +9,7 @@ import "testing"
 // transition chain. Phase 3 helper: collapses 5 near-clone tests (HappyPath,
 // FailureAndRetry, CNAMELost/Recovered, ProvisionTimeout) into a single
 // table-driven test that allows arbitrary starting state. Domain machine
-// is unique among LoopZero state machines because flows begin at multiple
+// is unique among LoopRuntime state machines because flows begin at multiple
 // states (PendingVerification for v1 flow, PendingNS for v2 CF Zone flow,
 // Provisioning for retry tests, Active for CNAME-lost tests).
 func TestDomainMachine_TransitionSequences(t *testing.T) {
@@ -60,6 +60,19 @@ func TestDomainMachine_TransitionSequences(t *testing.T) {
 			name:  "ProvisionTimeout",
 			from:  DomainProvisioning,
 			steps: []step{{DomainProvisionTimeout, DomainFailed}},
+		},
+		{
+			name:  "AppRemoved_WhileActive",
+			from:  DomainActive,
+			steps: []step{{DomainAppRemoved, DomainFailed}},
+		},
+		{
+			name: "AppRemoved_DuringGrace",
+			from: DomainActive,
+			steps: []step{
+				{DomainDegrade, DomainDegraded},
+				{DomainAppRemoved, DomainFailed},
+			},
 		},
 	}
 	for _, c := range cases {

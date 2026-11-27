@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -46,13 +46,6 @@ var _ = Describe("J-22 Secrets CRUD", Label("live", "dogfood", "j22"), func() {
 		})
 	})
 
-	Context("Scenario B — create → ESO sync → K8s Secret materialized", func() {
-		It("create secret round-trips through OpenBao transit + ESO to a K8s Secret", func() {
-			// The full chain (Dashboard → BFF → Engine → PG vault:v1: → ESO →
-			// broker → transit decrypt → K8s Secret) is the LIVE zero-leak proof;
-			// it mutates cluster state + needs KubectlGetJSON on the tenant ns.
-			// Deferred to a T3.2 follow-up commit (see dev-public-secrets-zero-leak_test.sh).
-			Skip("secret create/sync spec — implementation in T3.2 follow-up commit")
-		})
-	})
+	// A secret created through the API and read by the app's process is step 2 of the
+	// app lifecycle journey (journey_app_lifecycle_live_test.go).
 })

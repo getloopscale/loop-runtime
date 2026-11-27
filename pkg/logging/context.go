@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package logging
 
@@ -7,7 +7,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
 )
 
 // TraceExtractor extracts trace_id and span_id from a context.

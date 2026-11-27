@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -17,13 +17,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtest"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- test doubles ---
@@ -74,7 +74,7 @@ func TestEnforceProjectCapTx_BlocksWhenAtCap(t *testing.T) {
 	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-1", "starter", 1)
 
 	// Assert: typed PROJECTS_EXCEED_PLAN + metric incremented by exactly 1.
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("expected PROJECTS_EXCEED_PLAN, got %v", err)
 	}
@@ -105,7 +105,7 @@ func TestEnforceProjectCapTx_CapZeroFailsClosed(t *testing.T) {
 
 	err := enforceProjectCapTx(context.Background(), fake, nil, "acct-3", "starter", 0)
 
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("cap=0 must fail closed with PROJECTS_EXCEED_PLAN, got %v", err)
 	}

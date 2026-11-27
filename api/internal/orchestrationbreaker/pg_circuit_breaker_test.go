@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package orchestrationbreaker
 
@@ -12,8 +12,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Test doubles ---
@@ -84,7 +84,7 @@ func TestPGCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 
 	// 4th should be rejected
 	err := cb.TriggerSync(context.Background(), "app-1")
-	if err != loopzeroerrors.ErrPlatformDegraded {
+	if err != loopruntimeerrors.ErrPlatformDegraded {
 		t.Errorf("expected ErrPlatformDegraded, got %v", err)
 	}
 	if inner.triggered != 3 {
@@ -93,7 +93,7 @@ func TestPGCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 }
 
 func TestPGCircuitBreaker_AuthFailure_NotCounted(t *testing.T) {
-	inner := &fakeSyncClientCB{triggerErr: loopzeroerrors.ErrDeployServiceAuthFailed}
+	inner := &fakeSyncClientCB{triggerErr: loopruntimeerrors.ErrDeployServiceAuthFailed}
 	cb := NewCircuitBreakerSyncClient(inner, CircuitBreakerConfig{
 		OpenThreshold:  2,
 		CloseThreshold: 1,
@@ -114,7 +114,7 @@ func TestPGCircuitBreaker_AuthFailure_NotCounted(t *testing.T) {
 }
 
 func TestPGCircuitBreaker_SyncOperationInProgress_NotCounted(t *testing.T) {
-	inner := &fakeSyncClientCB{triggerErr: loopzeroerrors.ErrSyncOperationInProgress}
+	inner := &fakeSyncClientCB{triggerErr: loopruntimeerrors.ErrSyncOperationInProgress}
 	cb := NewCircuitBreakerSyncClient(inner, CircuitBreakerConfig{
 		OpenThreshold:  2,
 		CloseThreshold: 1,
@@ -147,7 +147,7 @@ func TestPGCircuitBreaker_WaitForSync_Protected(t *testing.T) {
 
 	// Should be rejected
 	err := cb.WaitForSync(context.Background(), "app-1", time.Second, nil)
-	if err != loopzeroerrors.ErrPlatformDegraded {
+	if err != loopruntimeerrors.ErrPlatformDegraded {
 		t.Errorf("expected ErrPlatformDegraded, got %v", err)
 	}
 }
@@ -194,7 +194,7 @@ func TestPGCircuitBreaker_HalfOpen_RecoveryFails_ReopensCircuit(t *testing.T) {
 
 	// Circuit should be back to open
 	err := cb.TriggerSync(context.Background(), "app-1")
-	if err != loopzeroerrors.ErrPlatformDegraded {
+	if err != loopruntimeerrors.ErrPlatformDegraded {
 		t.Errorf("expected ErrPlatformDegraded after failed recovery, got %v", err)
 	}
 }

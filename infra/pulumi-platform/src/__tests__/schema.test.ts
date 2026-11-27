@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
-// Schema + structure tests for loopzero-platform. Audit gap M05 #9
+// Schema + structure tests for loop-runtime-platform. Audit gap M05 #9
 // (active-execution-plan §6.E.2): pulumi-platform shipped 4434 LOC with
 // zero .test.ts. These tests lock the public surface so refactors that
 // drop required fields, rename service classes, or break the index
@@ -131,7 +131,7 @@ describe("refs.ts — StackReference fail-fast", () => {
   const src = fs.readFileSync(path.join(SRC_DIR, "refs.ts"), "utf-8");
 
   it("uses requireOutput() for all infra-side fields", () => {
-    // Audit-critical: requireOutput() panics if loopzero-infra didn't export the
+    // Audit-critical: requireOutput() panics if loop-runtime-infra didn't export the
     // field. getOutput() returns undefined silently. The platform stack MUST
     // fail-fast on missing infra outputs.
     expect(src).not.toMatch(/\.getOutput\(/);
@@ -139,7 +139,7 @@ describe("refs.ts — StackReference fail-fast", () => {
   });
 
   it("permits infraStackRef override via config", () => {
-    // refs.ts:19 — `cfg.get("infraStackRef") ?? \`organization/loopzero-infra/${pulumi.getStack()}\``.
+    // refs.ts:19 — `cfg.get("infraStackRef") ?? \`organization/loop-runtime-infra/${pulumi.getStack()}\``.
     // Allows per-developer stacks (e.g. paulo-dev) to reference a non-canonical infra stack.
     expect(src).toContain('cfg.get("infraStackRef")');
   });
@@ -169,18 +169,18 @@ describe("Pulumi.dev.yaml — dev stack baseline", () => {
   const doc = yaml.load(raw) as { config: Record<string, unknown> };
 
   it("declares the 4 required environment/domain keys", () => {
-    expect(doc.config["loopzero-platform:environment"]).toBe("dev");
-    expect(doc.config["loopzero-platform:domain"]).toBeDefined();
-    expect(doc.config["loopzero-platform:region"]).toBeDefined();
-    expect(doc.config["loopzero-platform:dnsZone"]).toBeDefined();
+    expect(doc.config["loop-runtime-platform:environment"]).toBe("dev");
+    expect(doc.config["loop-runtime-platform:domain"]).toBeDefined();
+    expect(doc.config["loop-runtime-platform:region"]).toBeDefined();
+    expect(doc.config["loop-runtime-platform:dnsZone"]).toBeDefined();
   });
 
   it("declares Cloudflare account+zone IDs (CF Worker delivery)", () => {
-    expect(doc.config["loopzero-platform:cfAccountId"]).toBeDefined();
-    expect(doc.config["loopzero-platform:cfZoneId"]).toBeDefined();
+    expect(doc.config["loop-runtime-platform:cfAccountId"]).toBeDefined();
+    expect(doc.config["loop-runtime-platform:cfZoneId"]).toBeDefined();
   });
 
   it("declares the cross-cluster Loki push URL", () => {
-    expect(doc.config["loopzero-platform:lokiPushUrl"]).toBeDefined();
+    expect(doc.config["loop-runtime-platform:lokiPushUrl"]).toBeDefined();
   });
 });

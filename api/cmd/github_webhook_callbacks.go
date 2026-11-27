@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -9,12 +9,12 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/github"
-	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/preview"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	ghwebhook "github.com/getloopscale/loop-runtime/api/internal/github/webhook"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/preview"
 )
 
 // linkedRepoLookup finds the project a GitHub repository is linked to.
@@ -79,8 +79,9 @@ func newPushHandler(shutdownCtx context.Context, repos linkedRepoLookup, deploye
 		}
 		go func() {
 			// Cancelled on server shutdown; bounded so a slow GitHub/S3 call
-			// cannot hang forever.
-			deployCtx, cancel := context.WithTimeout(shutdownCtx, 5*time.Minute)
+			// cannot hang forever. The bound covers the 20 minutes a push may
+			// wait for an environment that is deploying.
+			deployCtx, cancel := context.WithTimeout(shutdownCtx, 25*time.Minute)
 			defer cancel()
 			if err := deployer.HandlePush(deployCtx, github.PushRequest{
 				RepoFullName: event.Repository.FullName, Branch: event.Branch(), CommitSHA: event.After,

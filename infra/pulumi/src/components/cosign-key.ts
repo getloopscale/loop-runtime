@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 
@@ -46,7 +46,7 @@ export interface CosignKeyArgs {
   readonly secretName?: string;
 
   /**
-   * ESO SecretStore reference name. Defaults to "loopzero-pulumi-secrets"
+   * ESO SecretStore reference name. Defaults to "loop-runtime-pulumi-secrets"
    * (the canonical SecretStore that points to Pulumi state as backend).
    */
   readonly secretStoreName?: string;
@@ -123,7 +123,7 @@ export function createCosignKey(args: CosignKeyArgs): CosignKeyOutputs {
   const cfg = new pulumi.Config();
   const ns = args.namespace ?? "argo";
   const secretName = args.secretName ?? "cosign-signing-key";
-  const storeName = args.secretStoreName ?? "loopzero-pulumi-secrets";
+  const storeName = args.secretStoreName ?? "loop-runtime-pulumi-secrets";
   const refreshInterval = args.refreshInterval ?? "5m";
 
   // Read from encrypted config. `requireSecret` throws if missing —
@@ -160,7 +160,7 @@ export function createCosignKey(args: CosignKeyArgs): CosignKeyOutputs {
   // for in-Pulumi keygen (Sprint 9+), this becomes a real
   // ComponentResource.
   const urn = pulumi.output(
-    `urn:pulumi:${args.stackName}::loopzero-infra::custom:CosignKey::cosign-signing-key`,
+    `urn:pulumi:${args.stackName}::loop-runtime-infra::custom:CosignKey::cosign-signing-key`,
   );
 
   return {
@@ -205,9 +205,9 @@ metadata:
   name: ${input.secretName}
   namespace: ${input.namespace}
   annotations:
-    loopzero.io/component: cosign-key
-    loopzero.io/stack: ${input.stackName}
-    loopzero.io/generation-marker: ${input.generationMarker}
+    runtime.getloopscale.com/component: cosign-key
+    runtime.getloopscale.com/stack: ${input.stackName}
+    runtime.getloopscale.com/generation-marker: ${input.generationMarker}
 spec:
   refreshInterval: ${input.refreshInterval}
   secretStoreRef:

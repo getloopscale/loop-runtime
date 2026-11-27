@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package conditions
 
 // Standard condition types for the kstatus universal summary.
-// Every LoopZero CRD that adopts the summary pattern exposes these three
+// Every LoopRuntime CRD that adopts the summary pattern exposes these three
 // in its status.conditions, computed by SetReadinessSummary from the
 // per-step detail conditions.
 //

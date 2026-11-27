@@ -1,20 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -25,6 +28,8 @@ import (
 type DomainProvisionerStore interface {
 	FindAndClaimVerified(ctx context.Context) ([]ports.CustomDomain, error)
 	FindRemoving(ctx context.Context) ([]ports.CustomDomain, error)
+	// FindStaleProvisioning returns the domains in provisioning for longer than maxAge.
+	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
 	ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error)
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	UpdateCFZoneStatus(ctx context.Context, domain, cfZoneStatus string) error
@@ -41,6 +46,24 @@ type CFZoneStatusChecker interface {
 	GetZoneStatus(ctx context.Context, zoneID string) (string, error)
 	TriggerActivationCheck(ctx context.Context, zoneID string) error
 	DeleteZone(ctx context.Context, zoneID string) error
+}
+
+// errAppNotDeployed: the running release does not have the app the domain
+// points to.
+var errAppNotDeployed = errors.New("the domain's app is not part of the running release")
+
+// errReleaseInFlight: a deploy wrote, or is about to write, the manifest of a
+// release that is not the active one yet. The provisioner renders the active
+// release, so a push now would put the previous build back.
+var errReleaseInFlight = errors.New("a release of the environment is being delivered")
+
+// errPushFailed: the GitOps repository refused the push. The domain keeps its
+// status and the next cycle pushes again.
+var errPushFailed = errors.New("gitops push failed")
+
+// LatestReleases lists the releases of an environment, newest first.
+type LatestReleases interface {
+	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]db.Release, error)
 }
 
 // DomainReleaseReader fetches the active release for an environment.
@@ -74,6 +97,103 @@ type DomainProvisioner struct {
 	leanResources  bool   // Config.LeanResources (T-08)
 	interval       time.Duration
 	cfZone         CFZoneStatusChecker // nil = v1 only, non-nil = v2 CF Zone polling
+	savedScaling   SavedScaling        // nil = render the build's scaling
+	sync           SyncTrigger         // nil = push only; nothing reaches the cell until the next sync
+	latest         LatestReleases      // nil = a release being delivered is not looked for
+}
+
+// SyncTrigger starts the Argo CD sync of an Application.
+type SyncTrigger interface {
+	TriggerSync(ctx context.Context, appName string) error
+}
+
+// WithSync makes the provisioner sync the environment after each push. The
+// Application of an environment has no automated sync, so a push alone leaves
+// the cell as it was: the host a domain adds gets no route and no certificate,
+// and the one it removes keeps both.
+func (p *DomainProvisioner) WithSync(s SyncTrigger) *DomainProvisioner {
+	p.sync = s
+	return p
+}
+
+// WithLatestReleases makes the provisioner wait while a release of the domain's
+// environment is being delivered, which GetActiveByEnv cannot tell.
+func (p *DomainProvisioner) WithLatestReleases(r LatestReleases) *DomainProvisioner {
+	p.latest = r
+	return p
+}
+
+// releaseInFlight reports whether the newest release of the domain's
+// environment is between its creation and its activation. Call it under the
+// environment lock: a deploy creates its release under the same lock.
+func (p *DomainProvisioner) releaseInFlight(ctx context.Context, d ports.CustomDomain) (bool, error) {
+	if p.latest == nil {
+		return false, nil
+	}
+	newest, err := p.latest.ListByEnv(ctx, d.TenantID, d.ProjectName, d.Environment, 1)
+	if err != nil {
+		return false, fmt.Errorf("newest release lookup failed: %w", err)
+	}
+	if len(newest) == 0 {
+		return false, nil
+	}
+	status := statemachine.State(newest[0].Status)
+	return status == statemachine.ReleaseReady || status == statemachine.ReleasePending, nil
+}
+
+// pushUnderLock pushes the manifests a render under the environment lock
+// produced, before that lock is released. A deploy creates its release under
+// the same lock and pushes after it: pushed here, the provisioner's manifest
+// cannot land after the deploy's and replace it.
+func (p *DomainProvisioner) pushUnderLock(ctx context.Context, opts deploycontracts.GitOpsPushOpts) error {
+	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	if _, err := p.gitops.Push(pushCtx, opts); err != nil {
+		return fmt.Errorf("%w: %w", errPushFailed, err)
+	}
+	return nil
+}
+
+// syncEnvironment starts the sync of the domain's environment.
+func (p *DomainProvisioner) syncEnvironment(ctx context.Context, d ports.CustomDomain) error {
+	if p.sync == nil {
+		return nil
+	}
+	appName, err := naming.ArgoAppName(d.TenantID, d.ProjectName, d.Environment)
+	if err != nil {
+		return fmt.Errorf("argocd application name: %w", err)
+	}
+	if err := p.sync.TriggerSync(ctx, appName); err != nil {
+		return fmt.Errorf("sync %s: %w", appName, err)
+	}
+	return nil
+}
+
+// SavedScaling overlays the saved scaling configuration of an environment on
+// the apps a build declared (scaling.StoredScaling).
+type SavedScaling interface {
+	Apply(ctx context.Context, tenantID, project, env string, apps []db.BuildAppSpec) ([]db.BuildAppSpec, error)
+}
+
+// WithSavedScaling makes every render carry the saved scaling configuration.
+// The provisioner renders the running release again to add or remove a host;
+// with the build's apps alone it would write the build's replica count to the
+// GitOps repository and undo a scale made since the deploy.
+func (p *DomainProvisioner) WithSavedScaling(s SavedScaling) *DomainProvisioner {
+	p.savedScaling = s
+	return p
+}
+
+// withSavedScaling returns apps with the saved scaling configuration applied.
+func (p *DomainProvisioner) withSavedScaling(ctx context.Context, d ports.CustomDomain, apps []db.BuildAppSpec) ([]db.BuildAppSpec, error) {
+	if p.savedScaling == nil {
+		return apps, nil
+	}
+	scaled, err := p.savedScaling.Apply(ctx, d.TenantID, d.ProjectName, d.Environment, apps)
+	if err != nil {
+		return nil, fmt.Errorf("saved scaling lookup failed: %w", err)
+	}
+	return scaled, nil
 }
 
 // DomainProvisionerConfig holds configuration for the domain provisioner.
@@ -146,7 +266,8 @@ func (p *DomainProvisioner) Start(ctx context.Context) {
 			p.logger.Info("domain provisioner stopped")
 			return
 		case <-ticker.C:
-			p.processVerified(ctx)  // v1: TXT-verified → provisioning
+			p.processVerified(ctx) // v1: TXT-verified → provisioning
+			p.processProvisioning(ctx)
 			p.processPendingNS(ctx) // v2: check CF zone activation
 			p.processNSActive(ctx)  // v2: ns_active → provisioning (same as verified)
 			p.processRemoving(ctx)
@@ -157,6 +278,7 @@ func (p *DomainProvisioner) Start(ctx context.Context) {
 // ProcessOnce runs a single provisioning + removal cycle. Exported for testing (T-01 fix).
 func (p *DomainProvisioner) ProcessOnce(ctx context.Context) {
 	p.processVerified(ctx)
+	p.processProvisioning(ctx)
 	p.processPendingNS(ctx)
 	p.processNSActive(ctx)
 	p.processRemoving(ctx)
@@ -289,14 +411,32 @@ func (p *DomainProvisioner) processVerified(ctx context.Context) {
 	}
 }
 
+// processProvisioning provisions again the domains a previous cycle left in
+// provisioning: its push or its sync did not go through (Argo CD refuses a sync
+// while another runs), or a deploy was in progress. Older than one interval, so
+// a domain claimed in this cycle is not taken twice.
+func (p *DomainProvisioner) processProvisioning(ctx context.Context) {
+	domains, err := p.store.FindStaleProvisioning(ctx, p.interval)
+	if err != nil {
+		p.logger.Error("domain provisioner: find provisioning failed", "error", err)
+		return
+	}
+	for _, d := range domains {
+		if ctx.Err() != nil {
+			return
+		}
+		p.provisionDomain(ctx, d)
+	}
+}
+
 // provisionDomain renders manifests with the custom domain and pushes to gitops.
 // F-002 fix: Lock (fetch + render) → Unlock → Push → Update status.
 // Pattern matches deploy flow in ContainerDeliveryActivator.
 func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomDomain) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.ports.provision",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.ports.provision",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", d.TenantID),
-			attribute.String("loopzero.domain", d.Domain),
+			attribute.String("loop-runtime.tenant", d.TenantID),
+			attribute.String("loop-runtime.domain", d.Domain),
 		))
 	defer span.End()
 
@@ -320,6 +460,11 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
 		// HIGH-04 fix: re-read release inside lock to prevent using a superseded release
+		if inFlight, err := p.releaseInFlight(ctx, d); err != nil {
+			return fmt.Errorf("%w: %w", errReleaseInFlight, err)
+		} else if inFlight {
+			return errReleaseInFlight
+		}
 		release, err := p.releaseStore.GetActiveByEnv(ctx, d.TenantID, d.ProjectName, d.Environment)
 		if err != nil || release == nil {
 			return fmt.Errorf("no active release inside lock")
@@ -333,6 +478,14 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 		apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
 		if err != nil {
 			return fmt.Errorf("build apps lookup failed: %w", err)
+		}
+		// A release without the domain's app renders no route for the domain.
+		// Marking it active then would leave the host answering 404.
+		if !slices.ContainsFunc(apps, func(a db.BuildAppSpec) bool { return a.Name == d.AppName }) {
+			return errAppNotDeployed
+		}
+		if apps, err = p.withSavedScaling(ctx, d, apps); err != nil {
+			return err
 		}
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — the manifest builder now requires a
@@ -392,9 +545,19 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 			CorrelationID: d.ID,
 		}
 
-		return nil
+		return p.pushUnderLock(ctx, pushOpts)
 	})
 
+	if errors.Is(lockErr, errReleaseInFlight) {
+		log.Info("domain provisioner: not pushing over a release in delivery, provisioning after it", "reason", lockErr)
+		return // stay in provisioning: processProvisioning takes it again
+	}
+	if errors.Is(lockErr, errPushFailed) {
+		// F-007 fix: on gitops error, stay in provisioning (retry next cycle or next deploy).
+		log.Warn("domain provisioner: gitops push failed, will retry", "error", lockErr)
+		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
+		return
+	}
 	if lockErr != nil {
 		log.Error("domain provisioner: lock/render failed", "error", lockErr)
 		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
@@ -403,21 +566,21 @@ func (p *DomainProvisioner) provisionDomain(ctx context.Context, d ports.CustomD
 			log.Error("domain provisioner: failure transition not in the domain machine", "error", smErr)
 			return
 		}
-		if err2 := p.store.UpdateFailure(ctx, d.Domain, failed, fmt.Sprintf("Provisioning failed: %v", lockErr)); err2 != nil {
+		reason := fmt.Sprintf("Provisioning failed: %v", lockErr)
+		if errors.Is(lockErr, errAppNotDeployed) {
+			reason = appNotDeployedReason(d.AppName, d.Environment)
+		}
+		if err2 := p.store.UpdateFailure(ctx, d.Domain, failed, reason); err2 != nil {
 			log.Error("domain provisioner: failed to record failure", "error", err2)
 		}
 		return
 	}
 
-	// Phase B: Push to gitops (OUTSIDE lock — avoid holding lock during network I/O).
-	// F-007 fix: on gitops error, stay in provisioning (retry next tick or next deploy).
-	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
-		log.Warn("domain provisioner: gitops push failed, will retry", "error", err)
+	// Phase B: sync. The host is in the GitOps repository and not on the cell yet.
+	if err := p.syncEnvironment(ctx, d); err != nil {
+		log.Warn("domain provisioner: sync after push failed, will retry", "error", err)
 		metrics.DomainProvisioningDuration.WithLabelValues("failure").Observe(time.Since(start).Seconds())
-		return // stay in provisioning — F-006 timeout handles permanent failures
+		return // stay in provisioning: processProvisioning takes it again
 	}
 
 	// Phase C: CAS transition provisioning → active (HIGH-05 fix).
@@ -452,10 +615,10 @@ func (p *DomainProvisioner) processRemoving(ctx context.Context) {
 // removeDomain re-renders manifests WITHOUT the removed domain, pushes to gitops,
 // then deletes the DB row. F-002 fix: uses withEnvironmentLock for render phase.
 func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDomain) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.ports.remove",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.ports.remove",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", d.TenantID),
-			attribute.String("loopzero.domain", d.Domain),
+			attribute.String("loop-runtime.tenant", d.TenantID),
+			attribute.String("loop-runtime.domain", d.Domain),
 		))
 	defer span.End()
 
@@ -479,6 +642,16 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 	var pushOpts deploycontracts.GitOpsPushOpts
 
 	lockErr := p.locker.WithLock(ctx, d.TenantID, d.ProjectName, d.Environment, func(tx db.DBTX) error {
+		if inFlight, err := p.releaseInFlight(ctx, d); err != nil {
+			return fmt.Errorf("%w: %w", errReleaseInFlight, err)
+		} else if inFlight {
+			return errReleaseInFlight
+		}
+		// Read again under the lock: the release read before it may be superseded.
+		release, err := p.releaseStore.GetActiveByEnv(ctx, d.TenantID, d.ProjectName, d.Environment)
+		if err != nil || release == nil {
+			return fmt.Errorf("no active release inside lock")
+		}
 		build, err := p.buildStore.GetByID(ctx, release.BuildID)
 		if err != nil || build == nil {
 			return fmt.Errorf("build lookup failed: %w", err)
@@ -487,6 +660,9 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 		apps, err := p.buildStore.GetBuildApps(ctx, release.BuildID)
 		if err != nil {
 			return fmt.Errorf("build apps lookup failed: %w", err)
+		}
+		if apps, err = p.withSavedScaling(ctx, d, apps); err != nil {
+			return err
 		}
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — the manifest builder now requires a
@@ -542,20 +718,24 @@ func (p *DomainProvisioner) removeDomain(ctx context.Context, d ports.CustomDoma
 			ReleaseID:     release.ID,
 			CorrelationID: d.ID,
 		}
-		return nil
+		return p.pushUnderLock(ctx, pushOpts)
 	})
 
+	if errors.Is(lockErr, errReleaseInFlight) {
+		// The release being delivered was rendered without this host.
+		log.Info("domain provisioner: not pushing over a release in delivery, removing after it", "reason", lockErr)
+		return // stay in removing, retry next tick
+	}
+	if errors.Is(lockErr, errPushFailed) {
+		log.Warn("domain provisioner: gitops push failed on remove, will retry", "error", lockErr)
+		return // stay in removing, retry next tick
+	}
 	if lockErr != nil {
 		log.Error("domain provisioner: lock/render failed on remove", "error", lockErr)
 		return // stay in removing, retry next tick
 	}
-
-	// Phase B: Push to gitops (outside lock).
-	pushCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	defer cancel()
-
-	if _, err := p.gitops.Push(pushCtx, pushOpts); err != nil {
-		log.Warn("domain provisioner: gitops push failed on remove, will retry", "error", err)
+	if err := p.syncEnvironment(ctx, d); err != nil {
+		log.Warn("domain provisioner: sync after push failed on remove, will retry", "error", err)
 		return // stay in removing, retry next tick
 	}
 

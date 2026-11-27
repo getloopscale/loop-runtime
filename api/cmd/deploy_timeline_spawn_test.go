@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -46,6 +46,10 @@ func TestEventTypeToCanonicalTransitions_FailureSurfaces(t *testing.T) {
 	}{
 		{"build.failed", []string{"BUILD_FAILED"}},
 		{"build.cancelled", []string{"BUILD_CANCELLED"}},
+		// A sync that fails ends the deploy phase. The release may fail before
+		// the deploy phase was announced, so the phase is opened first; a
+		// state already emitted is not emitted again.
+		{"deploy.sync_failed", []string{"ACTIVE", "DEPLOY_IN_PROGRESS", "DEPLOY_FAILED"}},
 	}
 	for _, tc := range cases {
 		got := eventTypeToCanonicalTransitions(tc.event)
@@ -65,5 +69,19 @@ func TestEventTypeToCanonicalTransitions_UnknownEvent(t *testing.T) {
 	}
 	if got := eventTypeToCanonicalTransitions(""); got != nil {
 		t.Errorf("empty: got %v; want nil", got)
+	}
+}
+
+// The reason of a failed sync is what the page shows under the failed phase.
+func TestTimelineFailureReason_ReadsTheReasonOfAFailedSync(t *testing.T) {
+	data := []byte(`{"reason": "Sync timeout: service did not become healthy within the time limit", "status": "failed"}`)
+	if got := timelineFailureReason("DEPLOY_FAILED", data); got != "Sync timeout: service did not become healthy within the time limit" {
+		t.Errorf("reason = %q", got)
+	}
+	if got := timelineFailureReason("DEPLOY_IN_PROGRESS", data); got != "" {
+		t.Errorf("a state that is not a failure carries reason %q", got)
+	}
+	if got := timelineFailureReason("DEPLOY_FAILED", []byte(`not json`)); got != "" {
+		t.Errorf("unreadable data gave reason %q", got)
 	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // setup_stores_test.go — T2.5 unit tests of plan
 // 2026-06-10-j22-openbao-transit-eso-sync v1.2. Validates that
@@ -24,11 +24,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/pkg/vault"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/pkg/vault"
 )
 
 // compile-time guarantee: fakeTransit satisfies the same vault.Transit
@@ -72,7 +72,7 @@ func TestSetupSecretStore_NilTransitFallsBackToLegacyAES(t *testing.T) {
 	}
 	// Without transit the store has no write path (T10.3): a write is refused
 	// as an unavailable secrets backend before any database is touched.
-	if _, err := got.Set(context.Background(), "tn-1", "web", "production", "api", "DB_URL", []byte("v")); !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+	if _, err := got.Set(context.Background(), "tn-1", "web", "production", "api", "DB_URL", []byte("v")); !errors.Is(err, loopruntimeerrors.ErrSecretsBackendUnavailable) {
 		t.Fatalf("a store without transit must refuse writes, got %v", err)
 	}
 }

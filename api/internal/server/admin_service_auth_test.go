@@ -1,24 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
 import (
 	"context"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // Every /api/v1/admin/* route must pass through the ONE admin gate
 // (Authenticator.RequireAdminService). The cloud proxy attaches the legacy
-// LOOPZERO_SERVICE_AUTH_SECRET to every forwarded user-JWT request, so a route
+// LOOP_RUNTIME_SERVICE_AUTH_SECRET to every forwarded user-JWT request, so a route
 // that honours that secret lets any signed-in owner reach operator
-// primitives (loopzero-cloud#16). The assertion is made on the real router,
+// primitives (loop-console#16). The assertion is made on the real router,
 // because a handler test passes identically with the route mounted bare.
 
 type stubEvictor struct{}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package stepwatch
 
@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/events"
-	cloudmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	cloudmetrics "github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // ArgoNodePhase enumerates the Argo Workflow node phases we react to.
@@ -132,9 +132,9 @@ func (w *ArgoStepWatcher) Start(ctx context.Context) error {
 
 // buildIDPattern extracts the buildID from an Argo node name. Argo
 // names nodes after their parent workflow + a random suffix; the
-// workflow itself is named `loopzero-build-<buildID>-<random>`. We grep
+// workflow itself is named `loop-runtime-build-<buildID>-<random>`. We grep
 // for the canonical prefix.
-var buildIDPattern = regexp.MustCompile(`loopzero-build-(build-[a-f0-9]+)`)
+var buildIDPattern = regexp.MustCompile(`loop-runtime-build-(build-[a-f0-9]+)`)
 
 func extractBuildID(workflowName string) string {
 	m := buildIDPattern.FindStringSubmatch(workflowName)
@@ -288,16 +288,16 @@ func (w *ArgoStepWatcher) peekPhase(buildID, nodeName string) ArgoNodePhase {
 func (w *ArgoStepWatcher) ReportWatchError(statusCode int, message string) {
 	switch statusCode {
 	case 401, 403:
-		// CORRECTED 2026-08-18 (B-140): this message said "rotate loopzero-build-sa token", and
-		// the runbook it cites FORBIDS that — `loopzero-build-sa` is the workflow EXECUTOR, bound
+		// CORRECTED 2026-08-18 (B-140): this message said "rotate loop-runtime-build-sa token", and
+		// the runbook it cites FORBIDS that — `loop-runtime-build-sa` is the workflow EXECUTOR, bound
 		// only to `workflowtaskresults: [create, patch]`. Its token authenticates (the 401
 		// goes away) and is forbidden to list workflows (403), so following the message
 		// traded a readable defect for a silent one. The SA that submits and watches is
-		// `loopzero-workflow-submitter`.
+		// `loop-runtime-workflow-submitter`.
 		//
 		// Found by following the runbook to fix this error live on the droplet, where it
 		// fired every 2s. The `runbook-parity` gate guards the parity from here on.
-		w.logger.Error("argo step watcher: build cluster auth failed — rotate loopzero-workflow-submitter token",
+		w.logger.Error("argo step watcher: build cluster auth failed — rotate loop-runtime-workflow-submitter token",
 			"status_code", statusCode,
 			"message", message,
 			"runbook", "docs/runbooks.md",
@@ -405,7 +405,7 @@ func truncate(s string, max int) string {
 }
 
 // BuildIDFromWorkflowName returns the build id encoded in an Argo Workflow
-// name (`loopzero-build-<buildID>-<random>`), or "" when the workflow is not a
+// name (`loop-runtime-build-<buildID>-<random>`), or "" when the workflow is not a
 // build. adapters.K8sWorkflowNodeSource uses it to tag node events.
 func BuildIDFromWorkflowName(workflowName string) string {
 	return extractBuildID(workflowName)

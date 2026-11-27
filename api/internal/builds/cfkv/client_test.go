@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package cfkv
 
@@ -31,11 +31,11 @@ func TestSubdomain(t *testing.T) {
 		},
 		{
 			name:    "names with hyphens",
-			tenant:  "tn-loopzero",
+			tenant:  "tn-loop-runtime",
 			project: "e2e-project",
 			app:     "web",
 			env:     "production",
-			want:    "tn-loopzero-e2e-project-web-production",
+			want:    "tn-loop-runtime-e2e-project-web-production",
 		},
 		{
 			name:    "truncated at 63 chars",
@@ -161,7 +161,7 @@ func TestClient_Put_Integration(t *testing.T) {
 func TestRoutingEntry_JSON(t *testing.T) {
 	entry := RoutingEntry{
 		BuildID:  "build-67c852259d9b3a9f",
-		S3Prefix: "/tn-loopzero/e2e-project/web/build-67c852259d9b3a9f",
+		S3Prefix: "/tn-loop-runtime/e2e-project/web/build-67c852259d9b3a9f",
 	}
 
 	data, err := json.Marshal(entry)
@@ -169,7 +169,7 @@ func TestRoutingEntry_JSON(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 
-	expected := `{"buildId":"build-67c852259d9b3a9f","s3Prefix":"/tn-loopzero/e2e-project/web/build-67c852259d9b3a9f"}`
+	expected := `{"buildId":"build-67c852259d9b3a9f","s3Prefix":"/tn-loop-runtime/e2e-project/web/build-67c852259d9b3a9f"}`
 	if string(data) != expected {
 		t.Errorf("JSON = %s, want %s", string(data), expected)
 	}

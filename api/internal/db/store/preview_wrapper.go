@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -33,15 +33,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/id"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/id"
 )
 
 // =========================================================================
@@ -118,7 +118,7 @@ func (s *PostgresPreviewStore) UpdateStatus(ctx context.Context, tx db.DBTX, pre
 		return fmt.Errorf("preview store: update status failed: %w", err)
 	}
 	if n == 0 {
-		return loopzeroerrors.ErrPreviewNotFound
+		return loopruntimeerrors.ErrPreviewNotFound
 	}
 	return nil
 }
@@ -147,7 +147,7 @@ func (s *PostgresPreviewStore) UpdateBuild(ctx context.Context, tx db.DBTX, prev
 		return fmt.Errorf("preview store: update build failed: %w", err)
 	}
 	if n == 0 {
-		return loopzeroerrors.ErrPreviewNotFound
+		return loopruntimeerrors.ErrPreviewNotFound
 	}
 	return nil
 }
@@ -165,7 +165,7 @@ func (s *PostgresPreviewStore) UpdateURL(ctx context.Context, tx db.DBTX, previe
 		return fmt.Errorf("preview store: update url failed: %w", err)
 	}
 	if n == 0 {
-		return loopzeroerrors.ErrPreviewNotFound
+		return loopruntimeerrors.ErrPreviewNotFound
 	}
 	return nil
 }
@@ -188,7 +188,7 @@ func (s *PostgresPreviewStore) RequestDeletion(ctx context.Context, tenantID, pr
 		return fmt.Errorf("preview store: request deletion failed: %w", err)
 	}
 	if n == 0 {
-		return loopzeroerrors.ErrPreviewNotFound
+		return loopruntimeerrors.ErrPreviewNotFound
 	}
 	return nil
 }
@@ -244,7 +244,7 @@ func (s *PostgresPreviewStore) GetByID(ctx context.Context, tenantID, previewID 
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrPreviewNotFound
+			return nil, loopruntimeerrors.ErrPreviewNotFound
 		}
 		return nil, fmt.Errorf("preview store: get by id failed: %w", err)
 	}
@@ -264,7 +264,7 @@ func (s *PostgresPreviewStore) GetByPR(ctx context.Context, tenantID, projectID 
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrPreviewNotFound
+			return nil, loopruntimeerrors.ErrPreviewNotFound
 		}
 		return nil, fmt.Errorf("preview store: get by PR failed: %w", err)
 	}

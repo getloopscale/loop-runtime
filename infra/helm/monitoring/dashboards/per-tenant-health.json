@@ -30,7 +30,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     }
   ],
   "panels": [
@@ -93,7 +93,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total{tenant=\"$tenant\"}[1h])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_deploys_total{tenant=\"$tenant\"}[1h])) or vector(0)",
           "legendFormat": "Deploys/s",
           "refId": "A"
         }
@@ -149,7 +149,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_lock_acquired_total{tenant=\"$tenant\"}[1h])) or vector(0)",
+          "expr": "sum(increase(loop_runtime_lock_acquired_total{tenant=\"$tenant\"}[1h])) or vector(0)",
           "legendFormat": "Acquisitions",
           "refId": "A"
         }
@@ -197,7 +197,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_deploys_total{tenant=\"$tenant\"}[24h])) or vector(0)",
+          "expr": "sum(increase(loop_runtime_deploys_total{tenant=\"$tenant\"}[24h])) or vector(0)",
           "legendFormat": "Deploys",
           "refId": "A"
         }
@@ -249,7 +249,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_gitops_operation_duration_seconds_bucket{tenant=\"$tenant\"}[1h])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket{tenant=\"$tenant\"}[1h])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -308,7 +308,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_deploys_total{tenant=\"$tenant\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_deploys_total{tenant=\"$tenant\"}[5m])) or vector(0)",
           "legendFormat": "Deploys/s",
           "refId": "A"
         }
@@ -352,12 +352,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_gitops_operation_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
           "legendFormat": "{{ environment }} p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_gitops_operation_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_gitops_operation_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
           "legendFormat": "{{ environment }} p95",
           "refId": "B"
         }
@@ -416,7 +416,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(increase(loopzero_deploys_total{tenant=\"$tenant\"}[5m])) by (status) or vector(0)",
+          "expr": "sum(increase(loop_runtime_deploys_total{tenant=\"$tenant\"}[5m])) by (status) or vector(0)",
           "legendFormat": "{{ status }}",
           "refId": "A"
         }
@@ -460,12 +460,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_build_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_build_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
           "legendFormat": "{{ environment }} p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le, environment))",
           "legendFormat": "{{ environment }} p95",
           "refId": "B"
         }
@@ -525,12 +525,12 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_lock_hold_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le)) or vector(0)",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_lock_hold_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket{tenant=\"$tenant\"}[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "B"
         }
@@ -574,7 +574,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_lock_acquired_total{tenant=\"$tenant\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_lock_acquired_total{tenant=\"$tenant\"}[5m])) or vector(0)",
           "legendFormat": "Acquired/s",
           "refId": "A"
         }
@@ -584,7 +584,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "tenant"
   ],
   "templating": {
@@ -609,13 +609,13 @@
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
-        "definition": "label_values(loopzero_deploys_total, tenant)",
+        "definition": "label_values(loop_runtime_deploys_total, tenant)",
         "hide": 0,
         "includeAll": false,
         "name": "tenant",
         "options": [],
         "query": {
-          "query": "label_values(loopzero_deploys_total, tenant)",
+          "query": "label_values(loop_runtime_deploys_total, tenant)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 2,
@@ -630,7 +630,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero — Per-Tenant Health",
-  "uid": "loopzero-per-tenant-health",
+  "title": "LoopRuntime — Per-Tenant Health",
+  "uid": "loop-runtime-per-tenant-health",
   "version": 1
 }

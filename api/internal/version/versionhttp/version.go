@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package versionhttp serves the build-metadata endpoints — `/api/v1/version`,
 // `/v1/version` and the fleet variant.
@@ -32,9 +32,9 @@ import (
 // Dockerfile (which gets the org wrong, not the path).
 //
 //	go build -ldflags "\
-//	  -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionTag=$(git describe --tags) \
-//	  -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionCommit=$(git rev-parse HEAD) \
-//	  -X github.com/getloopscale/loopzero/api/internal/version/versionhttp.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+//	  -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionTag=$(git describe --tags) \
+//	  -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionCommit=$(git rev-parse HEAD) \
+//	  -X github.com/getloopscale/loop-runtime/api/internal/version/versionhttp.versionBuildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 var (
 	versionTag       = "dev"
 	versionCommit    = "unknown"
@@ -53,7 +53,7 @@ type VersionResponse struct {
 // fleetVersionResponse is the schema the dashboard's status panel consumes.
 //
 // The field names are NOT ours to choose: they are the contract
-// loopzero-cloud/internal/serviceversions/probe.go already speaks with five services
+// loop-console/internal/serviceversions/probe.go already speaks with five services
 // (`version` + `built_at`). The engine was left off the panel for diverging from
 // it in both path AND field name.
 type fleetVersionResponse struct {

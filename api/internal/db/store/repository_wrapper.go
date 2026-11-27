@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -27,11 +27,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // generateRepoID produces a "repo-XXXX" identifier for new
@@ -71,6 +71,11 @@ func (s *PostgresRepositoryStore) GetInstallation(ctx context.Context, installat
 		}
 		return nil, fmt.Errorf("repository store: get installation: %w", err)
 	}
+	return installationFromRow(row), nil
+}
+
+// installationFromRow converts a github_installations row.
+func installationFromRow(row generated.GithubInstallation) *GitHubInstallation {
 	inst := &GitHubInstallation{
 		ID:           row.ID,
 		AccountLogin: row.AccountLogin,
@@ -78,8 +83,56 @@ func (s *PostgresRepositoryStore) GetInstallation(ctx context.Context, installat
 		TenantID:     row.TenantID,
 		CreatedAt:    row.CreatedAt.Time,
 		UpdatedAt:    row.UpdatedAt.Time,
+		VerifiedBy:   row.VerifiedBy,
 	}
-	return inst, nil
+	if row.VerifiedAt.Valid {
+		verifiedAt := row.VerifiedAt.Time
+		inst.VerifiedAt = &verifiedAt
+	}
+	return inst
+}
+
+// ClaimInstallation binds an installation to tenantID, recording that GitHub
+// confirmed userID can access it. It reports false, and writes nothing, when
+// the installation is bound to another tenant.
+func (s *PostgresRepositoryStore) ClaimInstallation(ctx context.Context, id int64, accountLogin, accountType, tenantID, userID string) (bool, error) {
+	if tenantID == "" || userID == "" {
+		return false, fmt.Errorf("repository store: claim installation %d: tenant and user are required", id)
+	}
+	gdb := db.Generated(s.DB)
+	q := generated.New()
+
+	_, err := q.ClaimGitHubInstallation(ctx, gdb, generated.ClaimGitHubInstallationParams{
+		ID:           id,
+		AccountLogin: accountLogin,
+		AccountType:  accountType,
+		TenantID:     &tenantID,
+		VerifiedBy:   &userID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("repository store: claim installation: %w", err)
+	}
+	return true, nil
+}
+
+// ListVerifiedInstallations returns the installations bound to tenantID with
+// the binding confirmed on GitHub, ordered by id.
+func (s *PostgresRepositoryStore) ListVerifiedInstallations(ctx context.Context, tenantID string) ([]GitHubInstallation, error) {
+	gdb := db.Generated(s.DB)
+	q := generated.New()
+
+	rows, err := q.ListVerifiedGitHubInstallationsByTenant(ctx, gdb, &tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("repository store: list verified installations: %w", err)
+	}
+	installations := make([]GitHubInstallation, 0, len(rows))
+	for _, row := range rows {
+		installations = append(installations, *installationFromRow(row))
+	}
+	return installations, nil
 }
 
 // DeleteInstallation removes an installation; FK cascade purges
@@ -94,8 +147,8 @@ func (s *PostgresRepositoryStore) DeleteInstallation(ctx context.Context, instal
 	return nil
 }
 
-// LinkRepository connects a LoopZero project to a GitHub repository.
-// Idempotent re-link per `loopzero connect` CLI contract.
+// LinkRepository connects a LoopRuntime project to a GitHub repository.
+// Idempotent re-link per `loop-runtime connect` CLI contract.
 //
 // Plan J-09 T3.2 (2026-06-05) — autoDeploy parameter (was hardcoded true
 // in the SQL). Caller passes the user's choice; default true at the route
@@ -154,7 +207,7 @@ func (s *PostgresRepositoryStore) GetByRepo(ctx context.Context, repoFullName st
 	return generatedProjectRepoToProjectRepo(row), nil
 }
 
-// GetByProject finds the repository linked to a LoopZero project
+// GetByProject finds the repository linked to a LoopRuntime project
 // (tenant-scoped API path). Returns (nil, nil) when not linked.
 func (s *PostgresRepositoryStore) GetByProject(ctx context.Context, tenantID, projectName string) (*ProjectRepository, error) {
 	gdb := db.Generated(s.DB)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -14,7 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // An unknown preview set must never feed the prune.
@@ -26,13 +26,13 @@ import (
 // transient API error. The reconcile must fail instead, and delete nothing.
 func TestReconcileArgoCDApp_FailsWithoutPruningWhenPreviewListFails(t *testing.T) {
 	sc := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(sc); err != nil {
+	if err := loopruntimev1.AddToScheme(sc); err != nil {
 		t.Fatalf("scheme: %v", err)
 	}
 	listErr := errors.New("apiserver timeout")
 	c := interceptor.NewClient(fake.NewClientBuilder().WithScheme(sc).Build(), interceptor.Funcs{
 		List: func(ctx context.Context, cl client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
-			if _, ok := list.(*loopzerov1.PreviewEnvironmentList); ok {
+			if _, ok := list.(*loopruntimev1.PreviewEnvironmentList); ok {
 				return listErr
 			}
 			return cl.List(ctx, list, opts...)
@@ -43,9 +43,9 @@ func TestReconcileArgoCDApp_FailsWithoutPruningWhenPreviewListFails(t *testing.T
 		"tn-acme-default-project-preview-pr-7",
 	}}
 	r := &TenantReconciler{Client: c, ArgoCDProvisioner: argo}
-	tenant := &loopzerov1.Tenant{
+	tenant := &loopruntimev1.Tenant{
 		ObjectMeta: metav1.ObjectMeta{Name: "tn-acme"},
-		Spec: loopzerov1.TenantSpec{Environments: []loopzerov1.TenantEnvironmentEntry{
+		Spec: loopruntimev1.TenantSpec{Environments: []loopruntimev1.TenantEnvironmentEntry{
 			{Name: "production", Cluster: "workload", Project: "default-project"},
 		}},
 	}

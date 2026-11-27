@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // notifyingProvider records OnAuthFailure calls, as the minting provider
@@ -58,7 +58,7 @@ func TestEveryMethodSignalsATokenRejection(t *testing.T) {
 			err := call(client)
 
 			// Assert
-			if !errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) {
+			if !errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed) {
 				t.Errorf("err = %v, want ErrDeployServiceAuthFailed", err)
 			}
 			if provider.failures == 0 {

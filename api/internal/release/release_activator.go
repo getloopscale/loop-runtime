@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package release is the release-activation bounded context (activate, converge, promote, rollback, reap). M9 Step 6.
 package release
@@ -14,14 +14,14 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/naming"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -69,6 +69,43 @@ func NotifyBuildFailed(ctx context.Context, tenantID, projectName, commitSHA, bu
 		cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 		defer cancel()
 		onBuildFailed(cbCtx, tenantID, projectName, commitSHA, buildID)
+	}()
+}
+
+// DeployFailure describes a deploy that ended without going live.
+type DeployFailure struct {
+	TenantID    string
+	ProjectName string
+	BuildID     string
+	// Reason is the sentence the user reads.
+	Reason string
+	// Superseded is true when a newer deploy of the same environment replaced
+	// this one before it converged. It did not fail on its own.
+	Superseded bool
+}
+
+// onDeployFailed is an optional callback invoked when a release that was
+// rolling out ends without becoming active. The GitHub status notifier uses
+// it: without it a push deploy that fails after its build leaves the commit
+// status pending for good.
+var onDeployFailed func(ctx context.Context, failure DeployFailure)
+
+// RegisterDeployFailedCallback sets the global callback for a failed deploy.
+func RegisterDeployFailedCallback(fn func(ctx context.Context, failure DeployFailure)) {
+	onDeployFailed = fn
+}
+
+// notifyDeployFailed invokes the deploy-failed callback, detached from the
+// caller's cancellation like NotifyBuildFailed.
+func notifyDeployFailed(ctx context.Context, failure DeployFailure) {
+	if onDeployFailed == nil {
+		return
+	}
+	parentCtx := callbackContext(ctx, failure.TenantID)
+	go func() {
+		cbCtx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
+		defer cancel()
+		onDeployFailed(cbCtx, failure)
 	}()
 }
 
@@ -134,11 +171,11 @@ type ActivationKernel struct {
 func (k ActivationKernel) Activate(
 	ctx context.Context, tx db.DBTX, release *db.Release, apps []ActivationAppInfo, durationSecs int,
 ) error {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.release.activate",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.release.activate",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", release.TenantID),
-			attribute.String("loopzero.environment", release.Environment),
-			attribute.String("loopzero.release_id", release.ID),
+			attribute.String("loop-runtime.tenant", release.TenantID),
+			attribute.String("loop-runtime.environment", release.Environment),
+			attribute.String("loop-runtime.release_id", release.ID),
 		))
 	defer span.End()
 
@@ -248,7 +285,7 @@ func recordActivationMetrics(release *db.Release, durationSecs int) {
 
 // stageDeploySucceeded is step 5.5, the transactional outbox (Option C,
 // MEET-2026-07-03-005): the deploy.succeeded event is staged on the SAME tx.
-// loopzero-cloud drains deploy_events and fans out to the customer's webhooks; the
+// loop-console drains deploy_events and fans out to the customer's webhooks; the
 // engine never references the webhook tables. FATAL by design: if the event
 // cannot be staged the activation rolls back and the convergence loop retries,
 // which is what makes delivery at-least-once. transition_id is a fresh UUID per
@@ -323,14 +360,14 @@ func (k ActivationKernel) emitCompleted(ctx context.Context, release *db.Release
 // F-03 fix: computes URL for server/frontend apps so deploy.completed SSE event includes it.
 //
 // Plan release-blockers-2026-06-25-set v1.1 #61 (2026-06-26):
-// Closes loopzero-cloud#61 ("loopzero deploy announces .loopzero.local URL not publicly
+// Closes loop-console#61 ("loopscale deploy announces .loop-runtime.local URL not publicly
 // resolvable"). The deploy.completed SSE event URL composition is now the
-// SAME canonical that status.go uses — operator-configured LOOPZERO_PUBLIC_DOMAIN
+// SAME canonical that status.go uses — operator-configured LOOP_RUNTIME_PUBLIC_DOMAIN
 // (e.g. `prod-dev.getloopscale.app`) preferred when set; falls back to BASE_DOMAIN
-// (legacy default `loopzero.local`) only when no public override is wired. This
+// (legacy default `loop-runtime.local`) only when no public override is wired. This
 // mirrors the existing `StatusHandler.publicDomain` fallback ladder so
-// `loopzero deploy` and `loopzero status` emit byte-identical URLs (no more
-// "deploy says .loopzero.local, status says .prod-dev.getloopscale.app" mismatch).
+// `loopscale deploy` and `loopscale status` emit byte-identical URLs (no more
+// "deploy says .loop-runtime.local, status says .prod-dev.getloopscale.app" mismatch).
 func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain string) []ActivationAppInfo {
 	var specs []db.BuildAppSpec
 	if release.Apps != nil {
@@ -340,10 +377,10 @@ func releaseAppsToActivationApps(release *db.Release, baseDomain, publicDomain s
 		}
 	}
 	// Canonical: prefer the operator-configured public domain so the URL
-	// announced by `loopzero deploy` is the SAME URL `loopzero status` returns
+	// announced by `loopscale deploy` is the SAME URL `loopscale status` returns
 	// AND publicly resolvable. Empty publicDomain → fall back to baseDomain
 	// (preserves the pre-#61 behavior for envs without a public wildcard).
-	domain := userFacingDomain(publicDomain, baseDomain)
+	domain := UserFacingDomain(publicDomain, baseDomain)
 	apps := make([]ActivationAppInfo, 0, len(specs))
 	for _, s := range specs {
 		url := ""

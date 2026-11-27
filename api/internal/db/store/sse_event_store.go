@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // pruneBatchSize limits how many rows a single DELETE removes to avoid
@@ -62,6 +65,75 @@ func (s *PostgresEventStore) Append(ctx context.Context, buildID string, eventTy
 	}
 
 	return id, nil
+}
+
+// AppendOnce inserts an event unless the stream already holds one of that type,
+// and reports whether it wrote. The check and the insert are one decision: the
+// transaction takes an advisory lock on (stream, type) first, so two writers
+// that reach the same event at the same moment leave one row.
+//
+// It needs the pgx pool to open that transaction, as PinTenantToCell does.
+func (s *PostgresEventStore) AppendOnce(ctx context.Context, buildID string, eventType string, data json.RawMessage) (int64, bool, error) {
+	adapter, ok := s.queryDB.(*db.PgxAdapter)
+	if !ok || adapter.Pool == nil {
+		return 0, false, fmt.Errorf("event store: append once needs a pgx pool to hold the lock, got %T", s.queryDB)
+	}
+	tx, err := adapter.Pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return 0, false, fmt.Errorf("event store: begin append once: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op after a successful Commit
+
+	if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", buildID+"|"+eventType); err != nil {
+		return 0, false, fmt.Errorf("event store: lock append once: %w", err)
+	}
+	var id int64
+	err = tx.QueryRow(ctx, `
+		INSERT INTO sse_events (build_id, event_type, data)
+		SELECT $1, $2, $3
+		WHERE NOT EXISTS (SELECT 1 FROM sse_events WHERE build_id = $1 AND event_type = $2)
+		RETURNING id
+	`, buildID, eventType, data).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("event store: append once failed: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return 0, false, fmt.Errorf("event store: commit append once: %w", err)
+	}
+	return id, true, nil
+}
+
+// ListBuildsWithoutLiveTimeline returns the builds that started after since and
+// whose deploy timeline never reached `live` completed. It reads every tenant:
+// the caller is the platform's own timeline resumer.
+func (s *PostgresEventStore) ListBuildsWithoutLiveTimeline(ctx context.Context, since time.Time) ([]string, error) {
+	rows, err := s.queryDB.Query(ctx, `
+		SELECT DISTINCT e.build_id
+		FROM sse_events e
+		WHERE e.event_type = 'build.started' AND e.created_at > $1
+		  AND NOT EXISTS (
+		      SELECT 1 FROM sse_events t
+		      WHERE t.build_id = e.build_id AND t.event_type = 'deploy_timeline.live.completed')
+		ORDER BY e.build_id
+		LIMIT 500
+	`, since)
+	if err != nil {
+		return nil, fmt.Errorf("event store: list builds without live timeline: %w", err)
+	}
+	defer rows.Close()
+
+	var builds []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("event store: scan build id: %w", err)
+		}
+		builds = append(builds, id)
+	}
+	return builds, rows.Err()
 }
 
 // GetAfter returns all events for a build with ID greater than afterID, ordered by ID ascending.

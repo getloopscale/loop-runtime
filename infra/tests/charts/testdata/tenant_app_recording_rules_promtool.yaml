@@ -1,0 +1,162 @@
+# Cases for `promtool test rules`, run by TestTenantAppRecordingRulesPassPromtool against
+# the recording rules the cell's Prometheus mounts (rules.yml is written next to this
+# file by the test). The series are shaped like the ones cell-0 of staging held on
+# 2026-11-25: kube-state-metrics scraped with honor_labels, so `namespace`, `pod` and
+# `service` name the object, and Traefik naming a backend
+# `<namespace>-<Service>-<port>@kubernetescrd`.
+rule_files:
+  - rules.yml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      # Two pods of app `web`, one ready.
+      - series: 'kube_pod_labels{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",uid="1",job="kubernetes-service-endpoints",service="kube-state-metrics",label_runtime_getloopscale_com_tenant="tn-acme",label_runtime_getloopscale_com_project="shop",label_runtime_getloopscale_com_app_name="web",label_runtime_getloopscale_com_environment="production"}'
+        values: '1x10'
+      - series: 'kube_pod_labels{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",uid="2",job="kubernetes-service-endpoints",service="kube-state-metrics",label_runtime_getloopscale_com_tenant="tn-acme",label_runtime_getloopscale_com_project="shop",label_runtime_getloopscale_com_app_name="web",label_runtime_getloopscale_com_environment="production"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",uid="1",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="false",namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",uid="1",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",uid="2",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x10'
+      - series: 'kube_pod_status_ready{condition="false",namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",uid="2",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      # The same project's preview environment, one ready pod.
+      - series: 'kube_pod_labels{namespace="loop-runtime-tn-acme-shop-preview",pod="shop-web-5d4-a",uid="3",job="kubernetes-service-endpoints",service="kube-state-metrics",label_runtime_getloopscale_com_tenant="tn-acme",label_runtime_getloopscale_com_project="shop",label_runtime_getloopscale_com_app_name="web",label_runtime_getloopscale_com_environment="preview"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="loop-runtime-tn-acme-shop-preview",pod="shop-web-5d4-a",uid="3",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      # A platform pod: kube-state-metrics exports its labels series with no runtime.getloopscale.com label.
+      - series: 'kube_pod_labels{namespace="traefik",pod="traefik-77d-a",uid="4",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      - series: 'kube_pod_status_ready{condition="true",namespace="traefik",pod="traefik-77d-a",uid="4",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '1x10'
+      # The app's stable and canary Services, and a platform Service.
+      - series: 'kube_service_labels{namespace="loop-runtime-tn-acme-shop-production",service="shop-web-stable",uid="5",job="kubernetes-service-endpoints",label_runtime_getloopscale_com_tenant="tn-acme",label_runtime_getloopscale_com_project="shop",label_runtime_getloopscale_com_app_name="web",label_runtime_getloopscale_com_environment="production"}'
+        values: '1x10'
+      - series: 'kube_service_labels{namespace="loop-runtime-tn-acme-shop-production",service="shop-web-canary",uid="6",job="kubernetes-service-endpoints",label_runtime_getloopscale_com_tenant="tn-acme",label_runtime_getloopscale_com_project="shop",label_runtime_getloopscale_com_app_name="web",label_runtime_getloopscale_com_environment="production"}'
+        values: '1x10'
+      - series: 'kube_service_labels{namespace="loop-runtime-system",service="loop-runtime-api",uid="7",job="kubernetes-service-endpoints"}'
+        values: '1x10'
+      # Requests, per ingress replica. Stable: 1/s of 200 on each of two replicas and
+      # 0.1/s of 503. Canary: 0.5/s of 200. A platform backend: 5/s.
+      - series: 'traefik_service_requests_total{service="loop-runtime-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_requests_total{service="loop-runtime-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-b",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_requests_total{service="loop-runtime-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="503",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+6x10'
+      - series: 'traefik_service_requests_total{service="loop-runtime-tn-acme-shop-production-shop-web-canary-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+30x10'
+      - series: 'traefik_service_requests_total{service="loop-runtime-system-loop-runtime-api-8080@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+300x10'
+      # Durations of the stable Service on one replica: 1/s, 0.9/s within 100 ms.
+      - series: 'traefik_service_request_duration_seconds_bucket{le="0.1",service="loop-runtime-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+54x10'
+      - series: 'traefik_service_request_duration_seconds_bucket{le="0.3",service="loop-runtime-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_request_duration_seconds_bucket{le="+Inf",service="loop-runtime-tn-acme-shop-production-shop-web-stable-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+60x10'
+      - series: 'traefik_service_request_duration_seconds_bucket{le="+Inf",service="loop-runtime-tn-acme-shop-production-shop-web-canary-3000@kubernetescrd",code="200",method="GET",protocol="http",namespace="traefik",pod="traefik-77d-a",job="kubernetes-pods"}'
+        values: '0+30x10'
+      # What cAdvisor reports for pod a: the app container, the pod sandbox (pause) and
+      # the cgroup of the pod, which is the sum of the two. Only the first has a
+      # `container` label. Each app container burns 0.1 core; a holds 100 MiB, b 50 MiB.
+      - series: 'container_cpu_usage_seconds_total{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",container="web",cpu="total",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '0+6x10'
+      - series: 'container_cpu_usage_seconds_total{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",image="registry.k8s.io/pause:3.10",cpu="total",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '0+1x10'
+      - series: 'container_cpu_usage_seconds_total{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",cpu="total",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '0+7x10'
+      - series: 'container_cpu_usage_seconds_total{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",container="web",cpu="total",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '0+6x10'
+      - series: 'container_cpu_usage_seconds_total{namespace="traefik",pod="traefik-77d-a",container="traefik",cpu="total",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '0+60x10'
+      - series: 'container_memory_working_set_bytes{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",container="web",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '104857600x10'
+      - series: 'container_memory_working_set_bytes{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '105000000x10'
+      - series: 'container_memory_working_set_bytes{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",container="web",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '52428800x10'
+      - series: 'container_memory_working_set_bytes{namespace="traefik",pod="traefik-77d-a",container="traefik",job="kubernetes-nodes-cadvisor",instance="ip-10-40-144-7.ec2.internal"}'
+        values: '209715200x10'
+      # The limits of each app container, and of a platform pod.
+      - series: 'kube_pod_container_resource_limits{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",container="web",resource="cpu",unit="core",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0.5x10'
+      - series: 'kube_pod_container_resource_limits{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",container="web",resource="cpu",unit="core",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0.5x10'
+      - series: 'kube_pod_container_resource_limits{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",container="web",resource="memory",unit="byte",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '536870912x10'
+      - series: 'kube_pod_container_resource_limits{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",container="web",resource="memory",unit="byte",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '536870912x10'
+      - series: 'kube_pod_container_resource_limits{namespace="traefik",pod="traefik-77d-a",container="traefik",resource="cpu",unit="core",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '2x10'
+      # Pod a restarted twice at minute 5; pod b never did; a platform pod did once.
+      - series: 'kube_pod_container_status_restarts_total{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-a",container="web",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x4 2x5'
+      - series: 'kube_pod_container_status_restarts_total{namespace="loop-runtime-tn-acme-shop-production",pod="shop-web-7c9-b",container="web",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x10'
+      - series: 'kube_pod_container_status_restarts_total{namespace="traefik",pod="traefik-77d-a",container="traefik",job="kubernetes-service-endpoints",service="kube-state-metrics"}'
+        values: '0x4 1x5'
+    promql_expr_test:
+      - expr: loop_runtime_app:container_cpu_usage_seconds:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app:container_cpu_usage_seconds:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 0.2
+      - expr: loop_runtime_app:container_memory_working_set_bytes:sum
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app:container_memory_working_set_bytes:sum{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 157286400
+      - expr: loop_runtime_app_resource:kube_pod_container_resource_limits:sum
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app_resource:kube_pod_container_resource_limits:sum{tenant_id="tn-acme",project="shop",app="web",environment="production",resource="cpu"}'
+            value: 1
+          - labels: 'loop_runtime_app_resource:kube_pod_container_resource_limits:sum{tenant_id="tn-acme",project="shop",app="web",environment="production",resource="memory"}'
+            value: 1073741824
+      - expr: loop_runtime_app:kube_pod_container_status_restarts:increase1h
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app:kube_pod_container_status_restarts:increase1h{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 2
+      - expr: loop_runtime_app:kube_pod_status_ready:sum
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app:kube_pod_status_ready:sum{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 1
+          - labels: 'loop_runtime_app:kube_pod_status_ready:sum{tenant_id="tn-acme",project="shop",app="web",environment="preview"}'
+            value: 1
+      - expr: loop_runtime_app:traefik_service_requests:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production"}'
+            value: 2.6
+      - expr: loop_runtime_app_status_class:traefik_service_requests:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app_status_class:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",status_class="2xx"}'
+            value: 2.5
+          - labels: 'loop_runtime_app_status_class:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",status_class="5xx"}'
+            value: 0.1
+      - expr: loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
+        eval_time: 10m
+        exp_samples:
+          - labels: 'loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",le="0.1"}'
+            value: 0.9
+          - labels: 'loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",le="0.3"}'
+            value: 1
+          - labels: 'loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m{tenant_id="tn-acme",project="shop",app="web",environment="production",le="+Inf"}'
+            value: 1.5
+      # The queries the API sends for the project (metrics_proxy.go).
+      - expr: sum(loop_runtime_app:kube_pod_status_ready:sum{tenant_id="tn-acme",project="shop"})
+        eval_time: 10m
+        exp_samples:
+          - value: 2
+      - expr: (sum(loop_runtime_app_status_class:traefik_service_requests:rate5m{status_class="5xx",tenant_id="tn-acme",project="shop"}) or vector(0)) / sum(loop_runtime_app:traefik_service_requests:rate5m{tenant_id="tn-acme",project="shop"}) * 100
+        eval_time: 10m
+        exp_samples:
+          - value: 3.8461538461538463

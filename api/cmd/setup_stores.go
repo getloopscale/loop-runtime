@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -8,18 +8,18 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/objectstore"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
-	"github.com/getloopscale/loopzero/api/internal/source"
-	sourceroutes "github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/pkg/vault"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/objectstore"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	sourceroutes "github.com/getloopscale/loop-runtime/api/internal/source/sourcehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/pkg/vault"
 )
 
 // StoreDeps holds all store instances created from the database adapter.
@@ -97,21 +97,16 @@ func setupStores(dbAdapter *db.PgxAdapter, cfg config.Config, transit vault.Tran
 	giteaSourceStore, err := source.NewGiteaSourceStore(source.GiteaSourceStoreConfig{
 		BaseURL: cfg.GiteaURL,
 		Token:   cfg.GiteaToken,
-		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loopzero"
+		OrgName: cfg.GiteaOrg, // B77: was hardcoded "loop-runtime"
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// S3 uploader for source bundles — build cluster reads from Spaces.
-	var objUploader sourceroutes.ObjectUploader
-	if cfg.MinIOEndpoint != "" && cfg.MinIOAccessKey != "" && cfg.MinIOSecretKey != "" {
-		objStore, err := objectstore.NewS3Store(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
-		if err != nil {
-			return nil, fmt.Errorf("object store: %w", err)
-		}
-		objUploader = objStore
-		logger.Info("s3 uploader enabled", "endpoint", cfg.MinIOEndpoint)
+	objUploader, err := setupObjectUploader(cfg, logger)
+	if err != nil {
+		return nil, err
 	}
 
 	return &StoreDeps{
@@ -171,8 +166,31 @@ func setupSecretStore(dbAdapter db.DBTX, encKeyHex string, transit vault.Transit
 	}
 	// T10.3 (B-162): this store has no write path — encryptForStore refuses
 	// without a Transit client. Say so at boot rather than at the first
-	// `loopzero secret set`, which is where the operator would otherwise find out.
+	// `loopscale secret set`, which is where the operator would otherwise find out.
 	logger.Warn("secret store wired without openbao transit — secret writes will be refused (T10.3); legacy AES rows remain readable",
 		"legacy_aes_key_present", len(encKey) > 0)
 	return store.NewPostgresSecretStore(dbAdapter, encKey)
+}
+
+// setupObjectUploader builds the source bundle uploader: with the static key
+// pair when one is configured, with the AWS credential chain when the pod has
+// an IRSA role and no key, and none otherwise (dev without an object store).
+func setupObjectUploader(cfg config.Config, logger *slog.Logger) (sourceroutes.ObjectUploader, error) {
+	switch {
+	case cfg.MinIOEndpoint != "" && cfg.MinIOAccessKey != "" && cfg.MinIOSecretKey != "":
+		objStore, err := objectstore.NewS3Store(cfg.MinIOEndpoint, cfg.MinIOAccessKey, cfg.MinIOSecretKey)
+		if err != nil {
+			return nil, fmt.Errorf("object store: %w", err)
+		}
+		logger.Info("s3 uploader enabled", "endpoint", objStore.Endpoint(), "credentials", "static")
+		return objStore, nil
+	case cfg.ObjectStoreAWSCredentials:
+		objStore, err := objectstore.NewAWSS3Store(cfg.MinIOEndpoint)
+		if err != nil {
+			return nil, fmt.Errorf("object store: %w", err)
+		}
+		logger.Info("s3 uploader enabled", "endpoint", objStore.Endpoint(), "credentials", "aws-credential-chain")
+		return objStore, nil
+	}
+	return nil, nil
 }

@@ -1,4 +1,4 @@
-# Polaris config for LoopZero Helm chart audits.
+# Polaris config for LoopRuntime Helm chart audits.
 # Reference: https://polaris.docs.fairwinds.com/checks/
 # Plan T1.2: baseline-first; severity=warning until Phase 3.3 promotes to danger.
 #

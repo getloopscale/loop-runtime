@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package metrics provides custom Prometheus metrics for operator controllers.
-// All metrics follow the loopzero_operator_ prefix convention for Grafana dashboards.
+// All metrics follow the loop_runtime_operator_ prefix convention for Grafana dashboards.
 //
 // Registration target: controller-runtime's metrics.Registry (NOT the default
 // prometheus registry). The operator's metricsserver.Options serves only from
 // the controller-runtime registry; metrics registered in
 // prometheus.DefaultRegisterer would silently never appear in the /metrics
 // endpoint. Discovered LIVE 2026-05-25 during Op B validation when the new
-// loopzero_clustercredential_ca_fetch_total counter didn't show up despite the
+// loop_runtime_clustercredential_ca_fetch_total counter didn't show up despite the
 // counter object being created and Inc()'d.
 package metrics
 
@@ -19,14 +19,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
-	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	cb "github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 var (
 	// ReconcileDuration measures the duration of each reconcile loop in seconds.
 	ReconcileDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "loopzero_operator_reconcile_duration_seconds",
+			Name:    "loop_runtime_operator_reconcile_duration_seconds",
 			Help:    "Duration of reconcile loops by controller and result.",
 			Buckets: prometheus.DefBuckets,
 		},
@@ -36,7 +36,7 @@ var (
 	// ReconcileErrors counts reconcile errors by controller and error type.
 	ReconcileErrors = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "loopzero_operator_reconcile_errors_total",
+			Name: "loop_runtime_operator_reconcile_errors_total",
 			Help: "Total number of reconcile errors by controller and error type.",
 		},
 		[]string{"controller", "error_type"},
@@ -45,7 +45,7 @@ var (
 	// ReconcileTotal counts total reconcile invocations by controller and result.
 	ReconcileTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "loopzero_operator_reconcile_total",
+			Name: "loop_runtime_operator_reconcile_total",
 			Help: "Total number of reconcile invocations by controller and result (success/error/requeue).",
 		},
 		[]string{"controller", "result"},
@@ -57,7 +57,7 @@ var (
 	// during tenant deletion (argocd, build-ns, minio, gitea).
 	TenantDeletionStepDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "loopzero_tenant_deletion_step_duration_seconds",
+			Name:    "loop_runtime_tenant_deletion_step_duration_seconds",
 			Help:    "Duration of each cleanup step during tenant deletion.",
 			Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60},
 		},
@@ -67,7 +67,7 @@ var (
 	// TenantDeletionStuckTotal counts tenants that exceeded max deletion attempts.
 	TenantDeletionStuckTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "loopzero_tenant_deletion_stuck_total",
+			Name: "loop_runtime_tenant_deletion_stuck_total",
 			Help: "Total number of tenants that exceeded max deletion retry attempts.",
 		},
 	)
@@ -77,14 +77,14 @@ var (
 	// ObserveCircuitBreakerTransition on every state change.
 	TenantCircuitBreakerState = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "loopzero_tenant_cb_state",
+			Name: "loop_runtime_tenant_cb_state",
 			Help: "Circuit breaker state per dependency (0=closed, 1=open, 2=half-open).",
 		},
 		[]string{"dep"},
 	)
 
 	// MisplacedTenantTotal counts Tenant CRs found outside the canonical
-	// namespace `loopzero-system` (ADR-0018 v2 / MEET-ADR-0018 condition C5).
+	// namespace `loop-runtime-system` (ADR-0018 v2 / MEET-ADR-0018 condition C5).
 	// Written by tenant.MisplacedTenantScanner, which lists Tenants
 	// cluster-wide through an uncached reader at start and every 5 minutes:
 	// with C9 cache scoping no reconciler can see a misplaced CR, so the
@@ -92,8 +92,8 @@ var (
 	// Non-zero value fires the MisplacedTenantDetected alert (>5 min).
 	MisplacedTenantTotal = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "loopzero_misplaced_tenant_total",
-			Help: "Tenant CRs found outside canonical namespace loopzero-system (ADR-0018 invariant).",
+			Name: "loop_runtime_misplaced_tenant_total",
+			Help: "Tenant CRs found outside canonical namespace loop-runtime-system (ADR-0018 invariant).",
 		},
 		[]string{"namespace"},
 	)
@@ -108,7 +108,7 @@ var (
 	// (T5.0 pre-flight gate enforces this via validate-op-b-soak.sh).
 	ClusterCredentialCAFetchTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "loopzero_clustercredential_ca_fetch_total",
+			Name: "loop_runtime_clustercredential_ca_fetch_total",
 			Help: "Live CA fetch attempts in ClusterCredentialReconciler. result=success|fallback|skipped-insecure.",
 		},
 		[]string{"cluster", "result"},

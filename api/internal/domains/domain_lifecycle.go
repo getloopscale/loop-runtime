@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -7,7 +7,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // domainMachine is the one definition of the custom-domain lifecycle

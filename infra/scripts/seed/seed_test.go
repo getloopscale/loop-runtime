@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package seed
 
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // A spec.environments the seed cannot read must stop the seed. Proceeding
@@ -48,13 +48,13 @@ func TestExpectedNamespaces_UseTheOperatorNamingFormula(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		want["k3d-loopzero-cell-0/"+ns] = true
+		want["k3d-loop-runtime-cell-0/"+ns] = true
 	}
 	build, err := naming.BuildNamespace(TenantID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want["k3d-loopzero-build/"+build] = true
+	want["k3d-loop-runtime-build/"+build] = true
 
 	got, err := ExpectedNamespacesByContext()
 	if err != nil {
@@ -101,7 +101,7 @@ func TestSeedSQL_LeavesTheBootstrapUserInTheE2ETenantOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "DELETE FROM tenant_members WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> '" + TenantID + "';"
+	want := "DELETE FROM tenant_members WHERE user_id = 'loop-runtime-bootstrap' AND tenant_id <> '" + TenantID + "';"
 	if !strings.Contains(sql, want) {
 		t.Errorf("seed SQL lacks %q:\n%s", want, sql)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package processing
 
@@ -13,7 +13,7 @@ import (
 // can replace the in-memory sync.Map used by BuildReconcileLoop and
 // ReleaseConvergenceLoop.
 //
-// When enabled (LOOPZERO_USE_PG_CLAIMS=true), claim/release operations go
+// When enabled (LOOP_RUNTIME_USE_PG_CLAIMS=true), claim/release operations go
 // through PG (CAS on processing_by/processing_since columns), making
 // the dedup state visible across controller replicas.
 //

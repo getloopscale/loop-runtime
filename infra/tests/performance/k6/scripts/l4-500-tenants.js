@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // L4 — 500 tenants sustained load (single cell limit).
 //
@@ -26,7 +26,7 @@ import {
   healthCheck,
   verifyAppLive,
   appURL,
-} from './lib/loopzero-api.js';
+} from './lib/loop-runtime-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
@@ -52,7 +52,7 @@ export const options = {
   },
   thresholds: Object.assign(thresholdsFor('l4'), {
     // L4-specific: admission rejects should be < 5% of total submissions
-    'loopzero_admission_reject_total': ['count<25'],
+    'loop_runtime_admission_reject_total': ['count<25'],
   }),
   summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
 };
@@ -71,7 +71,7 @@ export default function (data) {
 
   const tenantID = `k6-l4-tn-${tenantIdx}`;
   const userID = `k6-l4-user-${tenantIdx}`;
-  const email = `k6-l4-${tenantIdx}@loopzero.test`;
+  const email = `k6-l4-${tenantIdx}@loop-runtime.test`;
   const projectName = `k6-l4-app-${tenantIdx}`;
 
   let commitSHA, buildID;
@@ -121,12 +121,12 @@ export function teardown() {
 
 export function handleSummary(data) {
   const m = data.metrics;
-  const succeeded = (m.loopzero_build_succeeded || {}).values || {};
-  const verified = (m.loopzero_app_verified || {}).values || {};
-  const deploy = (m.loopzero_deploy_duration_ms || {}).values || {};
-  const verify = (m.loopzero_app_verify_duration_ms || {}).values || {};
-  const admRej = (m.loopzero_admission_reject_total || {}).values || {};
-  const lockConf = (m.loopzero_lock_conflict_total || {}).values || {};
+  const succeeded = (m.loop_runtime_build_succeeded || {}).values || {};
+  const verified = (m.loop_runtime_app_verified || {}).values || {};
+  const deploy = (m.loop_runtime_deploy_duration_ms || {}).values || {};
+  const verify = (m.loop_runtime_app_verify_duration_ms || {}).values || {};
+  const admRej = (m.loop_runtime_admission_reject_total || {}).values || {};
+  const lockConf = (m.loop_runtime_lock_conflict_total || {}).values || {};
 
   const text = `
 ═════════════════════════════════════════════════════════

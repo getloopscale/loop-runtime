@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package architecture
 
@@ -32,9 +32,9 @@ import (
 // root or in ports, not in the handler package. feature-fence enforces the same
 // rule at the quality-gate level; this test keeps it runnable with `go test`.
 func TestImportGraph_HTTPPackagesAreLeaves(t *testing.T) {
-	const internal = "github.com/getloopscale/loopzero/api/internal/"
+	const internal = "github.com/getloopscale/loop-runtime/api/internal/"
 	out, err := exec.Command("go", "list", "-f",
-		"{{.ImportPath}} {{join .Imports \" \"}}", "github.com/getloopscale/loopzero/api/internal/...").CombinedOutput()
+		"{{.ImportPath}} {{join .Imports \" \"}}", "github.com/getloopscale/loop-runtime/api/internal/...").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list failed: %v\n%s", err, out)
 	}

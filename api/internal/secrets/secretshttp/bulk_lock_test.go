@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretshttp
 
@@ -12,10 +12,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // heldLocker records which (project, env) lock is held while fn runs, so a
@@ -33,7 +33,7 @@ func (l *heldLocker) WithLock(_ context.Context, _, project, env string, fn func
 	l.calls = append(l.calls, key)
 	if env == l.failEnv {
 		l.mu.Unlock()
-		return loopzeroerrors.ErrLockTimeout
+		return loopruntimeerrors.ErrLockTimeout
 	}
 	if l.held == nil {
 		l.held = map[string]bool{}

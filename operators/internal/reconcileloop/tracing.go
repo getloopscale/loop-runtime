@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package reconcileloop holds what happens INSIDE a reconcile loop: the event
 // predicates, the finalizer helpers and the tracing of the reconciles
@@ -26,14 +26,14 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/getloopscale/loopzero/operators/internal/metrics"
+	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
-var tracer = otel.Tracer("loopzero-operator")
+var tracer = otel.Tracer("loop-runtime-operator")
 
 // StartReconcileSpan creates the root reconcile span with standard attributes.
 func StartReconcileSpan(ctx context.Context, controller, name, namespace string) (context.Context, trace.Span) {
-	ctx, span := tracer.Start(ctx, "loopzero.operator."+controller+".reconcile",
+	ctx, span := tracer.Start(ctx, "loop-runtime.operator."+controller+".reconcile",
 		trace.WithAttributes(
 			attribute.String("k8s.object.name", name),
 			attribute.String("k8s.namespace", namespace),

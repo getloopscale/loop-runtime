@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package operatortest exports operator setup functions for integration and E2E testing.
 //
@@ -19,15 +19,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/operators/internal/app"
-	"github.com/getloopscale/loopzero/operators/internal/argocd"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/platform"
-	"github.com/getloopscale/loopzero/operators/internal/preview"
-	"github.com/getloopscale/loopzero/operators/internal/tenant"
+	"github.com/getloopscale/loop-runtime/operators/internal/app"
+	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/gitea"
+	miniop "github.com/getloopscale/loop-runtime/operators/internal/minio"
+	"github.com/getloopscale/loop-runtime/operators/internal/platform"
+	"github.com/getloopscale/loop-runtime/operators/internal/preview"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenant"
 )
 
 // GitRepoProvisioner is the interface for Git repository provisioning.
@@ -86,7 +86,7 @@ func (f *FakeGitProvisioner) EnsureRepo(_ context.Context, name string, _ string
 	if url, ok := f.repos[name]; ok {
 		return url, nil
 	}
-	url := fmt.Sprintf("http://gitea-http.loopzero-system.svc.cluster.local:3000/loopzero/%s.git", name)
+	url := fmt.Sprintf("http://gitea-http.loop-runtime-system.svc.cluster.local:3000/loop-runtime/%s.git", name)
 	f.repos[name] = url
 	return url, nil
 }
@@ -280,7 +280,7 @@ func (f *FakeMinIOProvisioner) EnsureTenantCredentials(_ context.Context, tenant
 	if cred, ok := f.Credentials[tenantID]; ok {
 		return cred.AccessKey, "", nil // existing user, empty secret
 	}
-	accessKey := fmt.Sprintf("loopzero-build-%s", tenantID)
+	accessKey := fmt.Sprintf("loop-runtime-build-%s", tenantID)
 	secretKey := fmt.Sprintf("fake-secret-%s", tenantID)
 	f.Credentials[tenantID] = struct{ AccessKey, SecretKey string }{accessKey, secretKey}
 	return accessKey, secretKey, nil

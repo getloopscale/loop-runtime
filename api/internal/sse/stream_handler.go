@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sse
 
@@ -11,10 +11,10 @@ import (
 	"net/http"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -220,21 +220,21 @@ func (h *StreamHandler) authorizedBuild(w http.ResponseWriter, r *http.Request) 
 	}
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
+		errorshttp.WriteJSON(w, r, loopruntimeerrors.ErrUnauthorized)
 		return nil, false
 	}
 	build, err := h.buildStore.GetByID(r.Context(), buildID)
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-			errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
+		if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
+			errorshttp.WriteJSON(w, r, loopruntimeerrors.ErrBuildNotFound)
 			return nil, false
 		}
 		h.logger.Error("stream handler: failed to fetch build", "build_id", buildID, "error", err)
-		errorshttp.WriteJSON(w, r, loopzeroerrors.NewLoopZeroError("INTERNAL_ERROR", "failed to fetch build"))
+		errorshttp.WriteJSON(w, r, loopruntimeerrors.NewLoopRuntimeError("INTERNAL_ERROR", "failed to fetch build"))
 		return nil, false
 	}
 	if build.TenantID != uc.TenantID {
-		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrBuildNotFound)
+		errorshttp.WriteJSON(w, r, loopruntimeerrors.ErrBuildNotFound)
 		return nil, false
 	}
 	return build, true
@@ -420,7 +420,7 @@ func (h *ProjectStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		errorshttp.WriteJSON(w, r, loopzeroerrors.ErrUnauthorized)
+		errorshttp.WriteJSON(w, r, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 	leave, ok := h.gate.Enter()

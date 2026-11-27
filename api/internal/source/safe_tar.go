@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/archive"
+	"github.com/getloopscale/loop-runtime/api/internal/archive"
 )
 
 // Re-export error types for backward compatibility with existing tests.

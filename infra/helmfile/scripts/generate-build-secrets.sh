@@ -15,7 +15,7 @@
 #          registry_auth_merge.go).
 #
 # Backup: every successful run dumps cosign-signing-key + buildkit-registry-config
-# to ~/.loopzero/backups/build-secrets-{env}-{timestamp}.yaml (chmod 600).
+# to ~/.loop-runtime/backups/build-secrets-{env}-{timestamp}.yaml (chmod 600).
 set -euo pipefail
 
 ENV="${1:?usage: $0 <env>}"
@@ -27,13 +27,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Issue #117 (generalizing #115) — pin the target cluster BY CONSTRUCTION.
 # This script writes Secrets to the BUILD cluster. Before this pin, it relied
 # on the caller having mutated the global kubecontext (`kubectl config
-# use-context k3d-loopzero-build` in Taskfile.yml). That is fragile in two ways:
+# use-context k3d-loop-runtime-build` in Taskfile.yml). That is fragile in two ways:
 # a caller that forgets provisions build Secrets into whatever cluster is
 # active, and mutating the operator's global context as a side effect leaks
 # out of the task when it fails mid-way. The `kubectl()` override below makes
 # every bare invocation downstream carry the right --context, so neither can
 # happen. Override KUBECTL_CONTEXT for non-k3d targets (DOKS prod).
-KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loopzero-build}"
+KUBECTL_CONTEXT="${KUBECTL_CONTEXT:-k3d-loop-runtime-build}"
 kubectl() { command kubectl --context="$KUBECTL_CONTEXT" "$@"; }
 
 log() { printf '[generate-build-secrets] %s\n' "$*" >&2; }
@@ -88,16 +88,16 @@ else
   log "cosign-signing-key generated and applied (B1 fixed permanently)"
 
   # T2.3 of openbao-adoption v1.3 (iter 26): also write cosign passphrase to
-  # Vault path secret/loopzero/<env>/build/secrets/cosign/passphrase. Dual-write
+  # Vault path secret/loop-runtime/<env>/build/secrets/cosign/passphrase. Dual-write
   # during migration window (Day 30 verify per T10; Day 60 removes K8s
   # cosign.password key). When BAO_ADDR + BAO_TOKEN are set, mirror passphrase
   # to Vault so ESO ExternalSecret CR `cosign-passphrase` (per
-  # infra/helm/loopzero-external-secrets/values.yaml) materializes it independently.
+  # infra/helm/loop-runtime-external-secrets/values.yaml) materializes it independently.
   # FAANG defense-in-depth: passphrase + key separately rotatable.
   if [[ -n "${BAO_ADDR:-}" && -n "${BAO_TOKEN:-}" ]]; then
     if command -v bao >/dev/null 2>&1; then
-      log "T2.3: writing cosign passphrase to Vault secret/loopzero/${ENV}/build/secrets/cosign/passphrase"
-      if bao kv put "secret/loopzero/${ENV}/build/secrets/cosign/passphrase" \
+      log "T2.3: writing cosign passphrase to Vault secret/loop-runtime/${ENV}/build/secrets/cosign/passphrase"
+      if bao kv put "secret/loop-runtime/${ENV}/build/secrets/cosign/passphrase" \
           "cosign.password=${COSIGN_PASSWORD}" >/dev/null 2>&1; then
         log "T2.3: Vault write OK (dual-write active; canonical SoT post Day-30 verify)"
       else
@@ -113,9 +113,9 @@ fi
 
 # 2) Registry credentials for BuildKit (host-scoped — B12 fix).
 # Always overwritten — values come from L1 outputs, not stable in cluster.
-if [[ -n "${LOOPZERO_REGISTRY_ENDPOINT:-}" ]]; then
-  AUTH_VALUE=$(printf '%s' "${LOOPZERO_SPACES_KEY:-}:${LOOPZERO_SPACES_SECRET:-}" | base64 -w0)
-  CONFIG=$(printf '{"auths":{"%s":{"auth":"%s"}}}' "${LOOPZERO_REGISTRY_ENDPOINT}" "${AUTH_VALUE}")
+if [[ -n "${LOOP_RUNTIME_REGISTRY_ENDPOINT:-}" ]]; then
+  AUTH_VALUE=$(printf '%s' "${LOOP_RUNTIME_SPACES_KEY:-}:${LOOP_RUNTIME_SPACES_SECRET:-}" | base64 -w0)
+  CONFIG=$(printf '{"auths":{"%s":{"auth":"%s"}}}' "${LOOP_RUNTIME_REGISTRY_ENDPOINT}" "${AUTH_VALUE}")
   kubectl create secret generic buildkit-registry-config -n argo \
     --from-literal="config.json=${CONFIG}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -123,12 +123,12 @@ if [[ -n "${LOOPZERO_REGISTRY_ENDPOINT:-}" ]]; then
 fi
 
 # 3) MinIO/S3 credentials for artifact upload — passthrough from L1.
-if [[ -n "${LOOPZERO_BUCKET_NAME:-}" ]]; then
+if [[ -n "${LOOP_RUNTIME_BUCKET_NAME:-}" ]]; then
   kubectl create secret generic minio-credentials -n argo \
-    --from-literal=accesskey="${LOOPZERO_SPACES_KEY:-}" \
-    --from-literal=secretkey="${LOOPZERO_SPACES_SECRET:-}" \
-    --from-literal=endpoint="${LOOPZERO_BUCKET_ENDPOINT:-}" \
-    --from-literal=bucket="${LOOPZERO_BUCKET_NAME}" \
+    --from-literal=accesskey="${LOOP_RUNTIME_SPACES_KEY:-}" \
+    --from-literal=secretkey="${LOOP_RUNTIME_SPACES_SECRET:-}" \
+    --from-literal=endpoint="${LOOP_RUNTIME_BUCKET_ENDPOINT:-}" \
+    --from-literal=bucket="${LOOP_RUNTIME_BUCKET_NAME}" \
     --dry-run=client -o yaml | kubectl apply -f - >/dev/null
   log "minio-credentials applied"
 fi

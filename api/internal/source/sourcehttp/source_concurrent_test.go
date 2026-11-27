@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sourcehttp
 
@@ -16,9 +16,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
 )
 
 // fakeRaceySourceStore simulates the concurrent-upload race observed in

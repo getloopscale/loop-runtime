@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -12,13 +12,13 @@ import (
 	"testing"
 	"time"
 
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // idempotencyKeyRequired lists the mutations whose client MUST send an
 // Idempotency-Key: each one creates something a retry would duplicate, and
-// every client of each sends the key (loopzero-cli deploy and domain add).
+// every client of each sends the key (loop-runtime-cli deploy and domain add).
 var idempotencyKeyRequired = map[string]bool{
 	"POST /api/v1/builds":                      true,
 	"POST /api/v1/domains":                     true,
@@ -27,35 +27,36 @@ var idempotencyKeyRequired = map[string]bool{
 
 // idempotencyKeyNotRequired records, per mutation, the decision NOT to
 // require an Idempotency-Key and what it rests on. The shared basis: no
-// client of these routes sends the header (loopzero-cli sends it only for deploy
+// client of these routes sends the header (loop-runtime-cli sends it only for deploy
 // and domain add), so requiring it would refuse every call; each is rate
 // limited instead, and the reason says what makes a retry tolerable.
 var idempotencyKeyNotRequired = map[string]string{
-	"POST /api/v1/source/upload":                        "rate limited; no client retries it automatically",
-	"POST /api/v1/projects":                             "a retry of a created project answers 409 PROJECT_EXISTS",
-	"DELETE /api/v1/projects/{name}":                    "deleting what is already gone leaves the same state",
-	"DELETE /api/v1/projects/{name}/environments/{env}": "deleting what is already gone leaves the same state",
-	"POST /api/v1/secrets":                              "an upsert under the environment lock: a retry rewrites the same value",
-	"POST /api/v1/secrets/bulk":                         "an upsert under the environment lock: a retry rewrites the same values",
-	"DELETE /api/v1/secrets/{name}":                     "deleting what is already gone leaves the same state",
-	"POST /api/v1/builds/{id}/cancel":                   "rate limited; no client retries it automatically",
-	"POST /api/v1/projects/{name}/scale":                "writes an absolute replica count",
-	"POST /api/v1/projects/{name}/rollback":             "rate limited; no client retries it automatically",
-	"POST /api/v1/projects/{name}/promote":              "rate limited; no client retries it automatically",
-	"POST /api/v1/teams/members":                        "rate limited; no client retries it automatically",
-	"DELETE /api/v1/teams/members/{username}":           "deleting what is already gone leaves the same state",
-	"PATCH /api/v1/teams/members/{username}":            "writes an absolute role",
-	"DELETE /api/v1/tenants/{id}":                       "deleting what is already gone leaves the same state",
-	"POST /api/v1/tenants/{id}/restore":                 "rate limited; no client retries it automatically",
-	"POST /api/v1/billing/portal":                       "rate limited; no client retries it automatically",
-	"POST /api/v1/environments":                         "a retry of a created environment answers 409",
-	"DELETE /api/v1/environments/{name}":                "deleting what is already gone leaves the same state",
-	"POST /api/v1/domains/{domain}/verify":              "rate limited; no client retries it automatically",
-	"DELETE /api/v1/domains/{domain}":                   "deleting what is already gone leaves the same state",
-	"POST /api/v1/projects/{name}/connect":              "rate limited; no client retries it automatically",
-	"DELETE /api/v1/projects/{name}/connect":            "deleting what is already gone leaves the same state",
-	"DELETE /api/v1/projects/{project}/previews/{id}":   "deleting what is already gone leaves the same state",
-	"POST /api/v1/auth/team/switch":                     "writes the active team absolutely",
+	"POST /api/v1/source/upload":                           "rate limited; no client retries it automatically",
+	"POST /api/v1/projects":                                "a retry of a created project answers 409 PROJECT_EXISTS",
+	"DELETE /api/v1/projects/{name}":                       "deleting what is already gone leaves the same state",
+	"DELETE /api/v1/projects/{name}/environments/{env}":    "deleting what is already gone leaves the same state",
+	"POST /api/v1/secrets":                                 "an upsert under the environment lock: a retry rewrites the same value",
+	"POST /api/v1/secrets/bulk":                            "an upsert under the environment lock: a retry rewrites the same values",
+	"DELETE /api/v1/secrets/{name}":                        "deleting what is already gone leaves the same state",
+	"POST /api/v1/builds/{id}/cancel":                      "rate limited; no client retries it automatically",
+	"POST /api/v1/projects/{name}/scale":                   "writes an absolute replica count",
+	"POST /api/v1/projects/{name}/rollback":                "rate limited; no client retries it automatically",
+	"POST /api/v1/projects/{name}/promote":                 "rate limited; no client retries it automatically",
+	"POST /api/v1/teams/members":                           "rate limited; no client retries it automatically",
+	"DELETE /api/v1/teams/members/{username}":              "deleting what is already gone leaves the same state",
+	"PATCH /api/v1/teams/members/{username}":               "writes an absolute role",
+	"DELETE /api/v1/tenants/{id}":                          "deleting what is already gone leaves the same state",
+	"POST /api/v1/tenants/{id}/restore":                    "rate limited; no client retries it automatically",
+	"POST /api/v1/billing/portal":                          "rate limited; no client retries it automatically",
+	"POST /api/v1/environments":                            "a retry of a created environment answers 409",
+	"DELETE /api/v1/environments/{name}":                   "deleting what is already gone leaves the same state",
+	"POST /api/v1/domains/{domain}/verify":                 "rate limited; no client retries it automatically",
+	"DELETE /api/v1/domains/{domain}":                      "deleting what is already gone leaves the same state",
+	"POST /api/v1/projects/{name}/connect":                 "rate limited; no client retries it automatically",
+	"DELETE /api/v1/projects/{name}/connect":               "deleting what is already gone leaves the same state",
+	"POST /api/v1/integrations/github/installations/claim": "the GitHub code is single use: GitHub refuses a repeat, which binds nothing",
+	"DELETE /api/v1/projects/{project}/previews/{id}":      "deleting what is already gone leaves the same state",
+	"POST /api/v1/auth/team/switch":                        "writes the active team absolutely",
 }
 
 type memoryIdempotencyStore struct{}

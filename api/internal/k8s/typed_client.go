@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package k8s
 
@@ -11,17 +11,17 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
-// NewScheme builds a runtime.Scheme with the loopzero.io/v1 CRD types registered
-// (Tenant, LoopZeroApplication, PreviewEnvironment, …) via the operators/api
+// NewScheme builds a runtime.Scheme with the runtime.getloopscale.com/v1 CRD types registered
+// (Tenant, LoopRuntimeApplication, PreviewEnvironment, …) via the operators/api
 // contract module (M6/M8). The typed client uses this to (de)serialize CRs as
 // Go structs instead of unstructured maps — the compiler now checks every field.
 func NewScheme() (*runtime.Scheme, error) {
 	s := runtime.NewScheme()
 	if err := apiv1.AddToScheme(s); err != nil {
-		return nil, fmt.Errorf("k8s: register loopzero.io scheme: %w", err)
+		return nil, fmt.Errorf("k8s: register runtime.getloopscale.com scheme: %w", err)
 	}
 	return s, nil
 }
@@ -55,8 +55,8 @@ func ExplicitRestConfig(kubeconfig, kubeContext string) (*rest.Config, error) {
 	return cfg, nil
 }
 
-// NewTypedClient builds a controller-runtime client.Client wired to the loopzero.io
-// scheme. This is the typed replacement for the dynamic client the loopzero.io CR
+// NewTypedClient builds a controller-runtime client.Client wired to the runtime.getloopscale.com
+// scheme. This is the typed replacement for the dynamic client the runtime.getloopscale.com CR
 // managers used pre-M8 — it makes api the second Go consumer of operators/api.
 func NewTypedClient(cfg *rest.Config) (client.Client, error) {
 	scheme, err := NewScheme()

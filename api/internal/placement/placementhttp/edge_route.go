@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placementhttp
 
@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // EdgeResolver answers which cell serves a public host.
@@ -20,8 +20,9 @@ type EdgeResolver interface {
 }
 
 // EdgeRouteHandler serves GET /internal/edge/route: the edge's subrequest before it
-// forwards a user's request. It reads the host from X-Forwarded-Host and answers with
-// the cell in X-LoopZero-Cell (200), or refuses (404 unknown host, 503 index unavailable).
+// forwards a user's request, or before it issues a certificate for a host. It reads the
+// host from the domain query, else from X-Forwarded-Host, and answers with
+// the cell in X-Loop-Runtime-Cell (200), or refuses (404 unknown host, 503 index unavailable).
 // A non-2xx answer is relayed to the user by the edge, so its body is product copy.
 type EdgeRouteHandler struct {
 	resolver EdgeResolver
@@ -46,17 +47,23 @@ func (h *EdgeRouteHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
-	host := r.Header.Get("X-Forwarded-Host")
+	// An edge that issues certificates on demand asks with ?domain=<host> (Caddy's
+	// `ask`), and may reach this API through a proxy that sets X-Forwarded-Host to the
+	// API's own name. The query names the host being asked about, so it wins.
+	host := r.URL.Query().Get("domain")
+	if host == "" {
+		host = r.Header.Get("X-Forwarded-Host")
+	}
 	if host == "" {
 		metrics.EdgeRouteLookups.WithLabelValues("bad_request").Inc()
-		http.Error(w, "missing X-Forwarded-Host", http.StatusBadRequest)
+		http.Error(w, "missing host: send ?domain= or X-Forwarded-Host", http.StatusBadRequest)
 		return
 	}
 	cell, err := h.resolver.Resolve(r.Context(), host)
 	switch {
 	case err == nil:
 		metrics.EdgeRouteLookups.WithLabelValues("routed").Inc()
-		w.Header().Set("X-LoopZero-Cell", cell)
+		w.Header().Set("X-Loop-Runtime-Cell", cell)
 		w.WriteHeader(http.StatusOK)
 	case errors.Is(err, placement.ErrEdgeRouteNotFound):
 		metrics.EdgeRouteLookups.WithLabelValues("not_found").Inc()

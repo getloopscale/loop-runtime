@@ -2,56 +2,56 @@
 #
 # Per ADR D4 (chaos-mesh-experiments-plan superseded; pattern preserved in
 # active-execution-plan.md): chaos experiments set a Prometheus label
-# `loopzero_chaos_active=1` via a ConfigMap-derived recording rule. SLO alerts
+# `loop_runtime_chaos_active=1` via a ConfigMap-derived recording rule. SLO alerts
 # that fire during scheduled chaos windows are suppressed using
-# `unless loopzero_chaos_active == 1` so PagerDuty doesn't page during
+# `unless loop_runtime_chaos_active == 1` so PagerDuty doesn't page during
 # expected degradation.
 #
 # This file:
-#   1. Defines the `loopzero_chaos_active` recording rule (reads a sentinel
-#      label from `loopzero-chaos-window` ConfigMap in loopzero-system namespace).
+#   1. Defines the `loop_runtime_chaos_active` recording rule (reads a sentinel
+#      label from `loop-runtime-chaos-window` ConfigMap in loop-runtime-system namespace).
 #   2. Provides two example chaos-window alerts that VALIDATE the inhibit
 #      pattern — they fire only OUTSIDE chaos windows when SLO breached.
 #   3. Provides one chaos-INSIDE-window alert that captures runaway chaos
 #      (chaos active for > 1h = forgot to stop = bug).
 #
-# The chaos test framework toggles loopzero-chaos-window ConfigMap on/off
+# The chaos test framework toggles loop-runtime-chaos-window ConfigMap on/off
 # at scenario start/end (planned for §3.B integration test).
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-chaos-rules
-  namespace: loopzero-system
+  name: loop-runtime-chaos-rules
+  namespace: loop-runtime-system
   labels:
-    app: loopzero
+    app: loop-runtime
     role: alert-rules
     prometheus: kube-prometheus
     release: monitoring
-    loopzero.io/task: 3.A.5
-    loopzero.io/plan: active-execution-plan
+    runtime.getloopscale.com/task: 3.A.5
+    runtime.getloopscale.com/plan: active-execution-plan
 spec:
   groups:
-    - name: loopzero.chaos.recording
+    - name: loop-runtime.chaos.recording
       interval: 30s
       rules:
-        # Recording rule: loopzero_chaos_active is 1 when a ConfigMap with
-        # annotation `loopzero.io/chaos-window=active` exists; else 0.
+        # Recording rule: loop_runtime_chaos_active is 1 when a ConfigMap with
+        # annotation `runtime.getloopscale.com/chaos-window=active` exists; else 0.
         #
         # Implementation: kube-state-metrics exposes
-        # kube_configmap_annotations{annotation_loopzero_io_chaos_window=...}.
+        # kube_configmap_annotations{annotation_runtime_getloopscale_com_chaos_window=...}.
         # We project that into a binary signal usable in `unless` clauses.
-        - record: loopzero_chaos_active
+        - record: loop_runtime_chaos_active
           expr: |
             max(
               kube_configmap_annotations{
-                namespace="loopzero-system",
-                configmap="loopzero-chaos-window",
-                annotation_loopzero_io_chaos_window="active"
+                namespace="loop-runtime-system",
+                configmap="loop-runtime-chaos-window",
+                annotation_runtime_getloopscale_com_chaos_window="active"
               }
             ) or vector(0)
 
-    - name: loopzero.chaos.slo-inhibits
+    - name: loop-runtime.chaos.slo-inhibits
       interval: 1m
       rules:
         # Sample inhibit pattern — admission rate-of-rejections is a typical
@@ -60,19 +60,19 @@ spec:
         - alert: AdmissionDeniedRateHigh_OutsideChaos
           expr: |
             (
-              sum(rate(loopzero_admission_denied_total[5m])) > 0.1
+              sum(rate(loop_runtime_admission_denied_total[5m])) > 0.1
             )
-            unless on() loopzero_chaos_active == 1
+            unless on() loop_runtime_chaos_active == 1
           for: 5m
           labels:
             severity: warning
-            loopzero_io_inhibit_during_chaos: "true"
+            runtime_getloopscale_com_inhibit_during_chaos: "true"
           annotations:
             summary: Admission denial rate elevated outside chaos window
             runbook: "docs/runbooks.md"
             description: |
-              `loopzero_admission_denied_total` rate > 0.1/s sustained 5m.
-              Chaos window NOT active (loopzero_chaos_active=0). Investigate
+              `loop_runtime_admission_denied_total` rate > 0.1/s sustained 5m.
+              Chaos window NOT active (loop_runtime_chaos_active=0). Investigate
               policy-controller logs OR rollback recent deny-mode change.
 
         # Sample inhibit pattern — PG circuit breaker open is normal during
@@ -80,13 +80,13 @@ spec:
         - alert: PGCircuitBreakerOpen_OutsideChaos
           expr: |
             (
-              loopzero_pg_circuit_breaker_state > 0
+              loop_runtime_pg_circuit_breaker_state > 0
             )
-            unless on() loopzero_chaos_active == 1
+            unless on() loop_runtime_chaos_active == 1
           for: 3m
           labels:
             severity: critical
-            loopzero_io_inhibit_during_chaos: "true"
+            runtime_getloopscale_com_inhibit_during_chaos: "true"
           annotations:
             summary: PG circuit breaker open outside chaos window
             runbook: "docs/runbooks.md"
@@ -94,15 +94,15 @@ spec:
               Connection pool saturated (>90%) and rejecting mutations.
               No chaos window active — this is a real saturation incident.
 
-    - name: loopzero.chaos.runaway
+    - name: loop-runtime.chaos.runaway
       interval: 1m
       rules:
         # Safety alert: chaos window stuck open for > 1h means the test
-        # framework forgot to clear loopzero-chaos-window ConfigMap. SLOs
+        # framework forgot to clear loop-runtime-chaos-window ConfigMap. SLOs
         # are inhibited which is a security/observability hole.
         - alert: ChaosWindowStuckOpen
           expr: |
-            (loopzero_chaos_active == 1)
+            (loop_runtime_chaos_active == 1)
           for: 1h
           labels:
             severity: warning
@@ -110,7 +110,7 @@ spec:
             summary: Chaos window active for >1h — forgot to clear?
             runbook: "docs/runbooks.md"
             description: |
-              `loopzero_chaos_active` has been 1 for over an hour. All
+              `loop_runtime_chaos_active` has been 1 for over an hour. All
               chaos-inhibited SLO alerts are suppressed. Clear the
-              `loopzero-chaos-window` ConfigMap annotation OR delete the
+              `loop-runtime-chaos-window` ConfigMap annotation OR delete the
               ConfigMap to restore SLO visibility.

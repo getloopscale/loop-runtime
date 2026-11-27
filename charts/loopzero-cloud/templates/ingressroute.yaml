@@ -1,2 +1,0 @@
-{{- /* Off unless ingressRoute.enabled — see values.yaml and loopzero-common.ingressRoute. */ -}}
-{{ include "loopzero-common.ingressRoute" . }}

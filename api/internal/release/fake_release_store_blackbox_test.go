@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release_test
 
@@ -8,16 +8,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // safeFakeTransition catches panics from the state machine.
 func safeFakeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = loopzeroerrors.NewInvalidTransition(string(current), string(event))
+			err = loopruntimeerrors.NewInvalidTransition(string(current), string(event))
 		}
 	}()
 	newState = m.Transition(current, event)
@@ -57,7 +57,7 @@ func (f *fakeReleaseStoreOrch) Create(ctx context.Context, tx db.DBTX, release *
 func (f *fakeReleaseStoreOrch) GetByID(ctx context.Context, id string) (*db.Release, error) {
 	r, ok := f.releases[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrReleaseNotFound
+		return nil, loopruntimeerrors.ErrReleaseNotFound
 	}
 	copy := *r
 	return &copy, nil
@@ -69,7 +69,7 @@ func (f *fakeReleaseStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id 
 	}
 	r, ok := f.releases[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrReleaseNotFound
+		return nil, loopruntimeerrors.ErrReleaseNotFound
 	}
 	newState, err := safeFakeTransition(releaseMachine, statemachine.State(r.Status), statemachine.Event(event))
 	if err != nil {
@@ -83,7 +83,7 @@ func (f *fakeReleaseStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id 
 func (f *fakeReleaseStoreOrch) SetGitCommit(ctx context.Context, tx db.DBTX, id string, commitSHA string) error {
 	r, ok := f.releases[id]
 	if !ok {
-		return loopzeroerrors.ErrReleaseNotFound
+		return loopruntimeerrors.ErrReleaseNotFound
 	}
 	r.GitCommit = commitSHA
 	return nil

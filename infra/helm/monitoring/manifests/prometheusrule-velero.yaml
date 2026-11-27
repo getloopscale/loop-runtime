@@ -1,7 +1,7 @@
 # velero-backup-dr-plan v1.0 / T3.1 — Velero backup freshness alerting.
 #
-# Replaces the ORPHAN `LoopZeroGiteaBackupStale` rule that referenced a metric
-# never emitted (loopzero_gitea_last_backup_timestamp). Velero exports its own
+# Replaces the ORPHAN `LoopRuntimeGiteaBackupStale` rule that referenced a metric
+# never emitted (loop_runtime_gitea_last_backup_timestamp). Velero exports its own
 # metrics natively at :8085/metrics and Phase 3.2 wires the scrape job.
 #
 # 4 alerts cover the full lifecycle:
@@ -13,19 +13,19 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-velero-alerts
+  name: loop-runtime-velero-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.velero
+    - name: loop-runtime.velero
       rules:
-        # Replaces the ORPHAN LoopZeroGiteaBackupStale: covers ALL of LoopZero's
-        # schedules (loopzero-*-backup) with a 12-hour window — a conservative RPO
+        # Replaces the ORPHAN LoopRuntimeGiteaBackupStale: covers ALL of LoopRuntime's
+        # schedules (loop-runtime-*-backup) with a 12-hour window — a conservative RPO
         # for the 6h schedules and a safety net for the weekly full backup.
-        - alert: LoopZeroVeleroBackupStale
-          expr: time() - velero_backup_last_successful_timestamp{schedule=~"loopzero-.*"} > 43200
+        - alert: LoopRuntimeVeleroBackupStale
+          expr: time() - velero_backup_last_successful_timestamp{schedule=~"loop-runtime-.*"} > 43200
           for: 5m
           labels:
             severity: critical
@@ -34,8 +34,8 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Last successful run of schedule {{ $labels.schedule }} is older than 12 hours. RPO exceeded — risk of data loss in case of cluster failure."
 
-        - alert: LoopZeroVeleroBackupFailing
-          expr: increase(velero_backup_failure_total{schedule=~"loopzero-.*"}[6h]) > 0
+        - alert: LoopRuntimeVeleroBackupFailing
+          expr: increase(velero_backup_failure_total{schedule=~"loop-runtime-.*"}[6h]) > 0
           for: 0m
           labels:
             severity: critical
@@ -44,7 +44,7 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Schedule {{ $labels.schedule }} produced one or more failed backups in the last 6 hours."
 
-        - alert: LoopZeroVeleroServerDown
+        - alert: LoopRuntimeVeleroServerDown
           expr: up{job="velero"} == 0
           for: 2m
           labels:
@@ -54,8 +54,8 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Velero deployment has been unreachable for >2 minutes. No backups will run while the server is down."
 
-        - alert: LoopZeroVeleroBackupPartial
-          expr: velero_backup_partial_failure_total{schedule=~"loopzero-.*"} > 0
+        - alert: LoopRuntimeVeleroBackupPartial
+          expr: velero_backup_partial_failure_total{schedule=~"loop-runtime-.*"} > 0
           for: 0m
           labels:
             severity: warning

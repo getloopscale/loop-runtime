@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -27,34 +27,34 @@ type operatorSecretAccess struct {
 
 var operatorSecretAccessTable = []operatorSecretAccess{
 	{
-		chart: "loopzero-tenant-operator",
+		chart: "loop-runtime-tenant-operator",
 		// cell kubeconfig Secrets (CellAwareRuntimeClientFactory) and the
 		// registry pull Secret (EnvironmentReconciler.ensurePullSecret), both
 		// read through the manager cache.
-		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
+		namespaces: map[string][]string{"loop-runtime-system": {"get", "list", "watch"}},
 	},
 	{
-		chart: "loopzero-app-operator",
+		chart: "loop-runtime-app-operator",
 		// cell kubeconfig Secrets (CellAwareRuntimeClientFactory), read through
 		// the manager cache. The TLS Secret the ExposureController checks is
 		// read in the workload's cell, with the cell's own identity.
-		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
+		namespaces: map[string][]string{"loop-runtime-system": {"get", "list", "watch"}},
 	},
 	{
-		chart: "loopzero-preview-operator",
+		chart: "loop-runtime-preview-operator",
 		// cell kubeconfig Secrets (CellAwareRuntimeClientFactory), read through
 		// the manager cache. Preview namespaces live in the cell, reached with
 		// the cell's own identity.
-		namespaces: map[string][]string{"loopzero-system": {"get", "list", "watch"}},
+		namespaces: map[string][]string{"loop-runtime-system": {"get", "list", "watch"}},
 	},
 	{
-		chart: "loopzero-platform-operator",
+		chart: "loop-runtime-platform-operator",
 		namespaces: map[string][]string{
 			// kubeconfig Secrets (ClusterCredential, read and watched), the Gitea
 			// admin Secret and platform-tokens (PlatformBootstrap, read and
 			// updated), the Git credential (GitRepositoryBinding). Deleting
 			// platform-tokens is a separate rule restricted by resourceNames.
-			"loopzero-system": {"get", "list", "watch", "update"},
+			"loop-runtime-system": {"get", "list", "watch", "update"},
 			// ArgoCD cluster, repository and repo-creds Secrets, created,
 			// updated and deleted by the three controllers; the admin Secret
 			// read by PlatformBootstrap.

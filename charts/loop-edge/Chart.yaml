@@ -1,0 +1,12 @@
+apiVersion: v2
+name: loop-edge
+description: The Caddy fleet that serves tenants' custom domains with certificates obtained on demand
+type: application
+version: 0.1.0
+appVersion: "dev"
+home: https://github.com/getloopscale/loop-runtime
+sources:
+  - https://github.com/getloopscale/loop-runtime
+maintainers:
+  - name: LoopRuntime Team
+    url: https://getloopscale.com

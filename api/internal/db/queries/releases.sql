@@ -8,7 +8,7 @@
 --
 -- Every multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate
 -- per platform-security-engineer condition 1 + M-1 + M-2 (enforced by
--- cmd/loopzero-ops/internal/quality/tenantpredicate gate).
+-- cmd/loop-runtime-ops/internal/quality/tenantpredicate gate).
 --
 -- Initial query set (5/13 total — remaining 8 queries added incrementally as
 -- callers migrate per T1.1 sub-step):
@@ -187,9 +187,31 @@ ORDER BY created_at ASC
 LIMIT 100;
 
 -- name: ListLatestActiveReleasePerEnv :many
--- The most recent ACTIVE release per environment across all of a tenant's
--- projects: the dashboard's per-environment last-deploy KPI.
-SELECT DISTINCT ON (environment) environment, git_commit, created_at
-FROM releases
-WHERE tenant_id = $1 AND status = 'ACTIVE'
-ORDER BY environment, created_at DESC;
+-- The most recent ACTIVE release of each (project, environment) of a tenant:
+-- the dashboard's per-environment last-deploy KPI. Two projects share
+-- environment names, so the project is part of the key. deployed_at is when
+-- the release became active: the end of the last rollback that ended on it,
+-- or its creation when no rollback did. git_commit is the
+-- GitOps repository commit; source_commit is the commit the user deployed (the
+-- release's build), NULL when that build is gone.
+SELECT DISTINCT ON (r.project_id, r.environment) r.project_id, r.environment, r.git_commit,
+       b.commit_sha AS source_commit,
+       COALESCE((SELECT max(rb.finished_at) FROM rollbacks rb
+                 WHERE rb.tenant_id = $1 AND rb.to_release_id = r.id AND rb.status = 'SUCCEEDED'),
+                r.created_at)::timestamptz AS deployed_at
+FROM releases r
+LEFT JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
+WHERE r.tenant_id = $1 AND r.status = 'ACTIVE'
+ORDER BY r.project_id, r.environment, r.created_at DESC;
+
+-- name: ListLatestReleaseStatusByBuild :many
+-- The status of the latest release each of the given builds has in its own
+-- environment. A release that a promotion created elsewhere from the same
+-- build is left out by the join on environment: it says nothing about how the
+-- deploy of the build itself did. A build with no release has no row.
+SELECT DISTINCT ON (r.build_id) r.build_id, r.status
+FROM releases r
+JOIN builds b ON b.id = r.build_id AND b.environment = r.environment
+WHERE r.tenant_id = sqlc.arg(tenant_id)
+  AND r.build_id = ANY(sqlc.arg(build_ids)::text[])
+ORDER BY r.build_id, r.created_at DESC;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -13,8 +13,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtest"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // execRecorder is the generated.DBTX side of the fake: it answers Exec with a

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package domains is the custom-domain feature (CF zone/DNS/TLS): provisioning, health checking
 // and Cloudflare reconciliation. Its handlers live in domainshttp and its Cloudflare zone client

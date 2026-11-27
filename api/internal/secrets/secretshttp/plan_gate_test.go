@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretshttp
 
@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // capLimiter allows up to cap secrets per environment and records what it
@@ -33,7 +33,7 @@ func (c *capLimiter) CheckValue(_ context.Context, _, metric string, requested i
 type unreadableLimiter struct{}
 
 func (unreadableLimiter) CheckValue(context.Context, string, string, int) (enforcement.LimitResult, error) {
-	return enforcement.LimitResult{}, loopzeroerrors.ErrPlatformDegraded
+	return enforcement.LimitResult{}, loopruntimeerrors.ErrPlatformDegraded
 }
 
 // envStore holds existing secrets per environment.

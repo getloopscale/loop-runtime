@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package stepwatch
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // fakeSource emits a scripted sequence of ArgoNodeEvents synchronously.
@@ -298,7 +298,7 @@ func TestArgoStepWatcher_HandleDelete_EmitsWorkflowDeleted(t *testing.T) {
 
 func TestArgoStepWatcher_BuildIDExtractedFromWorkflowName(t *testing.T) {
 	cases := map[string]string{
-		"loopzero-build-build-3c02294c80a43599-gxlg7": "build-3c02294c80a43599",
+		"loop-runtime-build-build-3c02294c80a43599-gxlg7": "build-3c02294c80a43599",
 		"unrelated-name": "",
 		"":               "",
 	}

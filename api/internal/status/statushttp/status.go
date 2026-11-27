@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package statushttp serves the project status endpoints: the point-in-time read and
 // the SSE stream that pushes changes as they happen.
@@ -19,16 +19,16 @@ import (
 	"sort"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/plantier"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/plantier"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // StatusBuildStore abstracts build retrieval for the status handler (DIP).
@@ -70,6 +70,9 @@ type StatusRelease struct {
 	Status    string
 	GitCommit string
 	CreatedAt time.Time
+	// DeployedAt is when the release became active: its creation, or the end
+	// of the rollback that reactivated it. Zero reads as CreatedAt.
+	DeployedAt time.Time
 	// EntryApp is the name of the apps_spec's first server/frontend app, used
 	// to emit the canonical public URL (`<tenant>-<project>-<entryApp>-<env>.<publicDomain>`).
 	// Empty when the release has no rendered apps (rare). Populated by the
@@ -94,7 +97,9 @@ type StatusHandler struct {
 	releases       StatusReleaseStore
 	baseDomain     string
 	publicDomain   string                  // operator-configured public wildcard for status.url (FAANG canonical J-25; mirrors PreviewPublicDomain)
-	grafanaBaseURL string                  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loopzero.local). Empty disables metrics_range_url emission.
+	grafanaBaseURL string                  // T1.1 of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1 — Grafana deep-link root (e.g. https://grafana.loop-runtime.local). Empty disables metrics_range_url emission.
+	metrics        StatusMetricsSource     // optional: source of replicas_ready and traffic_5xx_pct_1h
+	scale          StatusScaleReader       // optional: source of replicas_desired and of the scaling block
 	planTierStore  pkgdomain.PlanTierStore // #142 / #123 canonical — resolves tenant tier for dashboard pre-Apply slider ceiling (qa-dogfood-cleanup-2026-06-21). When nil, plan_tier echoes "starter" (matches pre-#142 fallback in ProjectHandler.Create + ScaleHandler.resolveTier).
 }
 
@@ -107,8 +112,8 @@ type StatusHandler struct {
 // session addendum 2026-06-12 (J-25 sponsor walkthrough LIVE catch).
 //
 // grafanaBaseURL is the Grafana deep-link root (operator-configured via
-// LOOPZERO_GRAFANA_BASE_URL env var). When set, statusResponse.MetricsRangeURL
-// is populated with templated URL `${grafanaBaseURL}/d/loopzero-project?
+// LOOP_RUNTIME_GRAFANA_BASE_URL env var). When set, statusResponse.MetricsRangeURL
+// is populated with templated URL `${grafanaBaseURL}/d/loop-runtime-project?
 // var-project=<name>&var-env=<env>`. When empty, MetricsRangeURL is
 // empty and dashboard renders "Open in Grafana" link as disabled. T1.1
 // of plan 2026-06-06-dashboard-journey-j18-status-runtime-health v1.1.
@@ -155,9 +160,13 @@ type activeReleaseResponse struct {
 
 // scalingStatusResponse is the scaling info in the status response.
 type scalingStatusResponse struct {
-	Replicas     int  `json:"replicas"`
-	Min          int  `json:"min"`
-	Max          int  `json:"max"`
+	Replicas int `json:"replicas"`
+	Min      int `json:"min"`
+	Max      int `json:"max"`
+	// TargetCPU and TargetMemory are omitted for a fixed scale and for an
+	// autoscaled app that has no such target.
+	TargetCPU    int  `json:"target_cpu,omitempty"`
+	TargetMemory int  `json:"target_memory,omitempty"`
 	ScaledToZero bool `json:"scaled_to_zero"`
 }
 
@@ -179,7 +188,7 @@ type statusResponse struct {
 	ActiveRelease *activeReleaseResponse `json:"active_release"`
 	SyncStatus    string                 `json:"sync_status"`
 	URL           string                 `json:"url"`
-	// Red Team loopzero-cloud#70/#62 closure: when the queried env has no last
+	// Red Team loop-console#70/#62 closure: when the queried env has no last
 	// build AND no active release, list any sibling envs that DO have a
 	// SUCCEEDED build so the CLI/dashboard can surface a hint instead of
 	// rendering the misleading empty-state view. Omitempty preserves the
@@ -189,9 +198,9 @@ type statusResponse struct {
 
 	// MetricsRangeURL is the Grafana deep-link templated URL for the J-18
 	// Status page "Open in Grafana" affordance. Format:
-	// `<grafanaBaseURL>/d/loopzero-project?var-project=<name>&var-env=<env>`.
+	// `<grafanaBaseURL>/d/loop-runtime-project?var-project=<name>&var-env=<env>`.
 	// Empty when StatusHandler.grafanaBaseURL is unset (operator did not
-	// configure LOOPZERO_GRAFANA_BASE_URL). Dashboard renders the link as
+	// configure LOOP_RUNTIME_GRAFANA_BASE_URL). Dashboard renders the link as
 	// disabled when empty. T1.1 of plan 2026-06-06-dashboard-journey-j18-
 	// status-runtime-health v1.1.
 	MetricsRangeURL string `json:"metrics_range_url"`
@@ -213,6 +222,17 @@ type statusResponse struct {
 	// canonically — the prior /v1/billing seed depended on Known Gap
 	// #116 cloud BFF billing read-side, which is 404).
 	PlanTier string `json:"plan_tier,omitempty"`
+
+	// The health fields the console reads (ProjectStatusDetail in its
+	// dashboard/src/lib/api/types.ts). Each is a pointer: a field with no
+	// source, or whose read failed, is omitted, because the console tells a
+	// missing value from a measured zero. alerts_active is not sent: nothing
+	// in the platform counts firing alerts per project.
+	ReplicasReady   *int     `json:"replicas_ready,omitempty"`
+	ReplicasDesired *int     `json:"replicas_desired,omitempty"`
+	DeployStatus    *string  `json:"deploy_status,omitempty"`
+	Traffic5xxPct1h *float64 `json:"traffic_5xx_pct_1h,omitempty"`
+	LastDeployAt    *string  `json:"last_deploy_at,omitempty"`
 }
 
 // Get handles GET /api/v1/projects/{name}/status?env={env}.
@@ -223,13 +243,13 @@ type statusResponse struct {
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -240,11 +260,11 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projects.GetByName(r.Context(), uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if project == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 		return
 	}
 
@@ -257,7 +277,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	builds, err := h.builds.ListByProject(r.Context(), uc.TenantID, name, 50, 0)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
@@ -265,7 +285,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	release, err := h.releases.GetActiveByEnv(r.Context(), uc.TenantID, name, env)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if release != nil {
@@ -273,11 +293,23 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		resp.SyncStatus = "synced"
 	}
 
-	if resp.LastBuild != nil {
+	// The apps of the running release, with the saved scale configuration
+	// applied. Nil when nothing runs, or when the scale could not be read.
+	var runningApps []StatusAppScale
+	if release != nil {
+		runningApps = h.fillHealth(r.Context(), &resp, uc.TenantID, name, env, release)
+	}
+
+	// A scale changes the running app without a build, so the last build's
+	// scaling is the fallback, not the source (#116).
+	switch {
+	case runningApps != nil:
+		resp.Scaling = scalingOfApps(runningApps)
+	case resp.LastBuild != nil:
 		resp.Scaling = findScalingForEnv(builds, env)
 	}
 
-	// Red Team loopzero-cloud#70/#62 closure: when the queried env has neither
+	// Red Team loop-console#70/#62 closure: when the queried env has neither
 	// a last_build nor an active release, surface sibling environments that
 	// DO have a SUCCEEDED build so the CLI / dashboard can replace the
 	// misleading empty-state with an honest "production is empty; preview
@@ -298,7 +330,7 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// "Visit" click in the dashboard hero card because no IngressRoute matched.
 	//
 	// Resolution order for the public-facing wildcard domain:
-	//   1. h.publicDomain (operator-configured LOOPZERO_PUBLIC_DOMAIN, e.g.
+	//   1. h.publicDomain (operator-configured LOOP_RUNTIME_PUBLIC_DOMAIN, e.g.
 	//      `prod-dev.getloopscale.app` for dev-public). When set + release exists +
 	//      entryApp resolved, emit the canonical public URL routed by Caddy
 	//      wildcard block to Traefik with Host rewrite.
@@ -312,11 +344,11 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	// v1.1 — Grafana deep-link + canonical prom_query_keys list.
 	//
 	// MetricsRangeURL: templated only when operator configured grafanaBaseURL
-	// (LOOPZERO_GRAFANA_BASE_URL). Empty otherwise so dashboard renders "Open in
+	// (LOOP_RUNTIME_GRAFANA_BASE_URL). Empty otherwise so dashboard renders "Open in
 	// Grafana" affordance as disabled honest (per ADR D2 + EC-1 absorption
 	// pattern — never silent empty values pretending things work).
 	if h.grafanaBaseURL != "" {
-		resp.MetricsRangeURL = h.grafanaBaseURL + "/d/loopzero-project?var-project=" + name + "&var-env=" + env
+		resp.MetricsRangeURL = h.grafanaBaseURL + "/d/loop-runtime-project?var-project=" + name + "&var-env=" + env
 	}
 
 	// PromQueryKeys: deterministic order from T0.2 eight-signals catalog.
@@ -368,7 +400,7 @@ func findLastBuildForEnv(builds []StatusBuild, env string) *lastBuildResponse {
 // collectOtherEnvsWithReleases returns the deterministic, deduplicated list
 // of sibling environments (≠ queriedEnv) that have at least one SUCCEEDED
 // build in the result set. Used by StatusHandler.Get to power the empty-env
-// hint (Red Team loopzero-cloud#70/#62).
+// hint (Red Team loop-console#70/#62).
 //
 // Order: alphabetical for stability across CLI/dashboard renderings (the
 // `builds` slice is most-recent-first, so naive iteration would emit by
@@ -405,9 +437,9 @@ func collectOtherEnvsWithReleases(builds []StatusBuild, queriedEnv string) []env
 // buildActiveReleaseResponse converts the domain release record to the
 // canonical response shape.
 //
-// Red Team loopzero-cloud#85 closure: the user-facing `git_commit` field
+// Red Team loop-console#85 closure: the user-facing `git_commit` field
 // is the APP commit (`build.commit_sha` — what the user pushed and
-// `loopzero deploy` printed in stdout), NOT the internal gitops repo
+// `loopscale deploy` printed in stdout), NOT the internal gitops repo
 // commit (which is what `releases.git_commit` actually stores for
 // SyncCallbackActivator integrity per MEET-2026-03-31-024 BUG-03). When
 // the active release's build_id matches a build in the result set, we

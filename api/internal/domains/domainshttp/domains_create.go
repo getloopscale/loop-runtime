@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainshttp
 
@@ -8,20 +8,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/domains"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	auditctx "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	auditctx "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Create registers a new custom domain (POST /api/v1/domains).
@@ -30,7 +31,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -56,7 +57,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 	auditctx.SetResourceID(ctx, req.Project)
 
 	// Validate domain format.
-	// Red Team loopzero-cloud#103 closure: was `code: INTERNAL_ERROR` which
+	// Red Team loop-console#103 closure: was `code: INTERNAL_ERROR` which
 	// connotes a server failure; this is INPUT validation, so emit the
 	// client-classified `INVALID_DOMAIN` code (mapped to 400 in
 	// pkg/errors/http/mapping.go).
@@ -78,6 +79,10 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 			"error": "Domain limit reached. You can register up to " + fmt.Sprintf("%d", maxDomainsPerTenant) + " custom domains.",
 			"code":  "DOMAIN_LIMIT_REACHED",
 		})
+		return
+	}
+
+	if !h.allowedByPlan(ctx, w, uc.TenantID, req) {
 		return
 	}
 
@@ -126,7 +131,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Environment: domain.Environment,
 		Status:      domain.Status,
 		Verification: &domainVerificationInfo{
-			TXTName:  "_loopzero-verify." + domain.Domain,
+			TXTName:  domains.VerificationTXTName(domain.Domain),
 			TXTValue: token,
 		},
 		CNAMETarget: h.cnameTarget,

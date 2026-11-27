@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package bootstraptest holds the in-memory bootstrap store the bootstrap
 // route's tests run against. It lives outside package bootstrap so production
@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap/bootstraphttp"
 )
 
 // InMemoryStore is an in-memory bootstrap.BootstrapStore for tests.

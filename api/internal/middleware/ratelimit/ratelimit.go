@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package ratelimit counts requests over a window and refuses the ones above
 // the quota.
@@ -25,8 +25,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/slidingwindow"
 )
 
 // RateLimiter is a sliding-window rate limiter keyed by an arbitrary string.

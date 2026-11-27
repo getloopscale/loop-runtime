@@ -1,0 +1,19 @@
+crds:
+  tenants:
+    enabled: true
+  loopruntimeapplications:
+    enabled: true
+  environments:
+    enabled: true
+  previewenvironments:
+    enabled: true
+  exposedroutes:
+    enabled: true
+  gitrepositorybindings:
+    enabled: true
+  platformbootstraps:
+    enabled: true
+  clustercredentials:
+    enabled: true
+
+controllerGenVersion: "v0.17.2"

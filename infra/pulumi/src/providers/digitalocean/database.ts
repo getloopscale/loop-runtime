@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as digitalocean from "@pulumi/digitalocean";
 import { IProviderDatabase } from "../../contracts/provider";
@@ -43,9 +43,9 @@ export class DigitalOceanDatabaseProvider implements IProviderDatabase {
       name: "gitea",
     });
 
-    new digitalocean.DatabaseDb(`${spec.name}-loopzero`, {
+    new digitalocean.DatabaseDb(`${spec.name}-loop-runtime`, {
       clusterId: cluster.id,
-      name: "loopzero",
+      name: "loop-runtime",
     });
 
     // Ory Kratos (identity management) and Hydra (OAuth2 server) require separate databases.

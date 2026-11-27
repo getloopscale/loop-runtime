@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainshttp
 
@@ -11,12 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // T3.1 of plan m3-verify-rate-limit-middleware (v1.1 SHIPPABLE 90.4).

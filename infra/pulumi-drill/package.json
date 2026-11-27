@@ -1,8 +1,8 @@
 {
-  "name": "loopzero-drill",
+  "name": "loop-runtime-drill",
   "version": "0.1.0",
   "private": true,
-  "description": "LoopZero DR drill Pulumi project — separate from production (MEET-2026-05-12 D9)",
+  "description": "LoopRuntime DR drill Pulumi project — separate from production (MEET-2026-05-12 D9)",
   "main": "src/index.ts",
   "scripts": {
     "build": "tsc -b",

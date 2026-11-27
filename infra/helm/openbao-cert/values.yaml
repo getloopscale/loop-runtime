@@ -10,7 +10,7 @@ issuerRef:
 # expects in secrets.helmfile.yaml.gotmpl.
 secretName: openbao-tls
 
-# Certificate validity (90d = pattern LoopZero)
+# Certificate validity (90d = pattern LoopRuntime)
 duration: 2160h  # 90d
 renewBefore: 360h  # 15d before expiration
 
@@ -29,7 +29,7 @@ dnsNames:
   - openbao-2.openbao-internal
   - openbao-2.openbao-internal.secrets-system.svc.cluster.local
   - localhost
-  # VK.5 LIVE 2026-06-02: cross-cluster access from loopzero-core via
+  # VK.5 LIVE 2026-06-02: cross-cluster access from loop-runtime-core via
   # kubectl port-forward exposed on host.k3d.internal hostname (k3d
   # injects this as hostAlias for the host machine IP).
   - host.k3d.internal

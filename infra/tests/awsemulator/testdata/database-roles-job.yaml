@@ -1,0 +1,27 @@
+# Creates loop_runtime_api, loop_runtime_worker and loop_console from a pod, as the master user, with the
+# production script. The pod's connection goes through the RDS instance's security group.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-roles
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: {{ .PsqlImage }}
+          envFrom:
+            - secretRef: {name: database-admin}
+          command: [sh, -c]
+          args:
+            - >-
+              psql -v ON_ERROR_STOP=1 -v api_password="$API_PASSWORD"
+              -v worker_password="$WORKER_PASSWORD" -v cloud_password="$CLOUD_PASSWORD"
+              -f /sql/provision-db-roles.sql
+          volumeMounts:
+            - {name: sql, mountPath: /sql}
+      volumes:
+        - name: sql
+          configMap: {name: database-roles}

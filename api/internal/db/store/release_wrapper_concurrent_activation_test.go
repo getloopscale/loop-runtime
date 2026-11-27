@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -27,9 +27,9 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // TestIsReleasesActiveUniqueViolation_OnlyIdxReleasesActiveUnique:
@@ -199,8 +199,8 @@ func TestUpdateStatus_ConcurrentActivation_ReturnsTypedError(t *testing.T) {
 		t.Fatal("expected CONCURRENT_ACTIVATION from the partial-unique-index, got nil")
 	}
 	// Assert the REAL typed wire (not a synthesized value): the store must
-	// return a *LoopZeroError with Code CONCURRENT_ACTIVATION.
-	var te *loopzeroerrors.LoopZeroError
+	// return a *LoopRuntimeError with Code CONCURRENT_ACTIVATION.
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "CONCURRENT_ACTIVATION" {
 		t.Errorf("real UpdateStatus must return typed CONCURRENT_ACTIVATION; got %v", err)
 	}

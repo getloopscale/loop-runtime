@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package config — regression suite for B1-B18 (CHG-2026-04-28-LAYERED-BOOTSTRAP T8.1).
 //
@@ -8,7 +8,7 @@
 //
 // Run:
 //
-//	LOOPZERO_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
+//	LOOP_RUNTIME_REGRESSION=1 go test ./infra/tests/config/ -run TestRegression -v
 package config
 
 import (
@@ -22,12 +22,12 @@ import (
 // runRegressionScript invokes regression-checks.sh and returns combined output.
 // F-01 publishes the API to the user without `tilt up`: NodePort 30001 is what the
 // k3d serverlb maps to host port 13001 (infra/k3d/core-cluster.yaml). It lived in
-// infra/helm/loopzero-api/values-standalone-multi.yaml, whose helmfile guard applied it
+// infra/helm/loop-runtime-api/values-standalone-multi.yaml, whose helmfile guard applied it
 // only when clusterRole was "standalone" — the one case the release was NOT
 // installed — so the overlay reached no install. The environment that does publish
 // the port is dev-public, and that overlay is what this pins now.
-func TestF01LoopZeroApiNodePortInDevPublic(t *testing.T) {
-	data, err := os.ReadFile("../../helmfile/values/dev-public/loopzero-api.yaml.gotmpl")
+func TestF01LoopRuntimeApiNodePortInDevPublic(t *testing.T) {
+	data, err := os.ReadFile("../../helmfile/values/dev-public/loop-runtime-api.yaml.gotmpl")
 	if err != nil {
 		t.Fatalf("read dev-public overlay: %v", err)
 	}
@@ -41,13 +41,13 @@ func TestF01LoopZeroApiNodePortInDevPublic(t *testing.T) {
 }
 
 // The localhost IngressRoute F-01 also added (Host localhost / 127.0.0.1 /
-// api.loopzero.local on the `web` entry point) was enabled by the same unreachable
-// overlay, so no install ever rendered it; it was not carried into charts/loopzero-api
+// api.loop-runtime.local on the `web` entry point) was enabled by the same unreachable
+// overlay, so no install ever rendered it; it was not carried into charts/loop-runtime-api
 // and its test went with it (docs/decisions.md, "One chart per bootstrap/published
 // pair").
 
 func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
-	data, err := os.ReadFile("../../../charts/loopzero-api/values.yaml")
+	data, err := os.ReadFile("../../../charts/loop-runtime-api/values.yaml")
 	if err != nil {
 		t.Fatalf("read default values: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
 		t.Fatalf("parse default values: %v", err)
 	}
 	if doc.Service.Type != "ClusterIP" {
-		t.Errorf("F-01 regression: charts/loopzero-api/values.yaml must keep service.type=ClusterIP, got %q", doc.Service.Type)
+		t.Errorf("F-01 regression: charts/loop-runtime-api/values.yaml must keep service.type=ClusterIP, got %q", doc.Service.Type)
 	}
 	// A null nodePort renders no nodePort field, so the cluster picks one only when an
 	// install asks for NodePort without pinning it.
@@ -73,9 +73,9 @@ func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
 // F-03, F-05 and F-06 were REMOVED, not skipped (B-180, applying B-169's standard).
 //
 // All three asserted about `cli/src/**`, which the M5 decomposition moved to the
-// sibling `loopzero-cli` repository. Each stat'd a path under `../../../cli/` and
+// sibling `loop-runtime-cli` repository. Each stat'd a path under `../../../cli/` and
 // skipped when it was missing -- conditional in form, unconditional in fact:
-// `cli/` is not in this tree and `loopzero-cli` is not cloned beside it, so the skip
+// `cli/` is not in this tree and `loop-runtime-cli` is not cloned beside it, so the skip
 // branch was the only branch ever taken since M5. F-06 was worse than dead: its
 // body continued past the skip with an UNGUARDED os.ReadFile of
 // `../../../cli/src/register/auth.ts` and a t.Fatalf, unreachable code that read
@@ -92,16 +92,16 @@ func TestF01DefaultProfileKeepsClusterIP(t *testing.T) {
 //     (TestCLIConsumer_AllPathsInSpec is hermetic: it reads the pinned
 //     `testdata/cli-consumed-paths.txt` against `api/openapi/engine.yaml` and
 //     needs no sibling on disk), plus `task quality:contract:cross-repo`, which
-//     runs loopzero-cli's half when the sibling IS present and prints an explicit
+//     runs loop-runtime-cli's half when the sibling IS present and prints an explicit
 //     SKIP line when it is not.
 //
 // What is genuinely NOT covered here, said plainly rather than implied: the CLI's
 // own internals -- Commander's exitOverride codes (F-03), init's AUTH_FAILED /
 // PREFLIGHT_FAILED vocabulary (F-05) and logout's hasToken wiring (F-06) -- are
-// loopzero-cli's behaviour and belong to loopzero-cli's suite. Asserting about them from
+// loop-runtime-cli's behaviour and belong to loop-runtime-cli's suite. Asserting about them from
 // a repository that does not contain them is what produced three permanent skips.
 //
-// The class is now guarded: `loopzero-ops quality test-skip-absent-path` fails when a
+// The class is now guarded: `loop-runtime-ops quality test-skip-absent-path` fails when a
 // test under infra/tests/ skips on a path absent from this tree.
 
 func TestF07VersionEndpointRegistered(t *testing.T) {
@@ -127,12 +127,12 @@ func TestF07VersionEndpointRegistered(t *testing.T) {
 	}
 }
 
-func TestF08LoopZeroApiServiceMonitorOptIn(t *testing.T) {
+func TestF08LoopRuntimeApiServiceMonitorOptIn(t *testing.T) {
 	read := func(rel string) string {
 		t.Helper()
-		data, err := os.ReadFile("../../../charts/loopzero-api/" + rel)
+		data, err := os.ReadFile("../../../charts/loop-runtime-api/" + rel)
 		if err != nil {
-			t.Fatalf("read charts/loopzero-api/%s: %v", rel, err)
+			t.Fatalf("read charts/loop-runtime-api/%s: %v", rel, err)
 		}
 		return string(data)
 	}
@@ -146,8 +146,8 @@ func TestF08LoopZeroApiServiceMonitorOptIn(t *testing.T) {
 	if !strings.Contains(read("templates/service.yaml"), "targetPort: metrics") {
 		t.Error("F-08 regression: the Service must expose targetPort=metrics so the ServiceMonitor scrape works")
 	}
-	if !strings.Contains(read("templates/servicemonitor.yaml"), `include "loopzero-common.servicemonitor"`) {
-		t.Error("F-08 regression: the ServiceMonitor must come from loopzero-common.servicemonitor, which is gated on metrics.serviceMonitor.enabled")
+	if !strings.Contains(read("templates/servicemonitor.yaml"), `include "loop-runtime-common.servicemonitor"`) {
+		t.Error("F-08 regression: the ServiceMonitor must come from loop-runtime-common.servicemonitor, which is gated on metrics.serviceMonitor.enabled")
 	}
 	values := read("values.yaml")
 	if !strings.Contains(values, "serviceMonitor:") || !strings.Contains(values, "port: metrics") {
@@ -185,41 +185,41 @@ func TestF11ArgocdLuaHealthChecksDefined(t *testing.T) {
 	}
 }
 
-func TestF12LoopZeroApiTokensSecretGenerated(t *testing.T) {
+func TestF12LoopRuntimeApiTokensSecretGenerated(t *testing.T) {
 	data, err := os.ReadFile("../../helmfile/scripts/generate-secrets.sh")
 	if err != nil {
 		t.Fatalf("read generate-secrets.sh: %v", err)
 	}
 	s := string(data)
-	if !strings.Contains(s, "loopzero-api-tokens") {
-		t.Error("F-12 regression: generate-secrets.sh must create loopzero-api-tokens Secret")
+	if !strings.Contains(s, "loop-runtime-api-tokens") {
+		t.Error("F-12 regression: generate-secrets.sh must create loop-runtime-api-tokens Secret")
 	}
 	if !strings.Contains(s, "argocd-token") {
-		t.Error("F-12 regression: loopzero-api-tokens must include argocd-token key (JWT for /health/deep probe)")
+		t.Error("F-12 regression: loop-runtime-api-tokens must include argocd-token key (JWT for /health/deep probe)")
 	}
 	if !strings.Contains(s, "/api/v1/session") {
 		t.Error("F-12 regression: script must POST to argocd /api/v1/session for JWT generation")
 	}
 	// Idempotency: if login fails, preserve the existing token. Helper renamed
 	// from `get_existing` to `get_or_generate` (latter handles both branches).
-	if !strings.Contains(s, "loopzero-api-tokens loopzero-system argocd-token") {
-		t.Error("F-12 regression: script must look up existing argocd-token in loopzero-api-tokens for mid-bootstrap idempotency")
+	if !strings.Contains(s, "loop-runtime-api-tokens loop-runtime-system argocd-token") {
+		t.Error("F-12 regression: script must look up existing argocd-token in loop-runtime-api-tokens for mid-bootstrap idempotency")
 	}
 	if !strings.Contains(s, "preserving existing argocd-token") {
 		t.Error("F-12 regression: script must log preservation of existing argocd-token on login failure")
 	}
-	// The loopzero-api install MUST reference the Secret. It is declared as a typed
+	// The loop-runtime-api install MUST reference the Secret. It is declared as a typed
 	// secrets.keyRefs entry of the values Helmfile installs the chart with.
-	dep, err := os.ReadFile("../../../charts/loopzero-api/values-bootstrap.yaml")
+	dep, err := os.ReadFile("../../../charts/loop-runtime-api/values-bootstrap.yaml")
 	if err != nil {
-		t.Fatalf("read loopzero-api bootstrap values: %v", err)
+		t.Fatalf("read loop-runtime-api bootstrap values: %v", err)
 	}
 	depStr := string(dep)
 	if !strings.Contains(depStr, "name: ARGOCD_TOKEN") {
-		t.Error("F-12 regression: the loopzero-api install must export env ARGOCD_TOKEN")
+		t.Error("F-12 regression: the loop-runtime-api install must export env ARGOCD_TOKEN")
 	}
-	if !strings.Contains(depStr, "secretName: loopzero-api-tokens") {
-		t.Error("F-12 regression: ARGOCD_TOKEN must come from secretKeyRef loopzero-api-tokens")
+	if !strings.Contains(depStr, "secretName: loop-runtime-api-tokens") {
+		t.Error("F-12 regression: ARGOCD_TOKEN must come from secretKeyRef loop-runtime-api-tokens")
 	}
 }
 
@@ -245,9 +245,9 @@ func TestF04MigrationScriptExists(t *testing.T) {
 	}
 	// Backup before destructive ops.
 	if !strings.Contains(s, "BACKUP_DIR=") || !strings.Contains(s, "tenant-migration-") {
-		t.Error("F-04 regression: script must backup CR YAML to ~/.loopzero/backups/tenant-migration-* before delete")
+		t.Error("F-04 regression: script must backup CR YAML to ~/.loop-runtime/backups/tenant-migration-* before delete")
 	}
-	// decide_winner logic: prefer canonical (loopzero-system) by creationTimestamp.
+	// decide_winner logic: prefer canonical (loop-runtime-system) by creationTimestamp.
 	if !strings.Contains(s, "decide_winner") || !strings.Contains(s, "creationTimestamp") {
 		t.Error("F-04 regression: script must compare creationTimestamp to decide canonical winner")
 	}

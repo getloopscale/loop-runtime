@@ -4,7 +4,7 @@ WORKDIR /workspace
 ENV GOWORK=off
 ENV GOPRIVATE=github.com/getloopscale/*
 
-# loopzero-contracts is a PINNED private module (M5 cutover, via pkg). Fetched with GOPRIVATE +
+# loop-runtime-contracts is a PINNED private module (M5 cutover, via pkg). Fetched with GOPRIVATE +
 # a buildx --secret token (never baked in a layer). git is required for the module VCS fetch.
 RUN apk add --no-cache git
 
@@ -24,20 +24,20 @@ COPY operators/ ./operators/
 
 RUN --mount=type=cache,target=/root/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loopzero-preview-operator ./cmd/preview-operator
+    cd operators && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loop-runtime-preview-operator ./cmd/preview-operator
 
 FROM gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero"
-LABEL org.opencontainers.image.title="loopzero-preview-operator"
-LABEL org.opencontainers.image.description="LoopZero PaaS Preview Environment operator"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime"
+LABEL org.opencontainers.image.title="loop-runtime-preview-operator"
+LABEL org.opencontainers.image.description="LoopRuntime PaaS Preview Environment operator"
 
-COPY --from=builder /loopzero-preview-operator /usr/local/bin/loopzero-preview-operator
+COPY --from=builder /loop-runtime-preview-operator /usr/local/bin/loop-runtime-preview-operator
 EXPOSE 8080 8081
 
 # T8.1 of deep-review-remediation-plan (closes find_infra_001 HIGH).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD ["/usr/local/bin/loopzero-preview-operator", "--healthcheck-probe"]
+  CMD ["/usr/local/bin/loop-runtime-preview-operator", "--healthcheck-probe"]
 
-ENTRYPOINT ["loopzero-preview-operator"]
+ENTRYPOINT ["loop-runtime-preview-operator"]
 CMD ["--leader-elect=true"]

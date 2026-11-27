@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package projectmetricshttp_test
 
@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/projectmetrics/projectmetricshttp"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -166,7 +166,7 @@ func TestMetricsProxy_Get(t *testing.T) {
 	t.Run("empty histogram returns 200 with collecting status", func(t *testing.T) {
 		// Arrange: project < 24h old simulated by Prometheus returning empty
 		// result. Handler must return 200 OK with status=collecting + hint —
-		// UI consumer renders "Coletando dados..." NOT empty chart.
+		// The console renders the hint in place of an empty chart.
 		projects := &fakeProjectStore{
 			project: &ports.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},
 		}
@@ -189,8 +189,8 @@ func TestMetricsProxy_Get(t *testing.T) {
 		if resp["status"] != "collecting" {
 			t.Errorf("expected status=collecting, got %q", resp["status"])
 		}
-		if resp["collecting_hint"] != "Coletando dados..." {
-			t.Errorf("expected collecting_hint='Coletando dados...', got %q", resp["collecting_hint"])
+		if resp["collecting_hint"] != "Collecting data..." {
+			t.Errorf("collecting_hint = %q, want the English \"Collecting data...\"", resp["collecting_hint"])
 		}
 		// Data must be empty array (not null)
 		if data, ok := resp["data"].([]interface{}); !ok || len(data) != 0 {
@@ -245,7 +245,7 @@ func TestMetricsProxy_Get(t *testing.T) {
 
 	t.Run("Edge: nil promClient returns 503 prometheus_not_configured", func(t *testing.T) {
 		// Arrange: handler constructed with nil Prometheus client (operator
-		// did not configure LOOPZERO_PROMETHEUS_ADDRESS). Handler must surface
+		// did not configure LOOP_RUNTIME_PROMETHEUS_ADDRESS). Handler must surface
 		// 503 honestly — NOT silently return empty data.
 		projects := &fakeProjectStore{
 			project: &ports.ProjectResult{ID: "proj-1", Name: "my-app", TeamID: "acme"},

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // CHG-2026-04-30-INFRA-NORMALIZE — T0.1 follow-up + Plan v2 Phase 5 enabler.
 // Validates the SQL contract of `000006_cells.up.sql` without requiring a

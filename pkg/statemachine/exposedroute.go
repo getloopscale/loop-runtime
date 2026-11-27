@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -37,7 +37,7 @@ const (
 //
 // Lifecycle: Empty → Pending → CertIssued → Reachable
 // Recovery:  Failed → Pending (Retry)
-// No terminal: ExposedRoute lives until parent CR (LoopZeroApplication) is deleted.
+// No terminal: ExposedRoute lives until parent CR (LoopRuntimeApplication) is deleted.
 func NewExposedRouteMachine() *Machine {
 	return NewMachine(MachineConfig{
 		Name: "ExposedRoute",
@@ -62,7 +62,7 @@ func NewExposedRouteMachine() *Machine {
 		// Audit gap M11 #26 fix: explicit empty Terminal set (instead of
 		// omitting the field). ExposedRoute is intentionally non-terminal —
 		// the CR is garbage-collected via ownerRef when its parent
-		// LoopZeroApplication is deleted, so the lifecycle has no symbolic
+		// LoopRuntimeApplication is deleted, so the lifecycle has no symbolic
 		// "Cleaned" state. An explicit `[]State{}` makes the design intent
 		// visible to readers and to anyone running parity checks against
 		// the operator status reconcile, distinguishing "no terminal by

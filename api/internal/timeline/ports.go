@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package timeline is the deploy-timeline feature: the ordered events of one
 // deploy, aggregated by timeline/aggregator and streamed by timelinehttp.

@@ -1,0 +1,57 @@
+{{- /* SPDX-License-Identifier: Apache-2.0 */ -}}
+{{- with .Values.identity }}
+{{- if .enabled }}
+{{- $host := required "public-routes: identity.host is required" .host }}
+{{- $registration := "(Path(`/self-service/registration`) || Path(`/self-service/registration/methods/password`))" }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: public-identity
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: public-routes
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  entryPoints:
+    {{- toYaml $.Values.entryPoints | nindent 4 }}
+  routes:
+    - match: Host(`{{ $host }}`) && (PathPrefix(`/oauth2/`) || PathPrefix(`/.well-known/`) || Path(`/userinfo`) || PathPrefix(`/credentials`))
+      kind: Rule
+      priority: 300
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .hydra.service }}
+          port: {{ .hydra.port }}
+{{- if $.Values.console.enabled }}
+    # Registration goes through loop-console, which answers an existing and a new
+    # email the same way.
+    - match: Host(`{{ $host }}`) && {{ $registration }}
+      kind: Rule
+      priority: 200
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $.Values.console.cloud.service }}
+          namespace: {{ $.Values.console.namespace }}
+          port: {{ $.Values.console.cloud.port }}
+{{- end }}
+    - match: Host(`{{ $host }}`) && !PathPrefix(`/admin`){{ if not $.Values.console.enabled }} && !{{ $registration }}{{ end }}
+      kind: Rule
+      priority: 100
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .kratos.service }}
+          port: {{ .kratos.port }}
+  {{- include "public-routes.tls" (dict "root" $ "name" "public-identity") | trim | nindent 2 }}
+{{- include "public-routes.certificate" (dict "root" $ "name" "public-identity" "namespace" .namespace "host" $host) }}
+{{- end }}
+{{- end }}

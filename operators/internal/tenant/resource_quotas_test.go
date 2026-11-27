@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package portable_tests — Resource Quota golden tests.
 //
 // Source mapping:
 //   - Capsule: e2e/resourcequota_test.go
 //   - Behavioral contracts: Capsule BC-002 (quota enforcement) + BC-004 (drift correction)
-//   - Translated to: LoopZero TenantController (build namespace quotas) and
+//   - Translated to: LoopRuntime TenantController (build namespace quotas) and
 //     EnvironmentController (runtime namespace quotas and LimitRanges).
 //
 // Key behavioral differences from Capsule:
 //   - Capsule propagates quotas from a single GlobalTenantResource to all tenant namespaces.
-//   - LoopZero has TWO quota contexts: build namespace (build-quota) and runtime namespace (tenant-quota).
+//   - LoopRuntime has TWO quota contexts: build namespace (build-quota) and runtime namespace (tenant-quota).
 //   - Build quota uses fixed platform constants (not configurable per tenant).
 //   - Runtime quota reflects Tenant CR spec.limits values.
 //   - Both controllers use CreateOrUpdate — drift is corrected on the next reconcile.
@@ -28,8 +28,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 // expectResourceQuotaField fetches a ResourceQuota by name+namespace and
@@ -52,7 +52,7 @@ func expectResourceQuotaField(quotaName, namespace string, key corev1.ResourceNa
 // value. Phase 3 helper: collapses 4 near-identical It() blocks per limit
 // type into table-driven entries (default-CPU/default-mem/request-CPU/request-mem).
 func expectLimitRangeField(tenantName string, fieldGetter func(corev1.LimitRangeItem) string, want string) {
-	ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
+	ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 	Eventually(func(g Gomega) {
 		var lr corev1.LimitRange
 		g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -66,17 +66,17 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_resource_quotas_build_quota_enforced ---
 	// Source: src_resource_quotas_limitrange_and_quota_replicated_to_namespaces
-	// BC: Capsule BC-002 → LoopZero build-quota ResourceQuota in build namespace
+	// BC: Capsule BC-002 → LoopRuntime build-quota ResourceQuota in build namespace
 
 	Context("golden_resource_quotas_build_quota_enforced", func() {
 		const tenantName = "golden-quota-build"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
@@ -116,31 +116,31 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_resource_quotas_runtime_quota_from_tenant_limits ---
 	// Source: src_resource_quotas_limitrange_and_quota_replicated_to_namespaces
-	// BC: Capsule BC-002 → LoopZero tenant-quota ResourceQuota in runtime namespace
+	// BC: Capsule BC-002 → LoopRuntime tenant-quota ResourceQuota in runtime namespace
 
 	Context("golden_resource_quotas_runtime_quota_from_tenant_limits", func() {
 		const tenantName = "golden-quota-rt"
 
 		BeforeAll(func() {
 			// Create tenant with explicit limits — these must be reflected in the quota.
-			environments := []loopzerov1.TenantEnvironmentEntry{
+			environments := []loopruntimev1.TenantEnvironmentEntry{
 				{Name: "production", Cluster: "workload", Project: "default-project"},
 			}
-			tenant := &loopzerov1.Tenant{
+			tenant := &loopruntimev1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      tenantName,
 					Namespace: "default",
 				},
-				Spec: loopzerov1.TenantSpec{
+				Spec: loopruntimev1.TenantSpec{
 					DisplayName:  "Golden Quota Runtime",
-					Plan:         loopzerov1.PlanStarter,
+					Plan:         loopruntimev1.PlanStarter,
 					Environments: environments,
-					GitOps: loopzerov1.GitOpsSpec{
-						RepoName: "loopzero-tenant-" + tenantName,
+					GitOps: loopruntimev1.GitOpsSpec{
+						RepoName: "loop-runtime-tenant-" + tenantName,
 						Branch:   "main",
 					},
-					Preview: loopzerov1.PreviewSpec{MaxEnvironments: 2, TTLHours: 24},
-					Limits: loopzerov1.ResourceLimits{
+					Preview: loopruntimev1.PreviewSpec{MaxEnvironments: 2, TTLHours: 24},
+					Limits: loopruntimev1.ResourceLimits{
 						MaxCPU:              resource.MustParse("8"),
 						MaxMemory:           resource.MustParse("16Gi"),
 						MaxStorage:          resource.MustParse("50Gi"),
@@ -151,7 +151,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
@@ -160,15 +160,15 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should create a ResourceQuota named tenant-quota in the runtime namespace", func() {
-			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
+			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should reflect spec.limits.maxCPU in requests.cpu of tenant-quota", func() {
-			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName), corev1.ResourceRequestsCPU, "8")
+			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName), corev1.ResourceRequestsCPU, "8")
 		})
 
 		It("should reflect spec.limits.maxMemory in requests.memory of tenant-quota", func() {
-			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName), corev1.ResourceRequestsMemory, "16Gi")
+			expectResourceQuotaField("tenant-quota", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName), corev1.ResourceRequestsMemory, "16Gi")
 		})
 
 		AfterAll(func() {
@@ -178,17 +178,17 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_resource_quotas_limitrange_default_container_limits ---
 	// Source: src_resource_quotas_limitrange_and_quota_replicated_to_namespaces
-	// BC: Capsule BC-002 → LoopZero tenant-limits LimitRange in runtime namespace
+	// BC: Capsule BC-002 → LoopRuntime tenant-limits LimitRange in runtime namespace
 
 	Context("golden_resource_quotas_limitrange_default_container_limits", func() {
 		const tenantName = "golden-lr-rt"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())
@@ -197,7 +197,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should create a LimitRange named tenant-limits in the runtime namespace", func() {
-			ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var lr corev1.LimitRange
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -207,7 +207,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should set Container type in tenant-limits LimitRange", func() {
-			expectLimitRangeContainerType("tenant-limits", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
+			expectLimitRangeContainerType("tenant-limits", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should set default CPU limit=500m in tenant-limits", func() {
@@ -233,21 +233,21 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_resource_quotas_restored_after_manual_deletion ---
 	// Source: src_resource_quotas_resourcequota_restored_after_modification
-	// BC: Capsule BC-004 (drift correction) → LoopZero CreateOrUpdate restores deleted quotas
+	// BC: Capsule BC-004 (drift correction) → LoopRuntime CreateOrUpdate restores deleted quotas
 
 	Context("golden_resource_quotas_restored_after_manual_deletion", func() {
 		const tenantName = "golden-quota-restore"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			// Wait for quota to exist before deleting it.
-			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loopzero-%s-default-project-production", tenantName))
+			expectResourceQuotaExists("tenant-quota", fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName))
 		})
 
 		It("should recreate tenant-quota after it is manually deleted", func() {
-			ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 
 			// Simulate infrastructure drift: manually delete the ResourceQuota.
 			var quota corev1.ResourceQuota
@@ -257,7 +257,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 			Expect(k8sClient.Delete(ctx, &quota)).To(Succeed())
 
 			// Trigger re-reconcile by updating the Tenant CR.
-			var t loopzerov1.Tenant
+			var t loopruntimev1.Tenant
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: tenantName, Namespace: "default",
 			}, &t)).To(Succeed())
@@ -276,7 +276,7 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 		})
 
 		It("should restore the correct CPU and memory values after drift correction", func() {
-			ns := fmt.Sprintf("loopzero-%s-default-project-production", tenantName)
+			ns := fmt.Sprintf("loop-runtime-%s-default-project-production", tenantName)
 			Eventually(func(g Gomega) {
 				var restored corev1.ResourceQuota
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
@@ -298,17 +298,17 @@ var _ = Describe("Golden: Resource Quotas", Ordered, func() {
 
 	// --- GOLDEN TEST: golden_resource_quotas_build_limitrange_created ---
 	// Source: src_resource_quotas_limitrange_and_quota_replicated_to_namespaces
-	// BC: Capsule BC-002 → LoopZero build-limits LimitRange in build namespace
+	// BC: Capsule BC-002 → LoopRuntime build-limits LimitRange in build namespace
 
 	Context("golden_resource_quotas_build_limitrange_created", func() {
 		const tenantName = "golden-lr-build"
 
 		BeforeAll(func() {
-			tenant := newGoldenTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+			tenant := newGoldenTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 			Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var t loopzerov1.Tenant
+				var t loopruntimev1.Tenant
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: tenantName, Namespace: "default",
 				}, &t)).To(Succeed())

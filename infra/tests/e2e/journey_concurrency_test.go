@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 14: Concurrency + Lock Discipline (absorbed from edge_concurrency
 // + failure_scenarios on 2026-05-25 per user mandate "keep only the
@@ -97,7 +97,7 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 				defer GinkgoRecover()
 				defer wg.Done()
 				<-barrier
-				stdout, stderr, exitCode := runLoopZeroDeploy(workDir, "--env", "production", "--json")
+				stdout, stderr, exitCode := runLoopRuntimeDeploy(workDir, "--env", "production", "--json")
 				results <- deployResult{stdout: stdout, stderr: stderr, exitCode: exitCode}
 			}()
 		}
@@ -142,7 +142,7 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 	})
 
 	It("Sync timeout error path leaks no internal terms (Rule 3)", func() {
-		stdout, stderr, exitCode := runLoopZero("status",
+		stdout, stderr, exitCode := runLoopRuntime("status",
 			"--project", "nonexistent-sync-test",
 			"--env", "production", "--json")
 
@@ -154,7 +154,7 @@ var _ = Describe("Journey 14: Concurrency + Lock Discipline", Label("journey"), 
 	})
 
 	It("Health probe failure error path leaks no internal terms (Rule 3)", func() {
-		stdout, stderr, exitCode := runLoopZero("status",
+		stdout, stderr, exitCode := runLoopRuntime("status",
 			"--project", "nonexistent-health-test",
 			"--env", "production", "--json")
 

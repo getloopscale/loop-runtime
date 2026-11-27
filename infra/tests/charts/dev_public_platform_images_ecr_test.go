@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -41,12 +41,12 @@ func assertECRImage(t *testing.T, where, ref, repository string) {
 // as on EKS — and without re-pulling an immutable tag on every start.
 func TestDevPublicPlatformDeploymentsPullFromECR(t *testing.T) {
 	releases := map[string]string{
-		"loopzero-api":               "charts/loopzero-api",
-		"loopzero-tenant-operator":   "charts/loopzero-tenant-operator",
-		"loopzero-app-operator":      "charts/loopzero-app-operator",
-		"loopzero-preview-operator":  "charts/loopzero-preview-operator",
-		"loopzero-platform-operator": "charts/loopzero-platform-operator",
-		"loopzero-cloud":             "charts/loopzero-cloud",
+		"loop-runtime-api":               "charts/loop-runtime-api",
+		"loop-runtime-tenant-operator":   "charts/loop-runtime-tenant-operator",
+		"loop-runtime-app-operator":      "charts/loop-runtime-app-operator",
+		"loop-runtime-preview-operator":  "charts/loop-runtime-preview-operator",
+		"loop-runtime-platform-operator": "charts/loop-runtime-platform-operator",
+		"loop-console":                   "charts/loop-console",
 	}
 	// The data plane (#446): one chart, one release per service enabled on dev-public.
 	for svc := range enabledDataPlane(t) {
@@ -79,27 +79,27 @@ func TestDevPublicPlatformDeploymentsPullFromECR(t *testing.T) {
 	}
 }
 
-// loopzero-api launches the build steps that sign and scan images; those images come from
+// loop-runtime-api launches the build steps that sign and scan images; those images come from
 // the same registry, pinned the same way.
 func TestDevPublicBuildStepImagesComeFromECR(t *testing.T) {
-	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loopzero-api", "charts/loopzero-api", helmfileCoreEnv...)
-	cm := renderedObject(t, rendered, "ConfigMap", "loopzero-api")
+	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "dev-public", "loop-runtime-api", "charts/loop-runtime-api", helmfileCoreEnv...)
+	cm := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
 	if cm == nil {
-		t.Fatal("loopzero-api rendered no ConfigMap loopzero-api")
+		t.Fatal("loop-runtime-api rendered no ConfigMap loop-runtime-api")
 	}
 	for key, repository := range map[string]string{
-		"LOOPZERO_COSIGN_IMAGE": "loopzero-cosign-signer",
-		"LOOPZERO_SYFT_IMAGE":   "loopzero-syft-scanner",
+		"LOOP_RUNTIME_COSIGN_IMAGE": "loop-runtime-cosign-signer",
+		"LOOP_RUNTIME_SYFT_IMAGE":   "loop-runtime-syft-scanner",
 	} {
 		ref, _ := dig(cm, "data", key).(string)
-		assertECRImage(t, "loopzero-api ConfigMap "+key, ref, repository)
+		assertECRImage(t, "loop-runtime-api ConfigMap "+key, ref, repository)
 	}
 }
 
 // MinIO and its client are built from source (#394) and published by the same pipeline.
 func TestDevPublicMinioImagesComeFromECR(t *testing.T) {
 	values := helmfileValues(t, "core.helmfile.yaml.gotmpl", "dev-public", "minio", helmfileCoreEnv...)
-	for key, repository := range map[string]string{"image": "loopzero-minio", "mcImage": "loopzero-clone-runner"} {
+	for key, repository := range map[string]string{"image": "loop-runtime-minio", "mcImage": "loop-runtime-clone-runner"} {
 		repo, _ := dig(values, key, "repository").(string)
 		tag, _ := dig(values, key, "tag").(string)
 		assertECRImage(t, "minio."+key, repo+":"+tag, repository)
@@ -108,7 +108,7 @@ func TestDevPublicMinioImagesComeFromECR(t *testing.T) {
 
 // The build cluster's clone step runs the clone-runner image.
 func TestDevPublicCloneRunnerComesFromECR(t *testing.T) {
-	values := helmfileValues(t, "build.helmfile.yaml.gotmpl", "dev-public", "loopzero-build-cwts", helmfileCoreEnv...)
+	values := helmfileValues(t, "build.helmfile.yaml.gotmpl", "dev-public", "loop-runtime-build-cwts", helmfileCoreEnv...)
 	ref, _ := dig(values, "images", "cloneRunner").(string)
-	assertECRImage(t, "loopzero-build-cwts.images.cloneRunner", ref, "loopzero-clone-runner")
+	assertECRImage(t, "loop-runtime-build-cwts.images.cloneRunner", ref, "loop-runtime-clone-runner")
 }

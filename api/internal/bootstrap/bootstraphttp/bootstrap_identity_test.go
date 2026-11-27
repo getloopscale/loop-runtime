@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package bootstraphttp_test
 
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap/bootstraphttp"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // recordingStore answers every Bootstrap with err and keeps the request it saw.

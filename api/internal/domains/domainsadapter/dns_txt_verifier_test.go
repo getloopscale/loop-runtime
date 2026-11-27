@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainsadapter
 
@@ -27,8 +27,8 @@ func TestDNSTXTVerifier_FindsThePublishedToken(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("got (%v, %v), want (true, nil)", ok, err)
 	}
-	if r.lastName != "_loopzero-verify.api.acme.com" {
-		t.Errorf("looked up %q, want _loopzero-verify.api.acme.com", r.lastName)
+	if r.lastName != "_loopscale-verify.api.acme.com" {
+		t.Errorf("looked up %q, want _loopscale-verify.api.acme.com", r.lastName)
 	}
 }
 

@@ -1,25 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package e2e — dogfood loop H1 (CHG-2026-04-29-DOGFOOD T6.1).
 //
 // **Goal**: validate the complete real-user journey `login → init →
 // deploy → status → rollback → delete` against k3d standalone-multi with a
-// real LOOPZERO_TOKEN, guaranteeing Proof of Life + Proof of Death.
+// real LOOP_RUNTIME_TOKEN, guaranteeing Proof of Life + Proof of Death.
 //
 // **Why distinct from `deploy_e2e_test.go`?**
 //   - `deploy_e2e_test.go` (T4.3 of the parent plan) focuses on the **deploy**
 //     path end-to-end; it assumes tenant/project already exist.
 //   - `dogfood_loop_h1_test.go` (T6.1) focuses on the **user journey** —
-//     it runs `loopzero login`, executes each step of the happy path as a
+//     it runs `loopscale login`, executes each step of the happy path as a
 //     real operator would, and the test validates that each exit code matches
 //     the intent (Rule 4).
 //
-// **Gating**: requires `LOOPZERO_E2E_DOGFOOD=1` + a valid `LOOPZERO_TOKEN` (GitHub
+// **Gating**: requires `LOOP_RUNTIME_E2E_DOGFOOD=1` + a valid `LOOP_RUNTIME_TOKEN` (GitHub
 // PAT with `read:user` scope or a Hydra OAuth token). CI runs it as a manual
 // trigger (not on PR builds — it needs a real cluster).
 //
-// **Cleanup**: defer `loopzero project delete` in each test.
+// **Cleanup**: defer `loopscale project delete` in each test.
 package e2e
 
 import (
@@ -33,49 +33,49 @@ import (
 )
 
 const (
-	dogfoodFlag         = "LOOPZERO_E2E_DOGFOOD"
+	dogfoodFlag         = "LOOP_RUNTIME_E2E_DOGFOOD"
 	dogfoodTenantPrefix = "df-h1"
 	dogfoodTimeout      = 25 * time.Minute
 )
 
-// requireDogfoodFlag skips the test unless LOOPZERO_E2E_DOGFOOD=1 + LOOPZERO_TOKEN.
-func requireDogfoodFlag(t *testing.T) (loopzeroBin, loopzeroToken string) {
+// requireDogfoodFlag skips the test unless LOOP_RUNTIME_E2E_DOGFOOD=1 + LOOP_RUNTIME_TOKEN.
+func requireDogfoodFlag(t *testing.T) (loopRuntimeBin, loopRuntimeToken string) {
 	t.Helper()
 	if os.Getenv(dogfoodFlag) != "1" {
-		t.Skipf("set %s=1 + LOOPZERO_TOKEN to run dogfood loop H1 (requires k3d + valid GitHub PAT)", dogfoodFlag)
+		t.Skipf("set %s=1 + LOOP_RUNTIME_TOKEN to run dogfood loop H1 (requires k3d + valid GitHub PAT)", dogfoodFlag)
 	}
-	loopzeroToken = os.Getenv("LOOPZERO_TOKEN")
-	if loopzeroToken == "" {
-		t.Skip("LOOPZERO_TOKEN required for dogfood loop H1 (GitHub PAT with read:user scope)")
+	loopRuntimeToken = os.Getenv("LOOP_RUNTIME_TOKEN")
+	if loopRuntimeToken == "" {
+		t.Skip("LOOP_RUNTIME_TOKEN required for dogfood loop H1 (GitHub PAT with read:user scope)")
 	}
-	// Locate loopzero binary (repo root / cli/bin/loopzero).
+	// Locate loop-runtime binary (repo root / cli/bin/loop-runtime).
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("os.Getwd: %v", err)
 	}
-	candidate := filepath.Join(cwd, "..", "..", "..", "cli", "bin", "loopzero")
+	candidate := filepath.Join(cwd, "..", "..", "..", "cli", "bin", "loop-runtime")
 	if _, err := os.Stat(candidate); err != nil {
-		t.Fatalf("loopzero binary not found at %s: %v", candidate, err)
+		t.Fatalf("loop-runtime binary not found at %s: %v", candidate, err)
 	}
 	abs, err := filepath.Abs(candidate)
 	if err != nil {
 		t.Fatalf("abs path: %v", err)
 	}
-	return abs, loopzeroToken
+	return abs, loopRuntimeToken
 }
 
-// loopzeroExec runs `loopzero <args>` and returns (stdout, stderr, exitCode).
+// loopRuntimeExec runs `loop-runtime <args>` and returns (stdout, stderr, exitCode).
 // Always passes --json for programmatic parsing and schema stability.
-type loopzeroResult struct {
+type loopRuntimeResult struct {
 	stdout   string
 	stderr   string
 	exitCode int
 }
 
-func loopzeroExec(t *testing.T, loopzeroBin string, env []string, dir string, args ...string) loopzeroResult {
+func loopRuntimeExec(t *testing.T, loopRuntimeBin string, env []string, dir string, args ...string) loopRuntimeResult {
 	t.Helper()
 	allArgs := append([]string{}, args...)
-	cmd := exec.Command("node", append([]string{loopzeroBin}, allArgs...)...)
+	cmd := exec.Command("node", append([]string{loopRuntimeBin}, allArgs...)...)
 	cmd.Env = env
 	cmd.Dir = dir
 	stdout, _ := cmd.Output()
@@ -84,7 +84,7 @@ func loopzeroExec(t *testing.T, loopzeroBin string, env []string, dir string, ar
 		stderr = exitErr.Stderr
 	}
 	exitCode := cmd.ProcessState.ExitCode()
-	return loopzeroResult{stdout: string(stdout), stderr: string(stderr), exitCode: exitCode}
+	return loopRuntimeResult{stdout: string(stdout), stderr: string(stderr), exitCode: exitCode}
 }
 
 // parseJSONLine extracts the first valid JSON from stdout (some commands
@@ -113,20 +113,20 @@ func parseJSONLine(t *testing.T, raw string) map[string]any {
 // TestDogfoodLoopH1 — complete real-user journey.
 //
 // Steps:
-//  1. `loopzero login --token $LOOPZERO_TOKEN` — exit 0
-//  2. `loopzero whoami --json` — authenticated:true
-//  3. `loopzero init --yes --name <unique>` in a tmp dir — loopzero.yaml written,
+//  1. `loopscale login --token $LOOP_RUNTIME_TOKEN` — exit 0
+//  2. `loopscale whoami --json` — authenticated:true
+//  3. `loopscale init --yes --name <unique>` in a tmp dir — loopzero.yaml written,
 //     exit 0 (preflightAuth passes because the token is valid — F-05 contract)
-//  4. `loopzero deploy --json` — exit 0, build_id returned, app eventually
+//  4. `loopscale deploy --json` — exit 0, build_id returned, app eventually
 //     reaches HTTP 200 via Traefik (Proof of Life)
-//  5. `loopzero status --json` — environment ACTIVE
-//  6. `loopzero project delete <name> --yes --json` — exit 0
+//  5. `loopscale status --json` — environment ACTIVE
+//  6. `loopscale project delete <name> --yes --json` — exit 0
 //  7. Proof of Death: workload pod removed in <60s
 //
 // Each step asserts exit code + parses JSON response + checks specific
 // invariants (auth, schema, no internal terms in output).
 func TestDogfoodLoopH1(t *testing.T) {
-	loopzeroBin, loopzeroToken := requireDogfoodFlag(t)
+	loopRuntimeBin, loopRuntimeToken := requireDogfoodFlag(t)
 
 	// Isolated $HOME to avoid polluting user config.
 	tmpHome := t.TempDir()
@@ -136,17 +136,17 @@ func TestDogfoodLoopH1(t *testing.T) {
 	baseEnv := append(os.Environ(),
 		"HOME="+tmpHome,
 		"XDG_CONFIG_HOME="+tmpHome,
-		"LOOPZERO_URL=http://localhost:13001",
+		"LOOP_RUNTIME_URL=http://localhost:13001",
 	)
 
 	// === Step 1: login ===
-	r := loopzeroExec(t, loopzeroBin, baseEnv, tmpProject, "login", "--token", loopzeroToken, "--json")
+	r := loopRuntimeExec(t, loopRuntimeBin, baseEnv, tmpProject, "login", "--token", loopRuntimeToken, "--json")
 	if r.exitCode != 0 {
 		t.Fatalf("step 1 (login) failed: exit=%d stdout=%s", r.exitCode, r.stdout)
 	}
 
 	// === Step 2: whoami ===
-	r = loopzeroExec(t, loopzeroBin, baseEnv, tmpProject, "whoami", "--json")
+	r = loopRuntimeExec(t, loopRuntimeBin, baseEnv, tmpProject, "whoami", "--json")
 	if r.exitCode != 0 {
 		t.Fatalf("step 2 (whoami) failed: exit=%d", r.exitCode)
 	}
@@ -174,7 +174,7 @@ func TestDogfoodLoopH1(t *testing.T) {
 			t.Fatalf("git %v: %v %s", gitCmd, err, out)
 		}
 	}
-	r = loopzeroExec(t, loopzeroBin, baseEnv, tmpProject, "init", "--yes", "--name", uniqueName, "--json")
+	r = loopRuntimeExec(t, loopRuntimeBin, baseEnv, tmpProject, "init", "--yes", "--name", uniqueName, "--json")
 	if r.exitCode != 0 {
 		t.Fatalf("step 3 (init) failed: exit=%d stdout=%s", r.exitCode, r.stdout)
 	}
@@ -185,12 +185,12 @@ func TestDogfoodLoopH1(t *testing.T) {
 	// Defer cleanup — Proof of Death (step 7) happens here if the test
 	// fails before getting there.
 	defer func() {
-		_ = loopzeroExec(t, loopzeroBin, baseEnv, tmpProject,
+		_ = loopRuntimeExec(t, loopRuntimeBin, baseEnv, tmpProject,
 			"project", "delete", uniqueName, "--yes", "--json")
 	}()
 
 	// === Step 4: deploy ===
-	r = loopzeroExec(t, loopzeroBin, baseEnv, tmpProject, "deploy", "--no-wait", "--json")
+	r = loopRuntimeExec(t, loopRuntimeBin, baseEnv, tmpProject, "deploy", "--no-wait", "--json")
 	if r.exitCode != 0 {
 		t.Fatalf("step 4 (deploy) failed: exit=%d stdout=%s", r.exitCode, r.stdout)
 	}
@@ -200,7 +200,7 @@ func TestDogfoodLoopH1(t *testing.T) {
 	}
 
 	// === Step 5: status ===
-	r = loopzeroExec(t, loopzeroBin, baseEnv, tmpProject, "status", "--json")
+	r = loopRuntimeExec(t, loopRuntimeBin, baseEnv, tmpProject, "status", "--json")
 	if r.exitCode != 0 {
 		t.Fatalf("step 5 (status) failed: exit=%d", r.exitCode)
 	}
@@ -225,7 +225,7 @@ func TestDogfoodLoopStructureExists(t *testing.T) {
 		t.Errorf("dogfood loop test file missing: %v", err)
 	}
 	// Sanity: the gating env var is the expected one.
-	if dogfoodFlag != "LOOPZERO_E2E_DOGFOOD" {
+	if dogfoodFlag != "LOOP_RUNTIME_E2E_DOGFOOD" {
 		t.Errorf("gating env var changed unexpectedly: %s", dogfoodFlag)
 	}
 }

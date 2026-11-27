@@ -22,13 +22,13 @@
 #
 # Requires K3s cluster recreate with `--kube-apiserver-arg=anonymous-auth=true`:
 #
-#   k3d cluster delete loopzero-build
-#   k3d cluster create loopzero-build \
+#   k3d cluster delete loop-runtime-build
+#   k3d cluster create loop-runtime-build \
 #     --k3s-arg "--kube-apiserver-arg=anonymous-auth=true@server:*"
 #   # then re-bootstrap Sigstore stack (helm install fulcio + rekor)
 #
 # Effort: ~30min operator + ALL prior Sigstore state lost
-# Blast radius: loopzero-build cluster destruction + state loss
+# Blast radius: loop-runtime-build cluster destruction + state loss
 # Alternative paths:
 #   (a) Fork fulcio chart 2.9.1 + add extraEnv for the SA token bearer
 #   (b) Use a Helm postRenderer kustomize patch to inject extraEnv
@@ -38,7 +38,7 @@
 # ─── Scenario A.1 fix (apply below if K3s anonymous-auth=true) ───────────
 #
 # Apply via:
-#   KC=$(k3d kubeconfig write loopzero-build)
+#   KC=$(k3d kubeconfig write loop-runtime-build)
 #   kubectl --kubeconfig="$KC" apply -f \
 #     infra/pulumi-platform/values-fulcio-oidc-overrides/scenario-a-anonymous-discovery.yaml
 
@@ -48,8 +48,8 @@ kind: ClusterRoleBinding
 metadata:
   name: service-account-issuer-discovery-anon
   labels:
-    app.kubernetes.io/managed-by: loopzero-m07-fulcio-oidc-fix
-    loopzero.io/plan: 2026-05-28-M07-fulcio-oidc-trust-to-3-85
+    app.kubernetes.io/managed-by: loop-runtime-m07-fulcio-oidc-fix
+    runtime.getloopscale.com/plan: 2026-05-28-M07-fulcio-oidc-trust-to-3-85
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

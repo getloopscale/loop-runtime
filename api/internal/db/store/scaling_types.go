@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -16,46 +16,50 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
-// newInvalidArgument wraps a string message as LoopZeroError so handler
+// newInvalidArgument wraps a string message as LoopRuntimeError so handler
 // validation produces actionable client feedback. Status 400 inferred
 // from INVALID_ARGUMENT code by the HTTP error mapper.
-func newInvalidArgument(msg string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewLoopZeroError("INVALID_ARGUMENT", msg)
+func newInvalidArgument(msg string) *loopruntimeerrors.LoopRuntimeError {
+	return loopruntimeerrors.NewLoopRuntimeError("INVALID_ARGUMENT", msg)
 }
 
 // ScalingConfig represents per-app scaling configuration persisted
 // in app_scaling_config.
 //
 // Plan T2.1 of `pre-launch-gaps-plan.md`. Replaces the previous
-// stub-202 path where `loopzero scale` returned acknowledged but did
+// stub-202 path where `loopscale scale` returned acknowledged but did
 // nothing persistent.
 type ScalingConfig struct {
-	ID           string    `json:"id"`
-	TenantID     string    `json:"tenant_id"`
-	ProjectID    string    `json:"project_id"`
-	Environment  string    `json:"environment"`
-	AppName      string    `json:"app_name"`
-	MinReplicas  int32     `json:"min_replicas"`
-	MaxReplicas  int32     `json:"max_replicas"`
-	TargetCPUPct *int32    `json:"target_cpu_pct,omitempty"`
-	ScaleToZero  bool      `json:"scale_to_zero"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	UpdatedBy    string    `json:"updated_by"`
-	ConfigHash   string    `json:"config_hash"`
+	ID           string `json:"id"`
+	TenantID     string `json:"tenant_id"`
+	ProjectID    string `json:"project_id"`
+	Environment  string `json:"environment"`
+	AppName      string `json:"app_name"`
+	MinReplicas  int32  `json:"min_replicas"`
+	MaxReplicas  int32  `json:"max_replicas"`
+	TargetCPUPct *int32 `json:"target_cpu_pct,omitempty"`
+	// TargetMemoryPct is the memory utilization target of the HPA. Nil scales on CPU alone.
+	TargetMemoryPct *int32    `json:"target_memory_pct,omitempty"`
+	ScaleToZero     bool      `json:"scale_to_zero"`
+	UpdatedAt       time.Time `json:"updated_at"`
+	UpdatedBy       string    `json:"updated_by"`
+	ConfigHash      string    `json:"config_hash"`
 }
 
 // CanonicalHash computes a stable hash of the config body fields
 // used by the API handler to short-circuit unchanged requests with
 // `applied: false`.
 //
-// Format: "min={min}|max={max}|cpu={cpu_or_NIL}|s2z={true|false}".
+// Format: "min={min}|max={max}|cpu={cpu_or_NIL}|s2z={true|false}", followed by
+// "|mem={mem}" when a memory target is set. A config without one keeps the hash
+// it had before the memory target existed.
 func (c *ScalingConfig) CanonicalHash() string {
 	cpu := "NIL"
 	if c.TargetCPUPct != nil {
@@ -63,12 +67,15 @@ func (c *ScalingConfig) CanonicalHash() string {
 	}
 	body := fmt.Sprintf("min=%d|max=%d|cpu=%s|s2z=%t",
 		c.MinReplicas, c.MaxReplicas, cpu, c.ScaleToZero)
+	if c.TargetMemoryPct != nil {
+		body += fmt.Sprintf("|mem=%d", *c.TargetMemoryPct)
+	}
 	sum := sha256.Sum256([]byte(body))
 	return hex.EncodeToString(sum[:])
 }
 
 // Validate checks invariants that DB CHECK constraints also enforce,
-// but surfaces them as LoopZeroError for actionable client feedback.
+// but surfaces them as LoopRuntimeError for actionable client feedback.
 func (c *ScalingConfig) Validate() error {
 	if c.MinReplicas < 0 {
 		return newInvalidArgument("min_replicas must be >= 0")
@@ -85,13 +92,20 @@ func (c *ScalingConfig) Validate() error {
 				fmt.Sprintf("target_cpu_pct (%d) must be between 1 and 100", v))
 		}
 	}
+	if c.TargetMemoryPct != nil {
+		v := *c.TargetMemoryPct
+		if v < 1 || v > 100 {
+			return newInvalidArgument(
+				fmt.Sprintf("target_memory_pct (%d) must be between 1 and 100", v))
+		}
+	}
 	if c.ScaleToZero && c.MinReplicas != 0 {
 		return newInvalidArgument(
 			"scale_to_zero=true requires min_replicas=0")
 	}
 	// The environment is a segment of the workload namespace, so it must be
 	// the RFC 1123 label pkg/naming (the namespace builder's own validator)
-	// accepts. LoopZero supports arbitrary tenant-created environments; existence
+	// accepts. LoopRuntime supports arbitrary tenant-created environments; existence
 	// is enforced by withEnvironmentLock at the route, this is syntax only.
 	if err := naming.ValidateKubernetesName(c.Environment); err != nil {
 		return newInvalidArgument(fmt.Sprintf("environment %q: %v", c.Environment, err))

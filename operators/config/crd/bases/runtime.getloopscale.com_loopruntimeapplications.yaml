@@ -1,0 +1,200 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.5
+  name: loopruntimeapplications.runtime.getloopscale.com
+spec:
+  group: runtime.getloopscale.com
+  names:
+    kind: LoopRuntimeApplication
+    listKind: LoopRuntimeApplicationList
+    plural: loopruntimeapplications
+    singular: loopruntimeapplication
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.url
+      name: URL
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          LoopRuntimeApplication is the Schema for the loopruntimeapplications API.
+          A LoopRuntimeApplication represents a tenant's deployed application, managing
+          hostname assignment, ExposedRoute creation, and health tracking.
+
+          Named LoopRuntimeApplication (not Application) to avoid collision with ArgoCD's
+          Application type.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: LoopRuntimeApplicationSpec defines the desired state of a LoopRuntimeApplication.
+            properties:
+              appName:
+                description: |-
+                  AppName is the application's name inside its project (the service name
+                  in loopzero.yaml). Together with TenantRef, Project and Environment it
+                  composes the routed hostname through pkg/naming.AppHostname, the formula
+                  the IngressRoute renderer uses. Optional so CRs written before the field
+                  existed stay valid: for those the controller reads the runtime.getloopscale.com/app label
+                  the api has always set on the CR.
+                type: string
+              environment:
+                description: Environment is the environment name (e.g., "production",
+                  "staging").
+                minLength: 1
+                type: string
+              hostname:
+                description: |-
+                  Hostname is the external hostname for this application.
+                  If empty, the controller computes it via naming.AppHostname.
+                type: string
+              project:
+                description: Project is the project name.
+                minLength: 1
+                type: string
+              replicas:
+                default: 1
+                description: Replicas is the desired number of replicas.
+                format: int32
+                minimum: 0
+                type: integer
+              serviceName:
+                description: ServiceName is the Kubernetes Service name backing this
+                  application.
+                minLength: 1
+                type: string
+              servicePort:
+                default: 80
+                description: ServicePort is the port on the backing service.
+                format: int32
+                maximum: 65535
+                minimum: 1
+                type: integer
+              tenantRef:
+                description: TenantRef is the name of the parent Tenant CR.
+                minLength: 1
+                type: string
+            required:
+            - environment
+            - project
+            - serviceName
+            - tenantRef
+            type: object
+          status:
+            description: LoopRuntimeApplicationStatus defines the observed state of a LoopRuntimeApplication.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the application's state.
+                  Condition types: ServiceResolved, IngressReady, CertificateIssued, RouteReachable, ApplicationHealthy
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              endpointsReady:
+                description: EndpointsReady indicates whether endpoints are available.
+                type: boolean
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the overall application lifecycle phase.
+                enum:
+                - Progressing
+                - Serving
+                - Reachable
+                - Degraded
+                - Down
+                - Cleaned
+                type: string
+              reachable:
+                description: Reachable indicates whether the route probe succeeded.
+                type: boolean
+              url:
+                description: URL is the full URL where the application is accessible.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

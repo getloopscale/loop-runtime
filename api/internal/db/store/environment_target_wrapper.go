@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -38,12 +38,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // resolveSqlcDBTX selects the right db.DBTX (caller tx → fallback to
@@ -255,7 +255,7 @@ func generatedEnvTargetToEnvTarget(row generated.EnvironmentTarget) *Environment
 // lock. found is false when no target row matches, which the caller must
 // report: a snapshot that is never written silently goes stale.
 //
-// Cross-tenant: build the store on the background (loopzero_worker) pool.
+// Cross-tenant: build the store on the background (loop_runtime_worker) pool.
 func (s *PostgresEnvironmentTargetStore) RecordReplicasReady(ctx context.Context, tenantID, projectID, env string, replicasReady int32, at time.Time) (found bool, err error) {
 	q := generated.New()
 	rows, err := q.RecordEnvironmentTargetReplicasReady(ctx, s.resolveSqlcDBTX(nil), generated.RecordEnvironmentTargetReplicasReadyParams{

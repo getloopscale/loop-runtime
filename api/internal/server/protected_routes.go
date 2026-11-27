@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -9,17 +9,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
-	"github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
-	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
-	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	mwaudit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/projects/projectshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/source/sourcehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/timelinehttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // middleware is one link of an HTTP middleware chain.
@@ -260,6 +260,7 @@ func registerSecretRoutes(r chi.Router, cfg Config, ch routeChains) {
 	}
 	if cfg.Guards.PlanLimiter != nil {
 		h.SetPlanLimiter(cfg.Guards.PlanLimiter)
+		h.SetUpgradeURL(cfg.Guards.UpgradeURL)
 	}
 	// T1.2 (j22 transit plan): cross-tenant binding check (EC-03 / CWE-204).
 	if cfg.Secrets.ProjectChecker != nil {
@@ -298,6 +299,7 @@ func registerBuildReadRoutes(r chi.Router, cfg Config, _ routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildSBOM, cfg.BuildSBOMHandler != nil,
 		"no database — same chain as the build family (main.go)") {
 		r.Get("/api/v1/builds/{id}/sbom", cfg.BuildSBOMHandler.Get)
+		r.Get("/api/v1/builds/{id}/sbom/{app}/download", cfg.BuildSBOMHandler.Download)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.BuildLogs, cfg.LogsHandler != nil,
 		"no database — comes from `orchDeps` (setup_server.go), which requires `dbAdapter`") {
@@ -365,6 +367,9 @@ func registerReleaseRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Rollback, cfg.RollbackHandler != nil,
 		"no database — comes from `orchDeps`. Without it there is no way to revert a release") {
 		r.With(ch.limited(audited("rollback.executed", "release"))...).Post("/api/v1/projects/{name}/rollback", cfg.RollbackHandler.Create)
+		// Each rollback as an operation of its own: who, from and to which
+		// release, and how it ended.
+		r.Get("/api/v1/projects/{name}/rollbacks", cfg.RollbackHandler.List)
 	}
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Promote, cfg.PromoteHandler != nil,
 		"no database — comes from `orchDeps`") {
@@ -402,7 +407,7 @@ func registerBillingRoutes(r chi.Router, cfg Config, ch routeChains) {
 		return
 	}
 	r.Get("/api/v1/billing", cfg.BillingHandler.Get)
-	// `owner`, as loopzero-cloud requires for the same capability: any member
+	// `owner`, as loop-console requires for the same capability: any member
 	// opening the billing portal is horizontal escalation to invoices,
 	// payment method and history.
 	r.With(gatedBy("owner", ch.limited(audited("billing.portal_opened", "billing")))...).Post("/api/v1/billing/portal", cfg.BillingHandler.Portal)
@@ -426,6 +431,11 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 		"passed in by whoever assembles the server (setupServerConfig, setup_server.go) — nil when the caller did not build it") {
 		return
 	}
+	// The plan caps custom domains per environment (custom_domains_per_env).
+	if cfg.Guards.PlanLimiter != nil {
+		cfg.DomainHandler.SetPlanLimiter(cfg.Guards.PlanLimiter)
+		cfg.DomainHandler.SetUpgradeURL(cfg.Guards.UpgradeURL)
+	}
 	r.Get("/api/v1/domains", cfg.DomainHandler.List)
 	r.Get("/api/v1/domains/{domain}", cfg.DomainHandler.Get)
 	r.Get("/api/v1/domains/{domain}/dns-records", cfg.DomainHandler.ListDNSRecords)
@@ -440,8 +450,8 @@ func registerDomainRoutes(r chi.Router, cfg Config, ch routeChains) {
 	r.With(gatedBy("admin", ch.limited(audited("domain.removed", "domain")))...).Delete("/api/v1/domains/{domain}", cfg.DomainHandler.Delete)
 }
 
-// registerRepositoryRoutes: GitHub App connection (auto-deploy) and the
-// dashboard's repository picker (J-09 T2.1).
+// registerRepositoryRoutes: GitHub App connection (auto-deploy), the
+// installations a tenant has and the dashboard's repository picker (J-09 T2.1).
 func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.Repositories, cfg.RepositoryHandler != nil,
 		"no GitHub dependencies — comes from `ghDeps` (setup_server.go), which needs GitHub App credentials and, before them, the database") {
@@ -452,6 +462,10 @@ func registerRepositoryRoutes(r chi.Router, cfg Config, ch routeChains) {
 	if surfaces.Recorded(cfg.Surfaces, surfaces.IntegrationsGitHub, cfg.IntegrationsGitHubHandler != nil,
 		"no GitHub dependencies — same `ghDeps` chain") {
 		r.Get("/api/v1/integrations/github/installations/{id}/repositories", cfg.IntegrationsGitHubHandler.ListRepositories)
+		r.Get("/api/v1/integrations/github/installations", cfg.IntegrationsGitHubHandler.ListInstallations)
+		// Binds installations to the caller's tenant after GitHub confirms the
+		// user's access: an admin action with an audit row, like connect.
+		r.With(gatedBy("admin", ch.limited(audited("github_installation.claimed", "github_installation")))...).Post("/api/v1/integrations/github/installations/claim", cfg.IntegrationsGitHubHandler.ClaimInstallations)
 	}
 }
 

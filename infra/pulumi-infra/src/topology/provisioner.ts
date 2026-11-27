@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Multi-cluster provisioner — creates clusters from declarative topology.
@@ -117,11 +117,11 @@ export function buildRegistryOutput(
           kubeconfig: kc,
           endpoint: ep,
           labels: {
-            "loopzero.io/cluster-id": id,
-            "loopzero.io/role": cluster.spec.role,
-            "loopzero.io/environment": environment,
-            "loopzero.io/region": cluster.spec.region,
-            ...(cluster.spec.cellId ? { "loopzero.io/cell-id": cluster.spec.cellId } : {}),
+            "runtime.getloopscale.com/cluster-id": id,
+            "runtime.getloopscale.com/role": cluster.spec.role,
+            "runtime.getloopscale.com/environment": environment,
+            "runtime.getloopscale.com/region": cluster.spec.region,
+            ...(cluster.spec.cellId ? { "runtime.getloopscale.com/cell-id": cluster.spec.cellId } : {}),
           },
         } satisfies InternalClusterRegistryEntry,
       })),

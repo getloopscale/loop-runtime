@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Group A: Tenant + Environment controllers.
 // Heaviest operator — owns all external provisioners (Gitea, ArgoCD, MinIO)
@@ -25,19 +25,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/argocd"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/environment"
-	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	"github.com/getloopscale/loopzero/operators/internal/metrics"
-	miniop "github.com/getloopscale/loopzero/operators/internal/minio"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
-	"github.com/getloopscale/loopzero/operators/internal/tenant"
-	"github.com/getloopscale/loopzero/operators/internal/tracing"
-	cb "github.com/getloopscale/loopzero/pkg/circuitbreaker"
-	"github.com/getloopscale/loopzero/pkg/healthcheck"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/environment"
+	"github.com/getloopscale/loop-runtime/operators/internal/gitea"
+	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
+	miniop "github.com/getloopscale/loop-runtime/operators/internal/minio"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenant"
+	"github.com/getloopscale/loop-runtime/operators/internal/tracing"
+	cb "github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
+	"github.com/getloopscale/loop-runtime/pkg/healthcheck"
 )
 
 var scheme = runtime.NewScheme()
@@ -46,8 +46,8 @@ func init() {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
 	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register loop-runtime/v1 scheme: %v", err))
 	}
 }
 
@@ -77,7 +77,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-tenant-operator")
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loop-runtime-tenant-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
@@ -104,7 +104,7 @@ func main() {
 		},
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "loopzero-tenant-operator.loopzero.io",
+		LeaderElectionID:       "loop-runtime-tenant-operator.runtime.getloopscale.com",
 		Cache:                  cacheOpts,
 	})
 	if err != nil {
@@ -138,12 +138,12 @@ func main() {
 //
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16 +
 // operator-split-invariants.md I-1. Cache scoping per ADR-0018 v2 C9.
-// Tenant + Environment cache restricted to `loopzero-system`; reading
+// Tenant + Environment cache restricted to `loop-runtime-system`; reading
 // these CRs from any other namespace returns empty list (so a CR
 // applied to `default` is invisible to this controller, fail-safe
 // for the dogfood iter 7-8 misplacement vector).
 //
-// Secrets are read in `loopzero-system` only — the kubeconfig Secret of each
+// Secrets are read in `loop-runtime-system` only — the kubeconfig Secret of each
 // cell's ClusterCredential and the registry pull Secret the Environment
 // controller copies into workload namespaces. The chart grants exactly that
 // through a namespaced Role, so the Secret informer watches that namespace
@@ -158,9 +158,9 @@ func managerCacheOptions() (cache.Options, error) {
 	}
 	return cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
-			&loopzerov1.Tenant{}:      {Namespaces: platformCRDNamespaces},
-			&loopzerov1.Environment{}: {Namespaces: platformCRDNamespaces},
-			&corev1.Secret{}:          secretScope,
+			&loopruntimev1.Tenant{}:      {Namespaces: platformCRDNamespaces},
+			&loopruntimev1.Environment{}: {Namespaces: platformCRDNamespaces},
+			&corev1.Secret{}:             secretScope,
 		},
 	}, nil
 }
@@ -231,8 +231,8 @@ func setupControllers(mgr ctrl.Manager, cfg config) error {
 	if err := environment.SetupEnvironmentControllerWithFactory(mgr, runtimeFactory); err != nil {
 		return fmt.Errorf("EnvironmentController: %w", err)
 	}
-	// ADR-0018 C2/C5: the cache cannot see a Tenant outside loopzero-system, so an
-	// uncached cluster-wide scan publishes loopzero_misplaced_tenant_total.
+	// ADR-0018 C2/C5: the cache cannot see a Tenant outside loop-runtime-system, so an
+	// uncached cluster-wide scan publishes loop_runtime_misplaced_tenant_total.
 	if err := mgr.Add(&tenant.MisplacedTenantScanner{Reader: mgr.GetAPIReader()}); err != nil {
 		return fmt.Errorf("misplaced Tenant scan: %w", err)
 	}

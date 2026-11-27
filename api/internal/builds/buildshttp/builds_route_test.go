@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp_test
 
@@ -14,12 +14,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
 
 	"github.com/go-chi/chi/v5"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Fake BuildOrchestrator ---
@@ -192,7 +192,7 @@ func TestBuildsRoute(t *testing.T) {
 	t.Run("POST /builds concurrent build returns 409 with DA-18 message", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			submitErr: loopzeroerrors.ErrDeployInProgress,
+			submitErr: loopruntimeerrors.ErrDeployInProgress,
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
@@ -223,14 +223,14 @@ func TestBuildsRoute(t *testing.T) {
 
 	t.Run("POST /builds over the Account project cap returns 422 PROJECTS_EXCEED_PLAN (deploy-path bypass #106)", func(t *testing.T) {
 		// M5 review F2 (handler-seam half): the deploy path (EnsureProject) returns
-		// a typed *LoopZeroError PROJECTS_EXCEED_PLAN when a NEW-project deploy would
+		// a typed *LoopRuntimeError PROJECTS_EXCEED_PLAN when a NEW-project deploy would
 		// exceed the Account cap; the orchestrator passes it through unchanged. This
 		// proves the LIVE HTTP seam — SubmitBuild's typed error → mapBuildError →
 		// HTTP 422 with an honest code — instead of a silent 500 / build-failure
 		// (DoD #1). A refactor that stopped routing the SubmitBuild error through
 		// mapBuildError would fail here.
 		orch := &fakeBuildOrchestrator{
-			submitErr: loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap"),
+			submitErr: loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap"),
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
@@ -382,7 +382,7 @@ func TestBuildsRoute(t *testing.T) {
 	t.Run("POST /builds lock timeout returns 409", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			submitErr: loopzeroerrors.ErrLockTimeout,
+			submitErr: loopruntimeerrors.ErrLockTimeout,
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
@@ -445,7 +445,7 @@ func TestBuildsGetRoute(t *testing.T) {
 	t.Run("GET /builds/:id not found returns 404", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			getBuildErr: loopzeroerrors.ErrBuildNotFound,
+			getBuildErr: loopruntimeerrors.ErrBuildNotFound,
 		}
 		handler := newBuildHandler(orch, "test-secret")
 		router := buildRouter(handler)
@@ -475,7 +475,7 @@ func TestBuildsNoInternalTerms(t *testing.T) {
 	t.Run("409 response contains no internal terms", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			submitErr: loopzeroerrors.ErrDeployInProgress,
+			submitErr: loopruntimeerrors.ErrDeployInProgress,
 		}
 		handler := newBuildHandler(orch, "test-secret")
 
@@ -605,7 +605,7 @@ func TestBuildsCancelRoute(t *testing.T) {
 	t.Run("POST /builds/:id/cancel already completed returns 409", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			cancelErr: loopzeroerrors.NewLoopZeroError(
+			cancelErr: loopruntimeerrors.NewLoopRuntimeError(
 				"BUILD_ALREADY_COMPLETED",
 				"Build already completed."),
 		}
@@ -636,7 +636,7 @@ func TestBuildsCancelRoute(t *testing.T) {
 	t.Run("POST /builds/:id/cancel not found returns 404", func(t *testing.T) {
 		// Arrange
 		orch := &fakeBuildOrchestrator{
-			cancelErr: loopzeroerrors.ErrBuildNotFound,
+			cancelErr: loopruntimeerrors.ErrBuildNotFound,
 		}
 		handler := newBuildHandler(orch, "test-secret")
 		router := buildRouter(handler)
@@ -676,15 +676,15 @@ func TestBuildsCancelRoute(t *testing.T) {
 // Ensure errors.Is works for mapping
 func TestErrorMapping(t *testing.T) {
 	t.Run("ErrDeployInProgress is detected via errors.Is", func(t *testing.T) {
-		err := loopzeroerrors.ErrDeployInProgress
-		if !errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
+		err := loopruntimeerrors.ErrDeployInProgress
+		if !errors.Is(err, loopruntimeerrors.ErrDeployInProgress) {
 			t.Fatal("expected errors.Is to match ErrDeployInProgress")
 		}
 	})
 
 	t.Run("ErrLockTimeout is detected via errors.Is", func(t *testing.T) {
-		err := loopzeroerrors.ErrLockTimeout
-		if !errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+		err := loopruntimeerrors.ErrLockTimeout
+		if !errors.Is(err, loopruntimeerrors.ErrLockTimeout) {
 			t.Fatal("expected errors.Is to match ErrLockTimeout")
 		}
 	})

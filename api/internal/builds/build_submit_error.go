@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -8,13 +8,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // SubmitBuildErrorReason discriminates failure modes returned by
 // BuildOrchestrator.SubmitBuild. Sprint 6 plan qa-sprint6-cleanup-2026-06-25
-// T1.1 (closes loopzero-cloud#34) — mirrors the Sprint 5 canonical typed-error
+// T1.1 (closes loop-console#34) — mirrors the Sprint 5 canonical typed-error
 // pattern (api/internal/source/pushbundle_error.go) applied to the build
 // trigger surface. Before Sprint 6 every untyped error fell through
 // routes/builds.go::mapBuildError to the generic ErrInternalError catchall;
@@ -40,7 +40,7 @@ const (
 	// the apps in the request.
 	ReasonBuildSubmitAppNormalizeFailed SubmitBuildErrorReason = 4
 	// ReasonBuildSubmitUnknown is the catchall (NEW — Sprint 6 ADR D2). Per
-	// Sprint 5 ADR D2 (closes loopzero-cloud#33): the canonical anti-pattern is
+	// Sprint 5 ADR D2 (closes loop-console#33): the canonical anti-pattern is
 	// defaulting to a misleading specific reason. Operators see the verbatim
 	// cause composed into the user-facing message.
 	ReasonBuildSubmitUnknown SubmitBuildErrorReason = 5
@@ -55,6 +55,7 @@ type SubmitBuildStage string
 const (
 	StageCheckActiveBuilds SubmitBuildStage = "check_active_builds"
 	StageResolveScaling    SubmitBuildStage = "resolve_scaling"
+	StageFindSignedImages  SubmitBuildStage = "find_signed_images"
 	StageEnsureProject     SubmitBuildStage = "ensure_project"
 	StageCreateBuild       SubmitBuildStage = "create_build"
 	StageSetAppsSpec       SubmitBuildStage = "set_apps_spec"
@@ -67,6 +68,7 @@ const (
 var stageToReason = map[SubmitBuildStage]SubmitBuildErrorReason{
 	StageCheckActiveBuilds: ReasonBuildSubmitDBWriteFailed,
 	StageResolveScaling:    ReasonBuildSubmitDBWriteFailed,
+	StageFindSignedImages:  ReasonBuildSubmitDBWriteFailed,
 	StageEnsureProject:     ReasonBuildSubmitProjectEnsureFailed,
 	StageCreateBuild:       ReasonBuildSubmitDBWriteFailed,
 	StageSetAppsSpec:       ReasonBuildSubmitDBWriteFailed,
@@ -95,7 +97,7 @@ func (r SubmitBuildErrorReason) String() string {
 }
 
 // reasonSummaries is the actionable summary of each reason, composed with the
-// verbatim cause by loopzeroerrors.NewComposed. It lives beside the enum so a new
+// verbatim cause by loopruntimeerrors.NewComposed. It lives beside the enum so a new
 // reason and its copy change together. Product language only (Rule 3).
 var reasonSummaries = map[SubmitBuildErrorReason]string{
 	ReasonBuildSubmitWorkflowFailed:      "Build trigger failed at workflow submit",
@@ -114,8 +116,8 @@ func (r SubmitBuildErrorReason) Summary() string {
 // UserError is the BUILD_SUBMIT_FAILED error shown to the user: the reason's
 // summary composed with the scrubbed detail, or a trace reference when the
 // detail says nothing useful.
-func (e *SubmitBuildError) UserError(traceID string) *loopzeroerrors.LoopZeroError {
-	return loopzeroerrors.NewComposed(loopzeroerrors.ErrBuildSubmitFailed, e.Reason.Summary(), e.Detail, traceID)
+func (e *SubmitBuildError) UserError(traceID string) *loopruntimeerrors.LoopRuntimeError {
+	return loopruntimeerrors.NewComposed(loopruntimeerrors.ErrBuildSubmitFailed, e.Reason.Summary(), e.Detail, traceID)
 }
 
 // SubmitBuildError is the discriminated typed error returned by

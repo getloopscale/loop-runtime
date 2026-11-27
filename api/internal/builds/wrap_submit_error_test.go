@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Sprint 6 plan T2.1 — pure-function unit tests for wrapSubmitBuildError
@@ -16,7 +16,7 @@ import (
 // negative direction + sentinel preservation). The negative direction
 // asserts unknown-stage inputs route to ReasonBuildSubmitUnknown, NOT to a
 // misleading discriminated reason — the structural guard against the
-// loopzero-cloud#34 catchall anti-pattern this Sprint closes.
+// loop-console#34 catchall anti-pattern this Sprint closes.
 
 func TestWrapSubmitBuildError_NewDiscriminators(t *testing.T) {
 	cases := []struct {
@@ -142,9 +142,9 @@ func TestWrapSubmitBuildError_NewDiscriminators(t *testing.T) {
 // through unwrapped (Sprint 5-style preservation). Routes/builds.go ladder
 // at lines 549-557 already short-circuits this case.
 func TestWrapSubmitBuildError_PreservesErrDeployInProgress(t *testing.T) {
-	in := loopzeroerrors.ErrDeployInProgress
+	in := loopruntimeerrors.ErrDeployInProgress
 	out := wrapSubmitBuildError(StageCheckActiveBuilds, in)
-	if !errors.Is(out, loopzeroerrors.ErrDeployInProgress) {
+	if !errors.Is(out, loopruntimeerrors.ErrDeployInProgress) {
 		t.Fatal("ErrDeployInProgress sentinel must pass through wrap")
 	}
 	if _, ok := AsSubmitBuildError(out); ok {
@@ -152,33 +152,33 @@ func TestWrapSubmitBuildError_PreservesErrDeployInProgress(t *testing.T) {
 	}
 }
 
-// Sprint 6 plan T2.1 EC-3 — typed *LoopZeroError instances (ScalingAmbiguous /
+// Sprint 6 plan T2.1 EC-3 — typed *LoopRuntimeError instances (ScalingAmbiguous /
 // NewReplicasExceedPlan / etc.) pass through unwrapped so the route handler
 // ladder at lines 547-559 still dispatches them with their original code.
-func TestWrapSubmitBuildError_PreservesTypedLoopZeroError(t *testing.T) {
-	in := loopzeroerrors.ErrScalingAmbiguous
+func TestWrapSubmitBuildError_PreservesTypedLoopRuntimeError(t *testing.T) {
+	in := loopruntimeerrors.ErrScalingAmbiguous
 	out := wrapSubmitBuildError(StageResolveScaling, in)
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(out, &te) {
-		t.Fatal("typed *LoopZeroError must pass through wrap")
+		t.Fatal("typed *LoopRuntimeError must pass through wrap")
 	}
-	if te.Code != loopzeroerrors.ErrScalingAmbiguous.Code {
-		t.Errorf("Code = %q, want %q", te.Code, loopzeroerrors.ErrScalingAmbiguous.Code)
+	if te.Code != loopruntimeerrors.ErrScalingAmbiguous.Code {
+		t.Errorf("Code = %q, want %q", te.Code, loopruntimeerrors.ErrScalingAmbiguous.Code)
 	}
 	if _, ok := AsSubmitBuildError(out); ok {
-		t.Fatal("typed *LoopZeroError must NOT be re-wrapped in SubmitBuildError (EC-3)")
+		t.Fatal("typed *LoopRuntimeError must NOT be re-wrapped in SubmitBuildError (EC-3)")
 	}
 }
 
 // M5 (#106) — the exact production scenario: EnsureProject (StageEnsureProject)
 // returns PROJECTS_EXCEED_PLAN when a deploy of a new project exceeds the
-// per-Account cap. wrapSubmitBuildError MUST pass the typed *LoopZeroError through
+// per-Account cap. wrapSubmitBuildError MUST pass the typed *LoopRuntimeError through
 // unwrapped (NOT re-wrap as a generic SubmitBuildError) so mapBuildError surfaces
 // it as 422 with code PROJECTS_EXCEED_PLAN, not a 500.
 func TestWrapSubmitBuildError_PreservesProjectsExceedPlanFromEnsureStage(t *testing.T) {
-	in := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-m5")
+	in := loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-m5")
 	out := wrapSubmitBuildError(StageEnsureProject, in)
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(out, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("PROJECTS_EXCEED_PLAN must pass through wrap unwrapped; got %v", out)
 	}

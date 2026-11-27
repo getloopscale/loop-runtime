@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -12,7 +12,7 @@ import (
 // Test_parseRBACMarker_ValidMarker — happy path: extract groups, resources, verbs.
 func Test_parseRBACMarker_ValidMarker(t *testing.T) {
 	rule, err := parseRBACMarker(
-		"+kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch",
+		"+kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch",
 		token.Position{Filename: "test.go", Line: 1})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -28,7 +28,7 @@ func Test_parseRBACMarker_ValidMarker(t *testing.T) {
 // Test_parseRBACMarker_MissingVerbs — per K8s convention, verbs= is mandatory.
 func Test_parseRBACMarker_MissingVerbs(t *testing.T) {
 	_, err := parseRBACMarker(
-		"+kubebuilder:rbac:groups=loopzero.io,resources=tenants",
+		"+kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants",
 		token.Position{Filename: "test.go", Line: 1})
 	if err == nil {
 		t.Errorf("expected error for missing verbs=, got nil")

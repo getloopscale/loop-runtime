@@ -78,14 +78,14 @@ if [ "${DRY_RUN:-0}" = "1" ]; then
 fi
 
 # Extract metadata from manifest
-HYPOTHESIS=$(grep "loopzero.io/hypothesis:" "$MANIFEST" | head -1 | sed 's/.*loopzero.io\/hypothesis: *//;s/^"//;s/"$//' || echo "(missing)")
-DOD_TEST=$(grep "loopzero.io/dod-test:" "$MANIFEST" | head -1 | sed 's/.*loopzero.io\/dod-test: *//;s/^"//;s/"$//' || echo "(missing)")
+HYPOTHESIS=$(grep "runtime.getloopscale.com/hypothesis:" "$MANIFEST" | head -1 | sed 's/.*runtime.getloopscale.com\/hypothesis: *//;s/^"//;s/"$//' || echo "(missing)")
+DOD_TEST=$(grep "runtime.getloopscale.com/dod-test:" "$MANIFEST" | head -1 | sed 's/.*runtime.getloopscale.com\/dod-test: *//;s/^"//;s/"$//' || echo "(missing)")
 CHAOS_KIND=$(grep "^kind:" "$MANIFEST" | head -1 | awk '{print $2}')
 CHAOS_ACTION=$(grep "^  action:" "$MANIFEST" | head -1 | sed 's/.*action: *//' || echo "(n/a)")
 DURATION=$(grep "^  duration:" "$MANIFEST" | head -1 | sed 's/.*duration: *//;s/"//g' || echo "(n/a)")
 
 # Extract slo-query (multi-line YAML scalar)
-SLO_QUERY=$(awk '/loopzero.io\/slo-query:/{flag=1; next} flag && /^      [a-zA-Z#=]/{print; next} flag && !/^      /{flag=0}' "$MANIFEST" | sed 's/^      //' | head -20)
+SLO_QUERY=$(awk '/runtime.getloopscale.com\/slo-query:/{flag=1; next} flag && /^      [a-zA-Z#=]/{print; next} flag && !/^      /{flag=0}' "$MANIFEST" | sed 's/^      //' | head -20)
 
 cat > "$OUTPUT" <<EOF
 # Chaos Test Report — $SCENARIO
@@ -140,7 +140,7 @@ $SLO_QUERY
 
 | Pod | Pre-chaos count | Post-recovery count | Delta |
 |-----|----------------|---------------------|-------|
-| loopzero-api | (see baseline.json) | (see post.json) | **$RESTART_DELTA** |
+| loop-runtime-api | (see baseline.json) | (see post.json) | **$RESTART_DELTA** |
 
 ## Verdict reasoning
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package httpio
 
@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 func TestAPIErrorCodesAnswerTheirRegisteredStatus(t *testing.T) {
@@ -27,7 +27,7 @@ func TestAPIErrorCodesAnswerTheirRegisteredStatus(t *testing.T) {
 		"SERVICES_JSON_TOO_LARGE": http.StatusRequestEntityTooLarge,
 		"NOT_MEMBER":              http.StatusForbidden,
 		"NOT_AVAILABLE":           http.StatusNotImplemented,
-		// Their authors passed these statuses to NewLoopZeroError, which ignored
+		// Their authors passed these statuses to NewLoopRuntimeError, which ignored
 		// them: all five answered 500.
 		"INVALID_APP_NAME":          http.StatusBadRequest,
 		"INVALID_APP_PATH":          http.StatusBadRequest,
@@ -36,7 +36,7 @@ func TestAPIErrorCodesAnswerTheirRegisteredStatus(t *testing.T) {
 		"ENV_PROVISION_TIMEOUT":     http.StatusGatewayTimeout,
 	}
 	for code, want := range cases {
-		if got := errorshttp.Status(&loopzeroerrors.LoopZeroError{Code: code}); got != want {
+		if got := errorshttp.Status(&loopruntimeerrors.LoopRuntimeError{Code: code}); got != want {
 			t.Errorf("Status(%s) = %d, want %d", code, got, want)
 		}
 	}

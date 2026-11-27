@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Deploy-flow helpers shared by journey_*.go specs.
 //
@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// deployResult captures the output of a single `loopzero deploy` invocation.
+// deployResult captures the output of a single `loopscale deploy` invocation.
 // Used by Journey 14 concurrent-deploy specs.
 type deployResult struct {
 	stdout   string
@@ -52,9 +52,9 @@ func initGitRepo(dir string) string {
 	return strings.TrimSpace(string(output))
 }
 
-// runLoopZeroDeploy executes `loopzero deploy` in the given directory with optional
+// runLoopRuntimeDeploy executes `loopscale deploy` in the given directory with optional
 // additional arguments. Returns stdout, stderr, and the exit code.
 // Auth is via configStore (XDG_CONFIG_HOME from BeforeSuite), not env.
-func runLoopZeroDeploy(dir string, args ...string) (stdout, stderr string, exitCode int) {
-	return execLoopZero(loopzeroInvocation{dir: dir}, append([]string{"deploy"}, args...)...)
+func runLoopRuntimeDeploy(dir string, args ...string) (stdout, stderr string, exitCode int) {
+	return execLoopRuntime(loopRuntimeInvocation{dir: dir}, append([]string{"deploy"}, args...)...)
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package auth
 
@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
-	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/slidingwindow"
 )
 
 // T1.3 — Auth failure persistence in audit_log.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -19,7 +19,7 @@ package store
 //
 // Bridge pattern same as T1.1-T1.3: db.DBTX → generated.DBTX via
 // SqlcBridge. Admin queries are tenantpredicate:exempt by design
-// (caller authenticated via LOOPZERO_ADMIN_API gate; cross-tenant intent).
+// (caller authenticated via LOOP_RUNTIME_ADMIN_API gate; cross-tenant intent).
 // Lifecycle queries are tenant-keyed (tenants_pending_deletion +
 // tenant_tombstones tables added to TenantOwnedTables allowlist in
 // T1.4).
@@ -30,9 +30,9 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // =========================================================================

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metering
 
@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
 )
 
 // TestNewWorkerLoop_ThreadsTunablesAndLease — the assembly wires the lease

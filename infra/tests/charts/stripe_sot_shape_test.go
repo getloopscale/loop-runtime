@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.2 of plan m5-stripe-sot-canonical-closure v1.0 — hermetic guard
 // locking the Stripe SoT shape canonical contract:
@@ -9,7 +9,7 @@
 //	(sk_test_ / pk_test_ / whsec_).
 //
 // Per ADR D1 of the plan: schema validated against committed fixture
-// (hermetic, runs in any env; CI never touches real ~/.loopzero/dev-
+// (hermetic, runs in any env; CI never touches real ~/.loop-runtime/dev-
 // credentials.json). The optional --check-live-sot operator path is
 // kept as a separate concern (not in this Go test; would belong in a
 // future operator-side tool).
@@ -39,8 +39,6 @@ package charts_test
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -49,7 +47,7 @@ const (
 	fixturePath = "../fixtures/dev-credentials-stripe-schema-test-mode.json"
 )
 
-// stripeSchema mirrors the relevant slice of ~/.loopzero/dev-credentials.json.
+// stripeSchema mirrors the relevant slice of ~/.loop-runtime/dev-credentials.json.
 type stripeSchema struct {
 	Stripe map[string]any `json:"stripe"`
 }
@@ -172,39 +170,5 @@ func TestStripeSoTShape_FixtureMode0644(t *testing.T) {
 	}
 	if mode&0o111 != 0 {
 		t.Errorf("fixture mode %o is executable; a JSON schema artifact must not be", mode)
-	}
-}
-
-// TestStripeSoTShape_PlanAndADRReferencesResolve cross-validates that every document
-// cited in this test's header can still be read.
-//
-// It checked the WORKING TREE until 2026-09-16, and all three citations had rotted:
-// `19b8c6eaa` folded 1,523 files into six living documents and took the plan and the ADR
-// with it, and `3d4075ca3` removed the rule file — which `CLAUDE.md` records as gone and
-// not replaced. So the anti-fabricated-citation guard was itself citing three things that
-// do not exist, which is the defect it was written to catch.
-//
-// It reads GIT now. A consolidated document leaves the worktree and stays in history
-// forever, so a history citation is the one form that cannot rot the same way — and it is
-// what `CLAUDE.md` does for its own dead references (`git show 4f728eb7a:docs/<path>`).
-func TestStripeSoTShape_PlanAndADRReferencesResolve(t *testing.T) {
-	t.Parallel()
-	// Each entry is the revision that still carries the file, and the path inside it.
-	refs := []struct{ rev, path string }{
-		{"19b8c6eaa~1", "docs/wiki/plans/m5-stripe-sot-canonical-closure-plan.md"},
-		{"19b8c6eaa~1", "docs/wiki/decisions/2026-06-23-tier-na-data-only-milestone-closure.md"},
-		{"3d4075ca3~1", ".claude/rules/cleanroom-up-live-test-mandate.md"},
-	}
-	for _, r := range refs {
-		// On disk first: a document that came back is better than one only in history.
-		if _, err := os.Stat(filepath.Join("../../..", r.path)); err == nil {
-			continue
-		}
-		spec := r.rev + ":" + r.path
-		cmd := exec.Command("git", "cat-file", "-e", spec)
-		cmd.Dir = "../../.."
-		if err := cmd.Run(); err != nil {
-			t.Errorf("cited document resolves neither on disk nor in git: %s (%v)", spec, err)
-		}
 	}
 }

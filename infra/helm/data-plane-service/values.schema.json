@@ -19,6 +19,28 @@
     "nodePort": { "type": ["integer", "null"], "minimum": 30000, "maximum": 32767 },
     "runAsUser": { "type": "integer", "minimum": 1 },
     "existingSecret": { "type": "string", "minLength": 1 },
+    "externalSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["store", "remoteKey", "refreshInterval", "keys", "postgresRoleSecret", "imagePull"],
+      "properties": {
+        "store": { "type": "string" },
+        "remoteKey": { "type": "string" },
+        "refreshInterval": { "type": "string", "minLength": 1 },
+        "keys": { "type": "object", "additionalProperties": { "type": "string", "minLength": 1 } },
+        "postgresRoleSecret": { "type": "string" },
+        "imagePull": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["secretName", "remoteKey", "registry"],
+          "properties": {
+            "secretName": { "type": "string" },
+            "remoteKey": { "type": "string" },
+            "registry": { "type": "string" }
+          }
+        }
+      }
+    },
     "env": { "type": "object", "additionalProperties": { "type": "string" } },
     "secretEnv": {
       "type": "array",
@@ -64,6 +86,16 @@
         "database": { "type": "string", "minLength": 1 },
         "user": { "type": "string", "minLength": 1 },
         "uriEnv": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "external": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["host", "port", "caSecret"],
+          "properties": {
+            "host": { "type": "string" },
+            "caSecret": { "type": "string" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        },
         "roles": {
           "type": "array",
           "items": {

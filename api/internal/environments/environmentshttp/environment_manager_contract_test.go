@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environmentshttp
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
 )
 
 // The handler's EnvironmentManager port is satisfied in production by the

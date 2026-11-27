@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package conditions provides condition helpers for all LoopZero controllers.
+// Package conditions provides condition helpers for all LoopRuntime controllers.
 // Conditions follow the Kubernetes API conventions for status conditions
 // (metav1.Condition) with typed constants for condition types and reasons.
 //
@@ -13,7 +13,7 @@
 // + kstatus summary/retry helpers here.
 package conditions
 
-import apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+import apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 
 // --- CR-status condition TYPE vocabulary (re-exported from operators/api/v1) ---
 // The canonical definitions live in operators/api/v1/conditions.go (M6). These

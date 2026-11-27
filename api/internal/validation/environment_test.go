@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package validation
 
@@ -9,7 +9,7 @@ import (
 )
 
 // One rule for an environment name, wherever it is accepted: it becomes a
-// segment of the Kubernetes namespace loopzero-<tenant>-<project>-<env>, so it is
+// segment of the Kubernetes namespace loop-runtime-<tenant>-<project>-<env>, so it is
 // a DNS-1123 label, and it starts with a letter.
 func TestValidateEnvironmentName(t *testing.T) {
 	cases := []struct {

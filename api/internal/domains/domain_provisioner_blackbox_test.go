@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains_test
 
@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domains"
+	"github.com/getloopscale/loop-runtime/api/internal/domains"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
 )
 
 // validAppDigest is a 64-hex sha256 used by tests that exercise
@@ -59,6 +59,9 @@ func (f *fakeDomainProvisionerStore) FindAndClaimVerified(ctx context.Context) (
 }
 func (f *fakeDomainProvisionerStore) FindRemoving(ctx context.Context) ([]ports.CustomDomain, error) {
 	return f.removing, nil
+}
+func (f *fakeDomainProvisionerStore) FindStaleProvisioning(context.Context, time.Duration) ([]ports.CustomDomain, error) {
+	return nil, nil
 }
 func (f *fakeDomainProvisionerStore) ListActiveByApp(ctx context.Context, tenantID, project, app, env string) ([]ports.CustomDomain, error) {
 	if f.listActiveErr != nil {

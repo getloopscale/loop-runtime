@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package pagination holds the request-parsing helpers every handler family
 // needs: pagination parameters, integer query params with a default, and the

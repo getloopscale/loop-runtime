@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
@@ -8,10 +8,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	dbstore "github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	dbstore "github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // lockTx is a distinguishable transaction handle handed out by the fake lock.
@@ -101,9 +101,9 @@ func submittedApps(t *testing.T, req ports.CreatePreviewRequest, lookup PreviewB
 	return got.Apps, got.Environment
 }
 
-func TestCreatePreview_BuildUsesAppsFromThePRLoopZeroYaml(t *testing.T) {
+func TestCreatePreview_BuildUsesAppsFromThePRLoopRuntimeYaml(t *testing.T) {
 	req := newRequest()
-	req.LoopZeroYamlApps = map[string]map[string]interface{}{"web": {"type": "server", "port": 3000}}
+	req.LoopRuntimeYamlApps = map[string]map[string]interface{}{"web": {"type": "server", "port": 3000}}
 
 	apps, env := submittedApps(t, req, fakeBuildApps{apps: []deploycontracts.AppSpec{{Name: "stale"}}})
 

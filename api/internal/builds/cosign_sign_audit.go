@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -8,14 +8,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // T1.2 mitigation #3 of MEET-2026-05-12 launch readiness — per-sign
 // audit log for cosign supply-chain transparency.
 //
-// Every container image that ships through LoopZero's build pipeline is signed
+// Every container image that ships through LoopRuntime's build pipeline is signed
 // by cosign (keyed in v1.0). Per the meeting's security veto resolution,
 // each signing event MUST persist an `image.signed` row to audit_log so:
 //   - Auditors can reconstruct who signed what + when, per tenant.
@@ -42,9 +42,14 @@ func emitCosignSignAudits(ctx context.Context, audit ports.AuditLogger, build *b
 	}
 
 	for _, app := range apps {
-		// Skip apps without supply-chain data — could be a legacy build
-		// (pre-Sprint-6) or a non-container artifact (static frontend).
+		// Skip apps without supply-chain data, such as a legacy build
+		// (pre-Sprint-6) whose workflow declared no attestation outputs.
 		if app.ImageDigestSHA256 == "" || app.ImageSignature == "" {
+			continue
+		}
+		// A reused image was signed by the earlier build that produced it,
+		// which emitted its audit entry then; this build signed nothing.
+		if app.ImageReused {
 			continue
 		}
 

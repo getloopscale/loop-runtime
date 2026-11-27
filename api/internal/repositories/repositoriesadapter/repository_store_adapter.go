@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package repositoriesadapter
 
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
 )
 
 // RepoStoreAdapter bridges store.PostgresRepositoryStore → repositories.RepositoryStore.
@@ -59,21 +59,14 @@ func (a *RepoStoreAdapter) GetByRepo(ctx context.Context, repoFullName string) (
 	}, nil
 }
 
-func (a *RepoStoreAdapter) SaveInstallation(ctx context.Context, id int64, accountLogin, accountType string, tenantID *string) error {
-	return a.Store.SaveInstallation(ctx, id, accountLogin, accountType, tenantID)
-}
-
-// InstallationTenant reports the tenant an installation is bound to; "" when
-// it is unclaimed (created by the installation webhook, tenant NULL) or absent.
-func (a *RepoStoreAdapter) InstallationTenant(ctx context.Context, installationID int64) (string, error) {
+// InstallationVerifiedFor reports whether the installation is bound to
+// tenantID with the binding confirmed on GitHub.
+func (a *RepoStoreAdapter) InstallationVerifiedFor(ctx context.Context, installationID int64, tenantID string) (bool, error) {
 	inst, err := a.Store.GetInstallation(ctx, installationID)
 	if err != nil {
-		return "", err
+		return false, err
 	}
-	if inst == nil || inst.TenantID == nil {
-		return "", nil
-	}
-	return *inst.TenantID, nil
+	return inst.VerifiedFor(tenantID), nil
 }
 
 // The port this adapter satisfies, asserted at compile time.

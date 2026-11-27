@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package authhttp_test
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/auth/authhttp"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	observability "github.com/getloopscale/loopzero/api/internal/middleware/observability"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	observability "github.com/getloopscale/loop-runtime/api/internal/middleware/observability"
 )
 
 func TestWhoamiRoute(t *testing.T) {

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // team_types.go — public struct for the team membership domain that
 // survives the T2.1 (Batch A #5) deletion of the legacy

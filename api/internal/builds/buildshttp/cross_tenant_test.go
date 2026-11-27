@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Cross-tenant isolation for the build handler.
 //
@@ -16,8 +16,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // Fixtures for this package's isolation tests, duplicated from the parent's

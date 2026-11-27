@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package capacity
 
@@ -23,18 +23,18 @@ import (
 //
 // Run:
 //
-//	LOOPZERO_CAPACITY=1 LOOPZERO_ARGOCD_URL=... \
-//	LOOPZERO_ARGOCD_TOKEN=... \
+//	LOOP_RUNTIME_CAPACITY=1 LOOP_RUNTIME_ARGOCD_URL=... \
+//	LOOP_RUNTIME_ARGOCD_TOKEN=... \
 //	go test ./infra/tests/performance/capacity/ -run TestCapacityArgoCD -v \
 //	  -args -rps=50 -duration=60s -workers=20
 func TestCapacityArgoCDAppGet(t *testing.T) {
 	SkipUnlessCapacityEnabled(t)
 
-	argocdURL := os.Getenv("LOOPZERO_ARGOCD_URL")
-	token := os.Getenv("LOOPZERO_ARGOCD_TOKEN")
-	appName := os.Getenv("LOOPZERO_ARGOCD_APP") // pick any existing app; falls to first if empty
+	argocdURL := os.Getenv("LOOP_RUNTIME_ARGOCD_URL")
+	token := os.Getenv("LOOP_RUNTIME_ARGOCD_TOKEN")
+	appName := os.Getenv("LOOP_RUNTIME_ARGOCD_APP") // pick any existing app; falls to first if empty
 	if argocdURL == "" || token == "" {
-		t.Fatal("LOOPZERO_ARGOCD_URL and LOOPZERO_ARGOCD_TOKEN required")
+		t.Fatal("LOOP_RUNTIME_ARGOCD_URL and LOOP_RUNTIME_ARGOCD_TOKEN required")
 	}
 
 	// If no specific app given, use /api/v1/applications (list all) instead.

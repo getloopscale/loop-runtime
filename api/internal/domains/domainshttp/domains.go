@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package domainshttp serves the custom-domain surface: claiming a domain, verifying
 // ownership, and driving it to a state where traffic actually reaches the tenant.
@@ -20,15 +20,15 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/domains"
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/domains"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // ErrDomainExists is an alias for ports.ErrDomainExists (backward compatibility).
@@ -39,7 +39,7 @@ import (
 func generateVerificationToken() string {
 	b := make([]byte, 10)
 	_, _ = rand.Read(b)
-	return "loopzero-verify=" + hex.EncodeToString(b)
+	return domains.VerificationTXTValue(hex.EncodeToString(b))
 }
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
@@ -84,7 +84,9 @@ type DomainHandler struct {
 	verifier    DomainVerifier
 	validator   DomainValidator
 	cnameTarget string
-	cfZone      CFZoneManager // nil = v1 mode (TXT verification), non-nil = v2 (CF Zone)
+	cfZone      CFZoneManager     // nil = v1 mode (TXT verification), non-nil = v2 (CF Zone)
+	planLimits  DomainPlanLimiter // nil only where no plan is enforced (no database: dev and tests)
+	upgradeURL  string            // where a plan limit refusal points; empty is the console's own path
 }
 
 // NewDomainHandler creates a new DomainHandler.
@@ -174,11 +176,19 @@ type domainTLSInfo struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
+// domainListItem is a domain as the list answers it: the stored record plus what a customer
+// needs to finish the setup in their DNS. The dashboard reads both from the list.
+type domainListItem struct {
+	CustomDomain
+	Verification *domainVerificationInfo `json:"verification,omitempty"`
+	CNAMETarget  string                  `json:"cname_target,omitempty"`
+}
+
 type domainListResponse struct {
-	Domains []CustomDomain `json:"domains"`
-	Total   int            `json:"total"`
-	Limit   int            `json:"limit"`
-	Offset  int            `json:"offset"`
+	Domains []domainListItem `json:"domains"`
+	Total   int              `json:"total"`
+	Limit   int              `json:"limit"`
+	Offset  int              `json:"offset"`
 }
 
 type domainDeleteResponse struct {
@@ -195,7 +205,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -205,11 +215,11 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape for contract uniformity.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -239,12 +249,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// v1: expose verification token to owner/admin for pending domains
-	if statemachine.DomainPhase(d.Status) == statemachine.DPhPendingVerification && auth.HasMinRole(uc.Role, "admin") {
-		resp.Verification = &domainVerificationInfo{
-			TXTName:  "_loopzero-verify." + d.Domain,
-			TXTValue: d.VerificationToken,
-		}
-	}
+	resp.Verification = verificationRecordFor(d, uc.Role)
 
 	httpio.WriteJSON(w, http.StatusOK, resp)
 }
@@ -255,7 +260,7 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -284,16 +289,38 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain list failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 
+	items := make([]domainListItem, 0, len(domains))
+	for i := range domains {
+		items = append(items, domainListItem{
+			CustomDomain: domains[i],
+			Verification: verificationRecordFor(&domains[i], uc.Role),
+			CNAMETarget:  h.cnameTarget,
+		})
+	}
+
 	httpio.WriteJSON(w, http.StatusOK, domainListResponse{
-		Domains: domains,
+		Domains: items,
 		Total:   total,
 		Limit:   filter.Limit,
 		Offset:  filter.Offset,
 	})
+}
+
+// verificationRecordFor is the TXT record that proves control of d, for a caller allowed to
+// see it. Only a domain still waiting for verification has one to show, and only an admin or
+// owner reads the token.
+func verificationRecordFor(d *CustomDomain, role string) *domainVerificationInfo {
+	if statemachine.DomainPhase(d.Status) != statemachine.DPhPendingVerification || !auth.HasMinRole(role, "admin") {
+		return nil
+	}
+	return &domainVerificationInfo{
+		TXTName:  domains.VerificationTXTName(d.Domain),
+		TXTValue: d.VerificationToken,
+	}
 }
 
 func strPtr(s string) *string { return &s }

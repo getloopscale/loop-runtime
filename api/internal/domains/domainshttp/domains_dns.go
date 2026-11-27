@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainshttp
 
@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Delete removes a custom domain (DELETE /api/v1/domains/{domain}).
@@ -23,7 +23,7 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -33,11 +33,11 @@ func (h *DomainHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "error", err)
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewDomainNotFound(domainName))
 		return
 	}
 
@@ -76,7 +76,7 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -84,12 +84,12 @@ func (h *DomainHandler) ListDNSRecords(w http.ResponseWriter, r *http.Request) {
 	d, err := h.store.GetByDomainAndTenant(ctx, domainName, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "domain lookup failed", "domain", domainName, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if d == nil {
 		// CHG-2026-04-23-AUDIT-13: typed error shape.
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewDomainNotFound(domainName))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewDomainNotFound(domainName))
 		return
 	}
 

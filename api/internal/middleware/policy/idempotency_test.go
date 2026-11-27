@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package policy_test
 
@@ -13,7 +13,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
 )
 
 // fakeIdempotencyStore implements policy.IdempotencyStore for tests.

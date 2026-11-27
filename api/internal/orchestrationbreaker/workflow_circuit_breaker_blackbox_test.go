@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package orchestrationbreaker_test
 
@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/orchestrationbreaker"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 func TestWorkflowCircuitBreaker_ClosedState_DelegatesToInner(t *testing.T) {
@@ -63,7 +63,7 @@ func TestWorkflowCircuitBreaker_OpensAfterThresholdFailures(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from open circuit, got nil")
 	}
-	if err != loopzeroerrors.ErrPlatformDegraded {
+	if err != loopruntimeerrors.ErrPlatformDegraded {
 		t.Errorf("expected ErrPlatformDegraded, got %v", err)
 	}
 }
@@ -123,7 +123,7 @@ func TestWorkflowCircuitBreaker_RecoveryProbe(t *testing.T) {
 
 	// Verify circuit is open
 	_, err := cb.Submit(context.Background(), deploycontracts.WorkflowSpec{BuildID: "b-002"})
-	if err != loopzeroerrors.ErrPlatformDegraded {
+	if err != loopruntimeerrors.ErrPlatformDegraded {
 		t.Fatalf("expected ErrPlatformDegraded, got %v", err)
 	}
 

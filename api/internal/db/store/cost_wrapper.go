@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -23,14 +23,14 @@ import (
 	"context"
 	"errors"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 
 	planpkg "github.com/getloopscale/contracts/plan"
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // SQLCostStore reads cost_counters rows from PostgreSQL via sqlc.
@@ -63,11 +63,11 @@ func NewSQLCostStore(db db.DBTX) *SQLCostStore {
 //   - other err     → (zero, false, err) (CapChecker fails-open)
 func (s *SQLCostStore) GetCounter(ctx context.Context, tenantID string, metric planpkg.CostMetric) (planpkg.CostCounter, bool, error) {
 	if s == nil || s.db == nil {
-		// Audit gap M02 #13 fix: typed LoopZeroError instead of generic errors.New.
+		// Audit gap M02 #13 fix: typed LoopRuntimeError instead of generic errors.New.
 		// `nil SQLCostStore` indicates the cost-enforcement middleware was
 		// wired without a backing store — a programming error caught at the
 		// first request rather than at boot.
-		return planpkg.CostCounter{}, false, loopzeroerrors.ErrInternalError.Wrap("nil SQLCostStore")
+		return planpkg.CostCounter{}, false, loopruntimeerrors.ErrInternalError.Wrap("nil SQLCostStore")
 	}
 
 	gdb := db.Generated(s.db)
@@ -120,8 +120,8 @@ func NewPlanReader(store enforcement.LimitsStore) *PlanReader {
 // fail-closed — currently it logs + skips enforcement.
 func (p *PlanReader) GetTenantPlan(ctx context.Context, tenantID string) (planpkg.Plan, error) {
 	if p == nil || p.store == nil {
-		// Audit gap M02 #13 fix: typed LoopZeroError instead of generic errors.New.
-		return planpkg.PlanStarter, loopzeroerrors.ErrInternalError.Wrap("nil PlanReader")
+		// Audit gap M02 #13 fix: typed LoopRuntimeError instead of generic errors.New.
+		return planpkg.PlanStarter, loopruntimeerrors.ErrInternalError.Wrap("nil PlanReader")
 	}
 	plan, err := p.store.GetTenantPlan(ctx, tenantID)
 	if err != nil {

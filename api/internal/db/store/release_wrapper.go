@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -40,17 +40,17 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/id"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/id"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // activeUniqueIndexName is the constraint name from migration 000022.
@@ -224,13 +224,13 @@ func (s *ReleaseStoreSqlc) Create(ctx context.Context, tx db.DBTX, r *db.Release
 
 // GetByID is a cross-tenant lookup (used by reapers / admin paths). Marked
 // `-- tenantpredicate:exempt` in queries/releases.sql. Returns
-// ErrReleaseNotFound (via loopzeroerrors) when the row doesn't exist, matching
+// ErrReleaseNotFound (via loopruntimeerrors) when the row doesn't exist, matching
 // the legacy PostgresReleaseStore contract.
 func (s *ReleaseStoreSqlc) GetByID(ctx context.Context, releaseID string) (*db.Release, error) {
 	row, err := s.q.GetReleaseByID(ctx, s.gen(nil), releaseID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrReleaseNotFound
+			return nil, loopruntimeerrors.ErrReleaseNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get release by id: %w", err)
 	}
@@ -244,7 +244,7 @@ func (s *ReleaseStoreSqlc) GetByIDTx(ctx context.Context, tx db.DBTX, releaseID 
 	row, err := s.q.GetReleaseByID(ctx, s.gen(tx), releaseID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrReleaseNotFound
+			return nil, loopruntimeerrors.ErrReleaseNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get release by id (tx): %w", err)
 	}
@@ -259,7 +259,7 @@ func (s *ReleaseStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, relea
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrReleaseNotFound
+			return nil, loopruntimeerrors.ErrReleaseNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get release by id for tenant: %w", err)
 	}
@@ -272,8 +272,8 @@ func (s *ReleaseStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, relea
 // legacy PostgresReleaseStore which matched by id alone.
 //
 // D4 invariant: SafeTransition runs at the store layer (not in handlers).
-// Returns loopzeroerrors.ErrReleaseNotFound if the release doesn't exist.
-// Returns loopzeroerrors.InvalidTransition if the event is not valid from
+// Returns loopruntimeerrors.ErrReleaseNotFound if the release doesn't exist.
+// Returns loopruntimeerrors.InvalidTransition if the event is not valid from
 // the current state.
 func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, releaseID, event string) (*db.Release, error) {
 	// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): this read-modify-write
@@ -294,13 +294,13 @@ func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, release
 
 	// 2. Validate transition via typed state machine — panic-trapped to
 	// statemachine.ErrInvalidTransition, then re-wrapped to
-	// loopzeroerrors.InvalidTransition for backward compat.
+	// loopruntimeerrors.InvalidTransition for backward compat.
 	newPhase, err := releaseMachine.SafeTransition(
 		statemachine.ReleasePhase(current.Status),
 		statemachine.ReleasePhaseEvent(event),
 	)
 	if err != nil {
-		return nil, loopzeroerrors.NewInvalidTransition(current.Status, event)
+		return nil, loopruntimeerrors.NewInvalidTransition(current.Status, event)
 	}
 
 	// 3. UPDATE through tx with tenant predicate.
@@ -318,7 +318,7 @@ func (s *ReleaseStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, release
 		// violations (e.g., a future PK collision) fall through to the
 		// generic wrapped error.
 		if isReleasesActiveUniqueViolation(err) {
-			return nil, loopzeroerrors.NewConcurrentActivation(current.ProjectID, current.Environment)
+			return nil, loopruntimeerrors.NewConcurrentActivation(current.ProjectID, current.Environment)
 		}
 		return nil, fmt.Errorf("sqlc: update release status: %w", err)
 	}
@@ -608,4 +608,30 @@ func generatedRowToRelease(row generated.Release) *db.Release {
 		r.ImageAttestationRekorURL = row.ImageAttestationRekorUrl
 	}
 	return r
+}
+
+// LatestReleaseStatuses returns, for each of the given builds that has a
+// release in its own environment, the status of the latest one. A build with
+// no such release is absent from the map.
+func (s *ReleaseStoreSqlc) LatestReleaseStatuses(ctx context.Context, tenantID string, buildIDs []string) (map[string]string, error) {
+	return s.latestReleaseStatuses(ctx, nil, tenantID, buildIDs)
+}
+
+// latestReleaseStatuses runs on tx when one is given, and on the pool otherwise.
+func (s *ReleaseStoreSqlc) latestReleaseStatuses(ctx context.Context, tx db.DBTX, tenantID string, buildIDs []string) (map[string]string, error) {
+	statuses := make(map[string]string, len(buildIDs))
+	if len(buildIDs) == 0 {
+		return statuses, nil
+	}
+	rows, err := s.q.ListLatestReleaseStatusByBuild(ctx, s.gen(tx), generated.ListLatestReleaseStatusByBuildParams{
+		TenantID: tenantID,
+		BuildIds: buildIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sqlc: latest release status by build: %w", err)
+	}
+	for _, row := range rows {
+		statuses[row.BuildID] = row.Status
+	}
+	return statuses, nil
 }

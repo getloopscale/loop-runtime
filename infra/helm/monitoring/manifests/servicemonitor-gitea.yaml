@@ -3,14 +3,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: loopzero-gitea
+  name: loop-runtime-gitea
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   namespaceSelector:
     matchNames:
-      - loopzero-system
+      - loop-runtime-system
   selector:
     matchLabels:
       app.kubernetes.io/name: gitea

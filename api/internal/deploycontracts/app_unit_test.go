@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -151,5 +152,28 @@ func TestNormalizeApp_InvalidType(t *testing.T) {
 	_, err := NormalizeApp("api", AppSpec{Type: "invalid"})
 	if err == nil {
 		t.Error("expected error for invalid type")
+	}
+}
+
+// Static delivery was removed (T3.3): every app is served by its container. An app that
+// still declares `render: static` in loopzero.yaml was built as a container and then routed
+// as static to assets nobody uploaded, so it was unreachable. It is refused, with a message
+// that says what to change.
+func TestNormalizeApp_RefusesARenderingOtherThanServer(t *testing.T) {
+	for _, rendering := range []string{"static", "edge"} {
+		_, err := NormalizeApp("web", AppSpec{Rendering: rendering})
+		if err == nil {
+			t.Fatalf("render %q: no error", rendering)
+		}
+		for _, want := range []string{"app 'web'", "render '" + rendering + "'", "remove render"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("render %q: error %q lacks %q", rendering, err, want)
+			}
+		}
+	}
+	for _, rendering := range []string{"", "server"} {
+		if _, err := NormalizeApp("web", AppSpec{Rendering: rendering}); err != nil {
+			t.Errorf("render %q: %v", rendering, err)
+		}
 	}
 }

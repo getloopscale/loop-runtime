@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 """Assert that the things which report a disarmed delivery gate are still there.
 
 WHAT THIS CLOSES, AND WHY IT IS A SECOND FILE.
@@ -26,7 +26,7 @@ This script is that something, and it is deliberately run from TWO substrates
 that fail independently:
 
   LOCAL, before the push. `task quality:hermetic` reaches it through the Go
-  tests in cmd/loopzero-ops, and `quality:hermetic` is what the delivery gate itself
+  tests in cmd/loop-runtime-ops, and `quality:hermetic` is what the delivery gate itself
   invokes. Here it costs ZERO ungated pushes: the deletion is refused on the
   machine that made it, before anything leaves.
 
@@ -48,10 +48,10 @@ nothing, because every reporter named above is in it. Terminating that regress
 needs an authority outside the file tree, and the only one GitHub offers is a
 REQUIRED status check. Measured 2026-09-06 against this repository:
 
-    gh api repos/getloopscale/loopzero/branches/develop/protection  -> 403
-    gh api repos/getloopscale/loopzero/rulesets                     -> 403
+    gh api repos/getloopscale/loop-runtime/branches/develop/protection  -> 403
+    gh api repos/getloopscale/loop-runtime/rulesets                     -> 403
     "Upgrade to GitHub Pro or make this repository public to enable this
-     feature."   (org `getloopscale` is on the `free` plan; `loopzero` is PRIVATE)
+     feature."   (org `getloopscale` is on the `free` plan; `loop-runtime` is PRIVATE)
 
 So on this plan NO check in this repository can be made required -- not this
 one, not the armed-check, not ci.yml. Every one of them notifies and none of

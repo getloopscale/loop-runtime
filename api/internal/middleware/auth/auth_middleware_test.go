@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Split out of the flat `middleware` package's middleware_test.go (B-059): a
 // test file lives in the package of its subject, and that file tested six
@@ -156,7 +156,7 @@ func TestAuth_MultipleTenants_NeedsHeader(t *testing.T) {
 		t.Error("handler should not be called")
 	}))
 
-	// Act: no X-LoopZero-Tenant header
+	// Act: no X-Loop-Runtime-Tenant header
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
 	rec := httptest.NewRecorder()
@@ -190,7 +190,7 @@ func TestAuth_MultipleTenants_WithHeader_Resolves(t *testing.T) {
 	// Act
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
-	req.Header.Set("X-LoopZero-Tenant", "tn-b")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-b")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -224,9 +224,9 @@ func TestAuth_ServiceAuth_ValidSecret(t *testing.T) {
 	// Act
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Service-Auth", "test-service-secret")
-	req.Header.Set("X-LoopZero-User-ID", "svc-user")
-	req.Header.Set("X-LoopZero-Tenant", "tn-svc")
-	req.Header.Set("X-LoopZero-Email", "svc@test.com")
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-svc")
+	req.Header.Set("X-Loop-Runtime-Email", "svc@test.com")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

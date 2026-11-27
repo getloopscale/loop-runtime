@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metering
 
@@ -7,7 +7,7 @@ package metering
 // metering-compute-loop T3.2, slice S1). Only the counters with a live worker
 // caller land here (YAGNI): Advanced → cpu_core_seconds_written_total (the
 // wiring-triad / pillar-c metric), CellError → cell_errors_total. The remaining
-// canonical loopzero_metering_* counters land WITH their callers (the loop, S4).
+// canonical loop_runtime_metering_* counters land WITH their callers (the loop, S4).
 
 import (
 	"testing"

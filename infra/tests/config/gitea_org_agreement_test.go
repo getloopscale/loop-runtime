@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package config
 
@@ -31,7 +31,7 @@ import (
 //     reaches exactly three constructors -- the gitops pusher twice
 //     (api/cmd/setup_workflows.go, api/cmd/controller/setup_services.go) and the
 //     source store once (api/cmd/setup_stores.go). Every repository they address
-//     is per-tenant: "{tenantID}-gitops" and "loopzero-source-{tenantID}[-{projectID}]".
+//     is per-tenant: "{tenantID}-gitops" and "loop-runtime-source-{tenantID}[-{projectID}]".
 //   - operators/cmd/tenant-operator reads GITEA_ORG into the provisioner, which
 //     EnsureRepo's tenant.Spec.GitOps.RepoName -- and the API itself sets that
 //     field to fmt.Sprintf("%s-gitops", t.Name) in
@@ -48,14 +48,14 @@ import (
 //     mechanism by which "the control plane owns its own org" -- there is no such
 //     mechanism on this knob.
 //
-// loopzero-platform is NOT created by anything in this tree. The only creator was the
+// loop-runtime-platform is NOT created by anything in this tree. The only creator was the
 // production bootstrap-platform script, deleted as dead (no caller, #240); nothing
-// routes it through GITEA_ORG, and every token-provisioning path ensures only loopzero.
+// routes it through GITEA_ORG, and every token-provisioning path ensures only loop-runtime.
 //
 // WHY THE GO DEFAULTS ARE IN THE COMPARED SET, not just the YAML. There is no
 // operator overlay under infra/helm at all, so on that install path the operator
-// takes constants.DefaultGiteaOrg while the API takes whatever charts/loopzero-api
-// declares (the bootstrap chart infra/helm/loopzero-api, which declared its own, was
+// takes constants.DefaultGiteaOrg while the API takes whatever charts/loop-runtime-api
+// declares (the bootstrap chart infra/helm/loop-runtime-api, which declared its own, was
 // deleted when the pair became one chart). A non-declaring side still contributes an
 // effective organisation, and that is the value its fallback names. Comparing
 // declared values alone would let the API overlay drift away from the operator's
@@ -74,8 +74,8 @@ import (
 // the scan to two sites and leave this test green over a divergence it no longer
 // looks at.
 var b191PinnedOrgSites = []string{
-	"charts/loopzero-api/values.yaml",
-	"charts/loopzero-tenant-operator/values.yaml",
+	"charts/loop-runtime-api/values.yaml",
+	"charts/loop-runtime-tenant-operator/values.yaml",
 }
 
 // b191OrgLineRE matches a Gitea-organisation declaration in a Helm values file,

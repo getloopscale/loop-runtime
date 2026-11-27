@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildsadapter
 
@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
 )
 
 // BuildLookupAdapter bridges db.BuildStore → github.BuildLookup.
@@ -58,7 +58,7 @@ type BuildSubmitterAdapter struct {
 }
 
 func (a *BuildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req github.WebhookBuildRequest) error {
-	if req.LoopZeroYaml == nil {
+	if req.LoopRuntimeYaml == nil {
 		return fmt.Errorf("no loopzero.yaml parsed")
 	}
 	// The SHA comes from the webhook payload; it is validated here, before it
@@ -70,15 +70,15 @@ func (a *BuildSubmitterAdapter) SubmitBuildFromWebhook(ctx context.Context, req 
 	}
 
 	// Sponsor LIVE-caught 2026-06-18: this conversion previously lived
-	// inline here AND in services/preview_service.go appsFromLoopZeroYaml,
+	// inline here AND in services/preview_service.go appsFromLoopRuntimeYaml,
 	// with a comment "mirror of autodeploy_adapters.go" admitting the
 	// duplication. Canonical 2026-06-16 added `start` field extraction
 	// only to this path — preview path silently kept losing it, so PR
 	// previews failed at generate-dockerfile time while push deploys
 	// succeeded against the same loopzero.yaml. Single source of truth now
-	// lives in deploycontracts.ConvertLoopZeroYamlApps (with hermetic regression
+	// lives in deploycontracts.ConvertLoopRuntimeYamlApps (with hermetic regression
 	// locks for every extracted field).
-	apps := deploycontracts.ConvertLoopZeroYamlApps(req.LoopZeroYaml.Apps)
+	apps := deploycontracts.ConvertLoopRuntimeYamlApps(req.LoopRuntimeYaml.Apps)
 
 	a.Logger.Info("auto-deploy: submitting build",
 		"project", req.ProjectName,

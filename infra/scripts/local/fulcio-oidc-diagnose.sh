@@ -86,7 +86,7 @@ fi
 # ─── Auto-discover BUILD_KUBECONFIG if not set ────────────────────
 if [[ -z "${BUILD_KUBECONFIG:-}" ]]; then
   if command -v k3d >/dev/null 2>&1; then
-    BUILD_KUBECONFIG=$(k3d kubeconfig write loopzero-build 2>/dev/null || true)
+    BUILD_KUBECONFIG=$(k3d kubeconfig write loop-runtime-build 2>/dev/null || true)
   fi
 fi
 if [[ -n "$BUILD_KUBECONFIG" ]]; then

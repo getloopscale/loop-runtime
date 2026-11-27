@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- T5.1 of plan 2026-06-01-p3-infra-observability-test-debt-plan.md v1.1
 -- (originally 000023 in plan M1; renumbered to 000022 because plan T3.1
@@ -28,7 +28,7 @@
 --
 -- M2 DECISION (plan): plain `CREATE UNIQUE INDEX` (NOT CONCURRENTLY)
 -- because (a) golang-migrate wraps statements in a transaction;
--- (b) LoopZero is pre-release with <100 releases per env; (c) production
+-- (b) LoopRuntime is pre-release with <100 releases per env; (c) production
 -- at scale can split into a CONCURRENTLY migration later (out of
 -- this plan's scope).
 --

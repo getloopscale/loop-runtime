@@ -1,7 +1,7 @@
 version: "3"
 
 # taskfiles/test.yml — test orchestration: unit, e2e, load, dogfood, validation.
-# Every script a task here runs must exist: cmd/loopzero-ops
+# Every script a task here runs must exist: cmd/loop-runtime-ops
 # quality_taskfile_script_refs_test.go fails on a task that points at a
 # deleted script (29 such tasks were removed or repointed on 2026-09-23).
 
@@ -19,12 +19,12 @@ tasks:
     desc: Verify docs/architecture.md Real Usage Matrix is up-to-date (gate PKG-G14)
     # T1.5 of plan 2026-05-23: migrated pkg-usage-matrix.sh to pure-Go gate (D6).
     cmds:
-      - cd cmd/loopzero-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --check
+      - cd cmd/loop-runtime-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --check
 
   pkg:usage-matrix:write:
     desc: Regenerate Real Usage Matrix in architecture.md (run before commit if pkg imports changed)
     cmds:
-      - cd cmd/loopzero-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --write
+      - cd cmd/loop-runtime-ops && go run . quality pkg-usage-matrix --root "{{.ROOT_DIR}}" --write
 
   pkg:state-machine-dots:check:
     desc: Verify docs/state-machines/*.dot match pkg/statemachine.Visualize() output (gate T2.7)
@@ -51,13 +51,13 @@ tasks:
       # Migrated to the Go gate (Track B TB5). The bash audit-regression-matrix.sh
       # aborted at exit 2 under set -e and never scanned — see
       # finding-2026-05-24-audit-regression-matrix-set-e-abort.
-      - cd cmd/loopzero-ops && go run . quality regression-matrix --root ..
+      - cd cmd/loop-runtime-ops && go run . quality regression-matrix --root ..
 
   parity:audit:golden:
     desc: Golden test for the matrix-audit logic (catches audit regressions)
     cmds:
       # Now the Go unit test TestGolden_* (faithful port of audit-golden-test.sh).
-      - go test ./cmd/loopzero-ops/internal/quality/regressionmatrix/...
+      - go test ./cmd/loop-runtime-ops/internal/quality/regressionmatrix/...
 
   test:all:
     desc: Run everything — unit + integration + E2E (requires running clusters)
@@ -111,10 +111,10 @@ tasks:
       # go.work. Without the flag these guards report on a tree they never read.
       # Cost measured on this target: 1.31s -> 2.31s. B-169/B-170.
       - cd infra/tests && go test -count=1 ./unit/... ./helm/... ./scripts/... ./config/... ./performance/... -short
-      # cmd/loopzero-ops is where the 123 quality gates live. The tests proving that
+      # cmd/loop-runtime-ops is where the 123 quality gates live. The tests proving that
       # a gate fails what it must fail ran through no path at all —
       # `quality:hermetic` did `go build`, not `go test`. B-088.
-      - cd cmd/loopzero-ops && go test ./... -short
+      - cd cmd/loop-runtime-ops && go test ./... -short
       # They build on their own (the module declares no require at all), so GOWORK=off
       # is still the correct, hermetic invocation. No task ever named them.
       # B-088.
@@ -125,7 +125,7 @@ tasks:
       # failed with "directory prefix . does not contain modules listed in go.work".
       # GOWORK=off here is a choice of hermeticity, not a consequence of absence.
       #
-      # There were two; one is left. `tools/loopzero-dockerfile-lint` was REMOVED on 2026-08-19
+      # There were two; one is left. `tools/loop-runtime-dockerfile-lint` was REMOVED on 2026-08-19
       # (B-157): it validated the user's Dockerfile, a path that left in T2.2.
       - cd tools/gen-service-auth-ed25519 && GOWORK=off go test ./... -short
 
@@ -141,7 +141,7 @@ tasks:
   test:e2e:
     desc: Run E2E tests (requires running clusters + tilt up)
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
       KUBEBUILDER_ASSETS:
         sh: 'setup-envtest use -p path 2>/dev/null || { echo "ERROR: setup-envtest not installed. Run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest" >&2; exit 1; }'
     cmds:
@@ -150,7 +150,7 @@ tasks:
         OUTPUT_FILE="$(mktemp)"
         trap 'rm -f "$OUTPUT_FILE"' EXIT
         (cd infra/tests && go test ./e2e/... -v -timeout 60m) | tee "$OUTPUT_FILE"
-        if grep -q "LoopZero E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+Specs" "$OUTPUT_FILE"; then
+        if grep -q "LoopRuntime E2E Suite" "$OUTPUT_FILE" && grep -Eq "Ran[[:space:]]+0[[:space:]]+of[[:space:]]+[0-9]+[[:space:]]+Specs" "$OUTPUT_FILE"; then
           echo "E2E deploy suite ran 0 specs (fully skipped). Failing to avoid false green."
           exit 1
         fi
@@ -158,7 +158,7 @@ tasks:
   test:e2e:chaos:
     desc: Run chaos engineering tests
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - cd infra/tests && go test ./e2e/... -v -run "Chaos" -timeout 15m
 
@@ -257,25 +257,25 @@ tasks:
   k6:operator:install:
     desc: Install k6 Operator in build cluster (enables distributed TestRun CRD)
     cmds:
-      - helm upgrade --install k6-operator infra/helm/k6-operator -n loopzero-system --create-namespace
+      - helm upgrade --install k6-operator infra/helm/k6-operator -n loop-runtime-system --create-namespace
 
   k6:distributed:l3:
     desc: Run distributed L3 test via k6 Operator (4 pods, ~65 min)
     cmds:
       - kubectl apply -f infra/tests/performance/k6/manifests/testrun-l3-distributed.yaml
-      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loop-runtime-system -w"'
 
   k6:distributed:l4:
     desc: Run distributed L4 test via k6 Operator (8 pods, ~2h)
     cmds:
       - kubectl apply -f infra/tests/performance/k6/manifests/testrun-l4-distributed.yaml
-      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loop-runtime-system -w"'
 
   k6:distributed:l5:
     desc: Run distributed L5 multi-cell test via k6 Operator (16 pods, ~4h) — 5,000 tenants
     cmds:
       - kubectl apply -f infra/tests/performance/k6/manifests/testrun-l5-distributed.yaml
-      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loopzero-system -w"'
+      - 'echo "TestRun submitted. Monitor with: kubectl get testrun -n loop-runtime-system -w"'
 
   k6:soak:apply:
     desc: Apply weekly soak CronJob + alerts to cluster
@@ -292,12 +292,12 @@ tasks:
   # ─────────────────────────────────────────────
 
   test:chaos:controller-kill:
-    desc: Chaos — kill loopzero-tenant-operator pod, verify recovery (~2 min)
+    desc: Chaos — kill loop-runtime-tenant-operator pod, verify recovery (~2 min)
     cmds:
       - infra/tests/runner/run-chaos.sh pod-kill-controller.yaml
 
   test:chaos:api-leader-kill:
-    desc: Chaos — kill loopzero-api leader, verify failover (~1 min)
+    desc: Chaos — kill loop-runtime-api leader, verify failover (~1 min)
     cmds:
       - infra/tests/runner/run-chaos.sh pod-kill-api-leader.yaml
 
@@ -425,7 +425,7 @@ tasks:
         echo "PASS: Dupl count ($TOTAL) within baseline ($BASELINE)"
 
   # jscpd / jscpd:strict (TypeScript CLI duplicate-code gates) removed 2026-06-16:
-  # the CLI was extracted to the standalone github.com/getloopscale/loopzero-cli repo
+  # the CLI was extracted to the standalone github.com/getloopscale/loop-runtime-cli repo
   # (M2 of the decomposition roadmap), which carries its own knip/jscpd config.
 
   vuln-scan:
@@ -479,7 +479,7 @@ tasks:
         # operators": `api` had never been looked at.
         #
         # Measured on the day of the fix, module by module: the three covered ones at 0, and 318
-        # findings in the ones nobody looked at — 221 of them in `cmd/loopzero-ops`, the binary that
+        # findings in the ones nobody looked at — 221 of them in `cmd/loop-runtime-ops`, the binary that
         # runs this repository's 130 gates. Plus 155 files outside `gofmt`, invisible because no
         # formatting linter is enabled in .golangci.yml.
         #
@@ -487,11 +487,11 @@ tasks:
         # (`api=140 + operators=60`) with both at ZERO. Two tasks with opposite verdicts about
         # the same thing is worse than one wrong one.
         #
-        # The logic now has a home and a test in cmd/loopzero-ops/internal/quality/lintcoverage.
-        if [ ! -x /tmp/loopzero-ops ]; then
-          (cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .)
+        # The logic now has a home and a test in cmd/loop-runtime-ops/internal/quality/lintcoverage.
+        if [ ! -x /tmp/loop-runtime-ops ]; then
+          (cd cmd/loop-runtime-ops && go build -o /tmp/loop-runtime-ops .)
         fi
-        /tmp/loopzero-ops quality lint-coverage
+        /tmp/loop-runtime-ops quality lint-coverage
 
   validate:helm-deps:
     desc: |
@@ -502,8 +502,8 @@ tasks:
       Why discovery and not a fixed list: `charts/*/charts/` is gitignored, so a
       fresh clone has no vendored dependency at all. While this task listed
       9 charts by hand and only from `charts/`, `task setup` failed on a clean clone —
-      measured on 2026-08-10 on the app-dev droplet, first on `loopzero-crds` (local dep
-      `loopzero-common`) and, once that was fixed, on `opencost` (remote dep, under
+      measured on 2026-08-10 on the app-dev droplet, first on `loop-runtime-crds` (local dep
+      `loop-runtime-common`) and, once that was fixed, on `opencost` (remote dep, under
       `infra/helm/`). A fixed list only covers the charts someone remembered to
       add; discovery covers what exists.
 
@@ -556,20 +556,20 @@ tasks:
           exit 1
         fi
         # Per-binary scope so each chart receives only its own markers.
-        bin/controller-gen rbac:roleName=loopzero-tenant-operator \
+        bin/controller-gen rbac:roleName=loop-runtime-tenant-operator \
           paths=./internal/tenant/... \
-          output:rbac:dir=../charts/loopzero-tenant-operator/templates/generated
-        bin/controller-gen rbac:roleName=loopzero-app-operator \
+          output:rbac:dir=../charts/loop-runtime-tenant-operator/templates/generated
+        bin/controller-gen rbac:roleName=loop-runtime-app-operator \
           paths=./internal/app/... \
-          output:rbac:dir=../charts/loopzero-app-operator/templates/generated
-        bin/controller-gen rbac:roleName=loopzero-preview-operator \
+          output:rbac:dir=../charts/loop-runtime-app-operator/templates/generated
+        bin/controller-gen rbac:roleName=loop-runtime-preview-operator \
           paths=./internal/preview/... \
-          output:rbac:dir=../charts/loopzero-preview-operator/templates/generated
-        bin/controller-gen rbac:roleName=loopzero-platform-operator \
+          output:rbac:dir=../charts/loop-runtime-preview-operator/templates/generated
+        bin/controller-gen rbac:roleName=loop-runtime-platform-operator \
           paths=./internal/platform/... \
-          output:rbac:dir=../charts/loopzero-platform-operator/templates/generated
+          output:rbac:dir=../charts/loop-runtime-platform-operator/templates/generated
         echo "Generated RBAC for 4 split charts. Review with:"
-        echo "  git diff charts/loopzero-*-operator/templates/generated/"
+        echo "  git diff charts/loop-runtime-*-operator/templates/generated/"
 
   validate:rbac:
     desc: |
@@ -578,7 +578,7 @@ tasks:
     cmds:
       - task: generate:rbac
       - |
-        if ! git diff --exit-code charts/loopzero-*-operator/templates/generated/ 2>&1; then
+        if ! git diff --exit-code charts/loop-runtime-*-operator/templates/generated/ 2>&1; then
           echo "FAIL: generated RBAC is out-of-sync with markers."
           echo "Fix: run 'task generate:rbac' and commit the diff."
           exit 1
@@ -609,7 +609,7 @@ tasks:
       - kubeconform --strict infra/helm/postgresql/templates/pdb.yaml
       - kubeconform --strict infra/helm/gitea/templates/pdb.yaml
       - kubeconform --strict infra/helm/argocd/templates/pdb.yaml
-      # Chart renders go through `loopzero-ops validate-chart`, never `helm template | kubeconform`:
+      # Chart renders go through `loop-runtime-ops validate-chart`, never `helm template | kubeconform`:
       # go-task runs a command without pipefail, so that pipe took kubeconform's status alone
       # and a render that FAILED validated "0 resource found" and passed (#392 — Velero did
       # exactly that on every fresh clone). validate-chart builds a chart's declared
@@ -618,24 +618,24 @@ tasks:
       # infra/kubeconform-schemas/ are looked up before kubeconform's defaults.
       # The repoinvariants test TestNoTaskfileCommandPipesARenderIntoKubeconform keeps the
       # pipe from coming back.
-      - cd cmd/loopzero-ops && go build -o /tmp/loopzero-ops .
+      - cd cmd/loop-runtime-ops && go build -o /tmp/loop-runtime-ops .
       # network-policies migrated from a raw manifest to a Helm chart (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5).
-      - /tmp/loopzero-ops validate-chart --release network-policies --chart infra/helm/network-policies/
-      # Internal LoopZero charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
+      - /tmp/loop-runtime-ops validate-chart --release network-policies --chart infra/helm/network-policies/
+      # Internal LoopRuntime charts (CHG-2026-04-28-LAYERED-BOOTSTRAP iter 5+).
       # Skip Traefik IngressRoute and ClusterImagePolicy CRDs (not in default schema).
-      # loopzero-api and loopzero-cloud are one chart each (charts/), installed by Helmfile with
+      # loop-runtime-api and loop-console are one chart each (charts/), installed by Helmfile with
       # their bootstrap values. ServiceMonitor is a CRD kind the default schema lacks.
-      - /tmp/loopzero-ops validate-chart --release loopzero-api --chart charts/loopzero-api/ -f charts/loopzero-api/values-bootstrap.yaml --skip IngressRoute,Certificate,ServiceMonitor
-      - /tmp/loopzero-ops validate-chart --release loopzero-cloud --chart charts/loopzero-cloud/ -f charts/loopzero-cloud/values-bootstrap.yaml --skip IngressRoute,Certificate,ExternalSecret
+      - /tmp/loop-runtime-ops validate-chart --release loop-runtime-api --chart charts/loop-runtime-api/ -f charts/loop-runtime-api/values-bootstrap.yaml --skip IngressRoute,Certificate,ServiceMonitor
+      - /tmp/loop-runtime-ops validate-chart --release loop-console --chart charts/loop-console/ -f charts/loop-console/values-bootstrap.yaml --skip IngressRoute,Certificate,ExternalSecret
       # ADR-0023 / plan v1.1 T1.5: monolith charts deleted. The 4 split
       # operator charts live in charts/ (validated by validate:helm-charts target).
-      - /tmp/loopzero-ops validate-chart --release cloudflared --chart infra/helm/cloudflared/
-      - /tmp/loopzero-ops validate-chart --release smoke-test --chart infra/helm/smoke-test/
-      - /tmp/loopzero-ops validate-chart --release cluster-issuer --chart infra/helm/cluster-issuer/ --skip ClusterIssuer
+      - /tmp/loop-runtime-ops validate-chart --release cloudflared --chart infra/helm/cloudflared/
+      - /tmp/loop-runtime-ops validate-chart --release smoke-test --chart infra/helm/smoke-test/
+      - /tmp/loop-runtime-ops validate-chart --release cluster-issuer --chart infra/helm/cluster-issuer/ --skip ClusterIssuer
       # The one admission-policies chart (charts/), installed by Helmfile on core and every
       # cell; rendered with the core overlay too, because that is a second install shape.
-      - /tmp/loopzero-ops validate-chart --release admission-policies --chart charts/loopzero-admission-policies/ --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule
-      - /tmp/loopzero-ops validate-chart --release admission-policies-mgmt --chart charts/loopzero-admission-policies/ -f charts/loopzero-admission-policies/values-mgmt.yaml --skip ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding
+      - /tmp/loop-runtime-ops validate-chart --release admission-policies --chart charts/loop-runtime-admission-policies/ --skip ClusterImagePolicy,ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding,PrometheusRule
+      - /tmp/loop-runtime-ops validate-chart --release admission-policies-mgmt --chart charts/loop-runtime-admission-policies/ -f charts/loop-runtime-admission-policies/values-mgmt.yaml --skip ValidatingAdmissionPolicy,ValidatingAdmissionPolicyBinding
       # velero-backup-dr-plan v1.0 / Validate — wrapper chart + schedules, in the install
       # shape of core.helmfile: values.yaml is passed explicitly because a `--set list[0].x`
       # patches only a list that a -f file supplied. Without it the --set built a new
@@ -643,7 +643,7 @@ tasks:
       # the pipe this replaced reported that as a pass (#392).
       # The Velero kinds (Schedule, BackupStorageLocation, ...) are validated, not skipped:
       # their strict schemas are generated from the pinned chart's CRDs (#391).
-      - /tmp/loopzero-ops validate-chart --release test --chart infra/helm/velero/ -f infra/helm/velero/values.yaml -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com
+      - /tmp/loop-runtime-ops validate-chart --release test --chart infra/helm/velero/ -f infra/helm/velero/values.yaml -f infra/helm/velero/values-schedules.yaml --set velero.configuration.backupStorageLocation[0].bucket=test --set velero.configuration.backupStorageLocation[0].config.region=sfo3 --set velero.configuration.backupStorageLocation[0].config.s3Url=https://sfo3.digitaloceanspaces.com
       # Monitoring manifests (ServiceMonitor, PrometheusRule are CRD kinds — skip those)
       - kubeconform --strict --skip ServiceMonitor,PrometheusRule,Probe infra/helm/monitoring/manifests/
       # infra/helm/argo-workflows/templates/ contains Go template syntax ({{ }}) — requires helm template to validate
@@ -672,7 +672,7 @@ tasks:
 
   validate:internal-charts:
     desc: |
-      Lints all internal LoopZero Helm charts (those referenced as `../helm/X` in
+      Lints all internal LoopRuntime Helm charts (those referenced as `../helm/X` in
       helmfiles). CHG-2026-04-28-LAYERED-BOOTSTRAP iteration 5+ created these
       to close the chart-not-found gap. Validates each chart parses, templates,
       and produces at least one K8s object.
@@ -705,7 +705,7 @@ tasks:
         - Schema drift between chart upgrades
       Uses local CRD schemas at infra/kubeconform-schemas/ for kinds not in
       the default kubeconform schema repository (CustomResourceDefinition).
-      The render is offline: LOOPZERO_DB_PASSWORD is a render-only placeholder set
+      The render is offline: LOOP_RUNTIME_DB_PASSWORD is a render-only placeholder set
       by the script, never a real secret (#391).
     cmds:
       # Delegate to a shell script — keeps kubeconform's {{...}} template
@@ -715,7 +715,7 @@ tasks:
       # the chart version infra/helm/velero/Chart.lock pins; the render above built
       # that dependency, so this is where a Velero upgrade without a schema refresh
       # is caught (#391). Refresh: task helm:sync-kubeconform-schemas.
-      - cd cmd/loopzero-ops && go run . kubeconform-schemas --check --root ../.. --chart infra/helm/velero
+      - cd cmd/loop-runtime-ops && go run . kubeconform-schemas --check --root ../.. --chart infra/helm/velero
 
   validate:layered-bootstrap:
     desc: |
@@ -728,13 +728,13 @@ tasks:
       - go test ./infra/tests/config/ -run "TestRegression|TestB18|TestB16|TestL3CoverageMatrix" -count=1
       - helmfile -f infra/helmfile/core.helmfile.yaml.gotmpl -e dev list >/dev/null
       - helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e dev list >/dev/null
-      - LOOPZERO_CELL_CONTEXT=${LOOPZERO_CELL_CONTEXT:-k3d-loopzero-cell-0} helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e dev list >/dev/null
+      - LOOP_RUNTIME_CELL_CONTEXT=${LOOP_RUNTIME_CELL_CONTEXT:-k3d-loop-runtime-cell-0} helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl -e dev list >/dev/null
       - echo "✓ All layered-bootstrap offline validations PASS"
 
   validate:k3d-integration:
     desc: |
       Runs the layered-bootstrap integration tests against a local k3d cluster.
-      Requires `k3d cluster create loopzero-test` to exist. Validates:
+      Requires `k3d cluster create loop-runtime-test` to exist. Validates:
         - admission-policies Helm chart installs cleanly + creates 6 VAPs
         - scoped-kubeconfig.sh produces a working SA-backed kubeconfig
         - argocd-register.sh creates ArgoCD cluster Secret with correct caData
@@ -742,7 +742,7 @@ tasks:
         - 8/8 internal Helm charts install cleanly on real k8s
       CHG-2026-04-28-LAYERED-BOOTSTRAP / Phase 7 partial real-cluster validation.
     cmds:
-      - LOOPZERO_K3D_INTEGRATION=1 go test -timeout 5m ./infra/tests/performance/load/ -run "TestK3d" -count=1 -v
+      - LOOP_RUNTIME_K3D_INTEGRATION=1 go test -timeout 5m ./infra/tests/performance/load/ -run "TestK3d" -count=1 -v
 
   validate:full:
     desc: |
@@ -773,7 +773,7 @@ tasks:
   migrate:tenants:
     desc: |
       F-04 (CHG-2026-04-29-DOGFOOD T3.3) — Reconcile Tenant + Environment
-      CRs duplicated across namespaces into the canonical loopzero-system. Default
+      CRs duplicated across namespaces into the canonical loop-runtime-system. Default
       is dry-run; use `task migrate:tenants -- --apply` to commit.
 
       CRITICAL: this is the T1 fix (data cleanup). T3.1 (hard-coding the
@@ -787,10 +787,10 @@ tasks:
     desc: |
       Reproduce all 13 dogfood findings (F-01..F-13) against dev-public k3d.
       Migrated to Ginkgo at infra/tests/e2e/dogfood_repro_test.go per M18 T2.1
-      (v0.62.0 2026-07-10). Run with LOOPZERO_E2E=1 for LIVE mode; unset for
+      (v0.62.0 2026-07-10). Run with LOOP_RUNTIME_E2E=1 for LIVE mode; unset for
       hermetic skip (compile-verify only).
     cmds:
-      - LOOPZERO_E2E=1 go test ./infra/tests/e2e/ -run TestDeployHappyPath -v --ginkgo.label-filter="dogfood-repro"
+      - LOOP_RUNTIME_E2E=1 go test ./infra/tests/e2e/ -run TestDeployHappyPath -v --ginkgo.label-filter="dogfood-repro"
 
   test:dogfood:secrets-openbao:rehearsal:
     desc: |
@@ -801,7 +801,7 @@ tasks:
       does NOT exercise OpenBao encrypt/decrypt, does NOT touch PG.
       Designed for the smoke-test phase of the cutover runbook §
       Step 4.1 (sponsor + Claude side-by-side: confirm the wire is up
-      THEN commit to the destructive `loopzero deploy` walkthrough).
+      THEN commit to the destructive `loopscale deploy` walkthrough).
 
       The 5 rehearsal probes:
         R1: ESO controller pod Running in external-secrets ns
@@ -810,19 +810,19 @@ tasks:
             (validates ESO authenticated via AppRole successfully — if
              this FAILs, the chain is broken somewhere between Secret /
              role_id / OpenBao server reachability / TLS pin)
-        R3: Secret loopzero-openbao-approle in external-secrets ns
+        R3: Secret loop-runtime-openbao-approle in external-secrets ns
             (validates runbook step 2.3.bis Secret was created in the
-             ESO controller ns, not just loopzero-system)
-        R4: Secret loopzero-openbao-approle in loopzero-system ns
-            (validates runbook step 2.1 ran — loopzero-api envFrom source)
-        R5: loopzero-api Deployment env has OPENBAO_TRANSIT_ENABLED=true
+             ESO controller ns, not just loop-runtime-system)
+        R4: Secret loop-runtime-openbao-approle in loop-runtime-system ns
+            (validates runbook step 2.1 ran — loop-runtime-api envFrom source)
+        R5: loop-runtime-api Deployment env has OPENBAO_TRANSIT_ENABLED=true
             (validates runbook step 2.2 wired the env literal AND
              helmfile -e dev-public apply ran with the dev-public
-             loopzero-api overlay containing the flag)
+             loop-runtime-api overlay containing the flag)
 
       Each probe is a single kubectl call returning <1s; total rehearsal
-      runtime ~5s. Forwards env vars LOOPZERO_KUBE_CONTEXT to the wrapped
-      script for non-k3d-loopzero-core cluster targeting.
+      runtime ~5s. Forwards env vars LOOP_RUNTIME_KUBE_CONTEXT to the wrapped
+      script for non-k3d-loop-runtime-core cluster targeting.
     cmds:
       - bash infra/tests/e2e/live/dev-public-secrets-zero-leak_test.sh --rehearsal {{.CLI_ARGS}}
 
@@ -871,14 +871,14 @@ tasks:
         # Go back through the root of THIS checkout. It used to be an absolute path from
         # a single machine — the target failed on any other clone.
         cd "{{.ROOT_DIR}}"
-        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
-                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
-                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
-                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+        for KCFG in ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-runtime-2.yaml; do
           [ -f "$KCFG" ] || { echo "skip: $KCFG not found"; continue; }
-          NAME=$(basename "$KCFG" .yaml | sed 's/loopzero-//')
+          NAME=$(basename "$KCFG" .yaml | sed 's/loop-runtime-//')
           echo "=== Installing Chaos Mesh in $NAME ==="
-          KUBECONFIG=$KCFG helm upgrade --install loopzero-chaos-mesh infra/helm/chaos-mesh \
+          KUBECONFIG=$KCFG helm upgrade --install loop-runtime-chaos-mesh infra/helm/chaos-mesh \
             -n chaos-mesh --create-namespace \
             -f infra/helm/chaos-mesh/values.yaml \
             --wait --timeout 5m
@@ -894,14 +894,14 @@ tasks:
       delete crd` separately if full removal is desired.
     cmds:
       - |
-        for KCFG in ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-mgmt.yaml \
-                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-build.yaml \
-                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime.yaml \
-                    ${HOME}/.kube/loopzero-loopzero-infra-dev-sfo3-runtime-2.yaml; do
+        for KCFG in ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-mgmt.yaml \
+                    ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-build.yaml \
+                    ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-runtime.yaml \
+                    ${HOME}/.kube/loop-runtime-loop-runtime-infra-dev-sfo3-runtime-2.yaml; do
           [ -f "$KCFG" ] || continue
           NAME=$(basename "$KCFG" .yaml)
           echo "=== Uninstalling Chaos Mesh from $NAME ==="
-          KUBECONFIG=$KCFG helm uninstall loopzero-chaos-mesh -n chaos-mesh 2>&1 | head -3
+          KUBECONFIG=$KCFG helm uninstall loop-runtime-chaos-mesh -n chaos-mesh 2>&1 | head -3
         done
 
   validate:bootstrap:
@@ -929,71 +929,71 @@ tasks:
   e2e:journey:
     desc: Run all E2E journey tests (full deploy flows, ~30-45min)
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - ginkgo -v --label-filter="journey" --timeout=60m ./infra/tests/e2e/
 
   e2e:parity:
     desc: 'Run prod-parity validation specs (Track B migration; local skips cloud-labeled). ~20-40min'
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - ginkgo -v --label-filter="parity && !cloud" --timeout=60m ./infra/tests/e2e/
 
   e2e:smoke:
     desc: Run E2E smoke subset (<5 min)
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - ginkgo -v --label-filter="smoke" --timeout=10m ./infra/tests/e2e/
 
   e2e:edge:
     desc: Run E2E edge case tests (concurrency, failures, state machine)
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - ginkgo -v --label-filter="edge-case" --timeout=30m ./infra/tests/e2e/
 
   e2e:all:
     desc: Run ALL E2E tests (journeys + edge cases + existing specs)
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - ginkgo -v --timeout=60m ./infra/tests/e2e/
 
   e2e:focus:
     desc: Run E2E tests matching a focus pattern (set FOCUS env var)
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
     cmds:
       - ginkgo -v --focus="${FOCUS}" --timeout=60m ./infra/tests/e2e/
 
   e2e:report:
     desc: Run ALL E2E tests with JUnit XML report
     env:
-      LOOPZERO_E2E: "1"
+      LOOP_RUNTIME_E2E: "1"
       JUNIT_REPORT_PATH: "e2e-report.xml"
     cmds:
       - ginkgo -v --timeout=60m --junit-report=e2e-report.xml ./infra/tests/e2e/
 
   # ---------------------------------------------------------------------------
   # Plan v1.2 T5.3 / D5 / EC-21 — per-env e2e targets covering all 5 envs.
-  # Sets LOOPZERO_TEST_ENV so cluster_kubectl_helpers_test.go resolves the right
+  # Sets LOOP_RUNTIME_TEST_ENV so cluster_kubectl_helpers_test.go resolves the right
   # kubeconfig (local k3d context vs drill DOKS kubeconfig dir vs prod stub).
 
   e2e:dev:
-    desc: Run E2E tests against local k3d dev env (LOOPZERO_TEST_ENV=k3d)
+    desc: Run E2E tests against local k3d dev env (LOOP_RUNTIME_TEST_ENV=k3d)
     env:
-      LOOPZERO_E2E: "1"
-      LOOPZERO_TEST_ENV: "k3d"
+      LOOP_RUNTIME_E2E: "1"
+      LOOP_RUNTIME_TEST_ENV: "k3d"
     cmds:
       - ginkgo -v --label-filter="journey || smoke" --timeout=60m ./infra/tests/e2e/
 
   e2e:drill:
-    desc: Run E2E tests against drill DOKS (LOOPZERO_TEST_ENV=drill, requires DRILL_KUBECONFIG_DIR)
+    desc: Run E2E tests against drill DOKS (LOOP_RUNTIME_TEST_ENV=drill, requires DRILL_KUBECONFIG_DIR)
     env:
-      LOOPZERO_E2E: "1"
-      LOOPZERO_TEST_ENV: "drill"
+      LOOP_RUNTIME_E2E: "1"
+      LOOP_RUNTIME_TEST_ENV: "drill"
     preconditions:
       - sh: '[ -n "$DRILL_KUBECONFIG_DIR" ]'
         msg: "DRILL_KUBECONFIG_DIR must point at drill kubeconfig dir (e.g., /tmp/drill-kc)"
@@ -1011,16 +1011,16 @@ tasks:
   e2e:standalone:
     desc: Run E2E tests against local k3d standalone env
     env:
-      LOOPZERO_E2E: "1"
-      LOOPZERO_TEST_ENV: "k3d"
+      LOOP_RUNTIME_E2E: "1"
+      LOOP_RUNTIME_TEST_ENV: "k3d"
     cmds:
       - ginkgo -v --label-filter="journey || smoke" --timeout=60m ./infra/tests/e2e/
 
   e2e:standalone-multi:
     desc: Run E2E tests against local k3d standalone-multi env (4 clusters)
     env:
-      LOOPZERO_E2E: "1"
-      LOOPZERO_TEST_ENV: "k3d"
+      LOOP_RUNTIME_E2E: "1"
+      LOOP_RUNTIME_TEST_ENV: "k3d"
     cmds:
       - ginkgo -v --label-filter="journey || smoke || edge-case" --timeout=60m ./infra/tests/e2e/
 
@@ -1051,17 +1051,17 @@ tasks:
       - bash infra/scripts/ci/coverage-go.sh
 
   # test:coverage:cli removed 2026-06-16 — the CLI was extracted to the standalone
-  # github.com/getloopscale/loopzero-cli repo (M2), which runs its own jest --coverage in CI.
+  # github.com/getloopscale/loop-runtime-cli repo (M2), which runs its own jest --coverage in CI.
 
   test:coverage:
     desc: |
       Run Go coverage. Output: /tmp/coverage-merged.lcov (consumable by codecov,
       diff-cover, etc). Phase 2 gates (diff + baseline) consume this output.
-      (CLI coverage moved to the standalone loopzero-cli repo — M2 decomposition.)
+      (CLI coverage moved to the standalone loop-runtime-cli repo — M2 decomposition.)
     cmds:
       - task: test:coverage:go
       # Go-only merge after CLI extraction (M2). Was: --cli-lcov /tmp/cli-coverage.lcov.
-      - cd cmd/loopzero-ops && go run . quality coverage-merge --go-profile /tmp/coverage.out --output /tmp/coverage-merged.lcov
+      - cd cmd/loop-runtime-ops && go run . quality coverage-merge --go-profile /tmp/coverage.out --output /tmp/coverage-merged.lcov
 
   # ---------------------------------------------------------------------------
   # Helm chart render-time tests (Plan 2026-05-20 v1.2 T4.2)
@@ -1089,7 +1089,7 @@ tasks:
   helm:render:test:chart:
     desc: |
       Run render-time tests for a SINGLE chart (alias for `task helm:test:chart`).
-      Usage: task helm:render:test:chart -- loopzero-api-published
+      Usage: task helm:render:test:chart -- loop-runtime-api-published
     cmds:
       - task: helm:test:chart
 
@@ -1171,7 +1171,7 @@ tasks:
       # every spec skips and this task used to exit 0 having run nothing (#393).
       # Only the `full` spec: the other two are partial chains, not the canonical run.
       # -ginkgo.timeout is separate from `go test -timeout` (Ginkgo defaults to 60min).
-      - LOOPZERO_CLEANROOM_DESTROY=1 go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 2h -v -args -ginkgo.label-filter=full -ginkgo.timeout=2h
+      - LOOP_RUNTIME_CLEANROOM_DESTROY=1 go test -tags=live ./infra/tests/livetest/cleanroom/... -count=1 -timeout 2h -v -args -ginkgo.label-filter=full -ginkgo.timeout=2h
 
   cleanroom:v2:hermetic:
     desc: |
@@ -1202,9 +1202,18 @@ tasks:
   dogfood:v2:
     desc: |
       T3.2 v2 dogfood per-journey LIVE Ginkgo specs. Requires dev-public UP +
-      JWT seed at ~/.loopzero/local-dogfood-token.txt. Gated by build tag `live`.
+      JWT seed at ~/.loop-runtime/local-dogfood-token.txt. Gated by build tag `live`.
     cmds:
       - go test -tags=live ./infra/tests/livetest/dogfood/... -count=1 -timeout 1h -v
+
+  awsemulator:
+    desc: |
+      loop-runtime-api on EKS, RDS and an ALB in the AWS emulator (build tag `awsemulator`).
+      Needs the cluster the emulator's harness leaves with KEEP_CLUSTER=1: source its
+      environment.sh, load the image into the kind cluster, and set LOOP_RUNTIME_API_IMAGE.
+      The aws-emulator-e2e workflow runs the same command.
+    cmds:
+      - cd infra/tests && GOWORK=off go test -tags=awsemulator -count=1 -v -timeout 40m ./awsemulator/
 
   chaos:v2:hermetic:
     desc: |

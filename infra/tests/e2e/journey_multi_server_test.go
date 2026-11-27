@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 02: Multi-Server Monorepo
 //
@@ -17,7 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
 )
 
 var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
@@ -53,9 +53,9 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	})
 
 	It("validates project with 2 apps", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "validate", "--json")
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "validate", "--json")
 		Expect(exitCode).To(Equal(0),
-			"loopzero validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loop-runtime validate should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"validate stdout": stdout,
@@ -71,12 +71,12 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	It("workload names are project-scoped", func() {
 		// Workload primitive is Deployment (legacy) OR Rollout
 		// (argo-rollouts-progressive-delivery-plan T1.3, default-on per
-		// LOOPZERO_PROGRESSIVE_DELIVERY=true). Query both kinds via comma-list
+		// LOOP_RUNTIME_PROGRESSIVE_DELIVERY=true). Query both kinds via comma-list
 		// so this spec is forward-compatible regardless of which renderer
 		// path generated the manifests.
 		//
 		// 2026-05-09 cleanroom dogfood: this assertion intermittently
-		// failed because `loopzero deploy` SSE emits `deploy.completed` on
+		// failed because `loopscale deploy` SSE emits `deploy.completed` on
 		// Application Healthy, which fires marginally before the Rollout
 		// resource is created (Application sync creates Rollout async).
 		// Eventually-poll for up to 90s — workload primitive should
@@ -84,7 +84,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 		Eventually(func() []string {
 			cmd := kubectlForCluster(ClusterWorkload,
 				"-n", ns, "get", "deployments.apps,rollouts.argoproj.io",
-				"-l", "loopzero.io/project="+project,
+				"-l", "runtime.getloopscale.com/project="+project,
 				"--no-headers", "-o", "custom-columns=NAME:.metadata.name")
 			output, err := cmd.CombinedOutput()
 			if err != nil {
@@ -121,7 +121,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 
 		cmd := kubectlForCluster(ClusterWorkload,
 			"-n", ns, "get", "ingressroute.traefik.io",
-			"-l", "loopzero.io/project="+project+",loopzero.io/app-name=worker",
+			"-l", "runtime.getloopscale.com/project="+project+",runtime.getloopscale.com/app-name=worker",
 			"--no-headers", "--ignore-not-found", "-o", "name")
 		output, err := cmd.CombinedOutput()
 		Expect(err).NotTo(HaveOccurred())
@@ -132,7 +132,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	It("worker pod is Running", func() {
 		cmd := kubectlForCluster(ClusterWorkload,
 			"-n", ns, "get", "pod",
-			"-l", "loopzero.io/app-name=worker",
+			"-l", "runtime.getloopscale.com/app-name=worker",
 			"--field-selector=status.phase=Running",
 			"--no-headers", "-o", "name")
 		output, err := cmd.CombinedOutput()
@@ -146,7 +146,7 @@ var _ = Describe("Journey 02: Multi-Server", Ordered, Label("journey"), func() {
 	})
 
 	It("project delete succeeds and cleanup complete", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "project", "delete", project, "--yes", "--json")
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "project", "delete", project, "--yes", "--json")
 		Expect(exitCode).To(Equal(0),
 			"project delete should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Coverage moved out of the parent's coverage_boost_test.go when the family was
 // extracted (B-080, slice-38): the lock-timeout predicate and the rollback edge
@@ -17,17 +17,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // The lock returns the typed ErrLockTimeout, and services wrap it; the handler
 // must still answer the typed 409 through errors.As, with no string matching.
 func TestRollback_WrappedLockTimeoutIs409LockTimeout(t *testing.T) {
 	projects := &fakeRollbackProjectStore{project: &ports.ProjectResult{ID: "p1", Name: "my-api"}}
-	svc := &fakeRollbackService{err: fmt.Errorf("rollback: %w", loopzeroerrors.ErrLockTimeout)}
+	svc := &fakeRollbackService{err: fmt.Errorf("rollback: %w", loopruntimeerrors.ErrLockTimeout)}
 	h := NewRollbackHandler(projects, svc, "dev.getloopscale.com")
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/rollback", bytes.NewBufferString(`{"environment":"production"}`))

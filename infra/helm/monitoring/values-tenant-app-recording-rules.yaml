@@ -1,0 +1,145 @@
+# The series a cell's Prometheus records per tenant app, for the cell's
+# prometheus-federation release (../../helmfile/cell.helmfile.yaml.gotmpl), merged over
+# values-prometheus-federation.yaml.
+#
+# A tenant app is an Argo Rollout that LoopScale does not instrument: no Deployment
+# series describes its replicas and the app exports no request metric. What a cell does
+# hold is the readiness of each pod (kube-state-metrics) and every request the ingress
+# forwarded to a backend (Traefik), neither carrying the tenant. kube-state-metrics
+# exports the runtime.getloopscale.com labels of pods and Services (values-kube-state-metrics.yaml),
+# and the rules below join on them.
+#
+# The contract, which loop-runtime-api queries on the core Prometheus
+# (api/internal/projectmetrics/projectmetricshttp/metrics_proxy.go and
+# api/internal/environments/environmentsadapter/prometheus_readiness_source.go). Every
+# series carries `tenant_id`, `project`, `app` and `environment`:
+#
+#   loop_runtime_app:kube_pod_status_ready:sum
+#       pods of the app that are Ready
+#   loop_runtime_app:traefik_service_requests:rate5m
+#       requests per second the ingress forwarded to the app
+#   loop_runtime_app_status_class:traefik_service_requests:rate5m
+#       the same, by `status_class` of the answer ("2xx" ... "5xx")
+#   loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
+#       the request duration histogram, by `le`, for histogram_quantile
+#   loop_runtime_app:container_cpu_usage_seconds:rate5m
+#       CPU cores the app's containers use, summed over its pods
+#   loop_runtime_app:container_memory_working_set_bytes:sum
+#       working set of the app's containers in bytes, summed over its pods
+#   loop_runtime_app_resource:kube_pod_container_resource_limits:sum
+#       the limits of the app's containers summed over its pods, by `resource`
+#       ("cpu" in cores, "memory" in bytes), the ceiling the two series above fill
+#   loop_runtime_app:kube_pod_container_status_restarts:increase1h
+#       container restarts of the app's pods over the last hour
+#
+# The core Prometheus federates the names that start with `loop_runtime_app`
+# (values-prometheus.yaml) and adds `cluster`; the two `loop_runtime_pod:` and
+# `loop_runtime_service:` series are the join's right-hand sides and stay on the cell.
+#
+# cAdvisor reports a pod three times: each container, the pod sandbox and the cgroup of
+# the whole pod. Only a container's series has a `container` label, so the usage rules
+# select `container!=""` and count nothing twice.
+#
+# The desired replica count is not recorded: it lives in the Rollout's spec, which
+# kube-state-metrics does not read without a custom resource state configuration.
+#
+# infra/tests/charts/tenant_app_metrics_test.go renders this file and runs the rules over
+# synthetic series with promtool.
+serverFiles:
+  recording_rules.yml:
+    groups:
+      - name: loop-runtime-tenant-apps
+        # Rules of a group are evaluated in order, so the joins below read the two
+        # label series recorded in the same evaluation.
+        rules:
+          # A pod of a tenant app, with the app's labels under the contract's names.
+          - record: loop_runtime_pod:kube_pod_labels:max
+            expr: |-
+              max by (namespace, pod, tenant_id, project, app, environment) (
+                label_replace(label_replace(label_replace(label_replace(
+                  kube_pod_labels{label_runtime_getloopscale_com_tenant!="", label_runtime_getloopscale_com_project!="", label_runtime_getloopscale_com_app_name!="", label_runtime_getloopscale_com_environment!=""},
+                  "tenant_id", "$1", "label_runtime_getloopscale_com_tenant", "(.+)"),
+                  "project", "$1", "label_runtime_getloopscale_com_project", "(.+)"),
+                  "app", "$1", "label_runtime_getloopscale_com_app_name", "(.+)"),
+                  "environment", "$1", "label_runtime_getloopscale_com_environment", "(.+)")
+              )
+          # A Service of a tenant app (Argo Rollouts gives each app a stable and a canary
+          # one). Traefik names a backend `<namespace>-<Service>-<port>@kubernetescrd`;
+          # `traefik_backend` is that name up to the port, which the request rules derive
+          # from Traefik's `service` label to join on.
+          - record: loop_runtime_service:kube_service_labels:max
+            expr: |-
+              max by (traefik_backend, tenant_id, project, app, environment) (
+                label_join(
+                  label_replace(label_replace(label_replace(label_replace(
+                    kube_service_labels{label_runtime_getloopscale_com_tenant!="", label_runtime_getloopscale_com_project!="", label_runtime_getloopscale_com_app_name!="", label_runtime_getloopscale_com_environment!=""},
+                    "tenant_id", "$1", "label_runtime_getloopscale_com_tenant", "(.+)"),
+                    "project", "$1", "label_runtime_getloopscale_com_project", "(.+)"),
+                    "app", "$1", "label_runtime_getloopscale_com_app_name", "(.+)"),
+                    "environment", "$1", "label_runtime_getloopscale_com_environment", "(.+)"),
+                  "traefik_backend", "-", "namespace", "service")
+              )
+          - record: loop_runtime_app:kube_pod_status_ready:sum
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                kube_pod_status_ready{condition="true"}
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app:traefik_service_requests:rate5m
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                label_replace(
+                  rate(traefik_service_requests_total{service=~".+@kubernetescrd"}[5m]),
+                  "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd")
+                * on (traefik_backend) group_left (tenant_id, project, app, environment)
+                loop_runtime_service:kube_service_labels:max
+              )
+          - record: loop_runtime_app_status_class:traefik_service_requests:rate5m
+            expr: |-
+              sum by (tenant_id, project, app, environment, status_class) (
+                label_replace(
+                  label_replace(
+                    rate(traefik_service_requests_total{service=~".+@kubernetescrd"}[5m]),
+                    "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd"),
+                  "status_class", "${1}xx", "code", "([0-9]).+")
+                * on (traefik_backend) group_left (tenant_id, project, app, environment)
+                loop_runtime_service:kube_service_labels:max
+              )
+          - record: loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
+            expr: |-
+              sum by (tenant_id, project, app, environment, le) (
+                label_replace(
+                  rate(traefik_service_request_duration_seconds_bucket{service=~".+@kubernetescrd"}[5m]),
+                  "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd")
+                * on (traefik_backend) group_left (tenant_id, project, app, environment)
+                loop_runtime_service:kube_service_labels:max
+              )
+          - record: loop_runtime_app:container_cpu_usage_seconds:rate5m
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app:container_memory_working_set_bytes:sum
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                sum by (namespace, pod) (container_memory_working_set_bytes{container!=""})
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app_resource:kube_pod_container_resource_limits:sum
+            expr: |-
+              sum by (tenant_id, project, app, environment, resource) (
+                sum by (namespace, pod, resource) (kube_pod_container_resource_limits{resource=~"cpu|memory"})
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app:kube_pod_container_status_restarts:increase1h
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[1h]))
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )

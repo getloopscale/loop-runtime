@@ -8,8 +8,8 @@ kind: ClusterIssuer
 metadata:
   name: letsencrypt-staging
   annotations:
-    loopzero.io/purpose: "Load testing and dev — untrusted certs by design"
-    loopzero.io/rotation: "N/A (test certs)"
+    runtime.getloopscale.com/purpose: "Load testing and dev — untrusted certs by design"
+    runtime.getloopscale.com/rotation: "N/A (test certs)"
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory

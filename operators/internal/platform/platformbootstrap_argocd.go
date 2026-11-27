@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform
 
@@ -19,17 +19,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // reconcileArgoCDPhase handles the ConfiguringArgoCD phase.
 // Steps: check reachability, validate/create JWT, register repo credentials.
 // ARCH-OP-001: Uses ArgoCDBootstrapClient interface for HTTP operations.
-func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "bootstrap.argocd.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
@@ -76,7 +76,7 @@ func (r *PlatformBootstrapReconciler) reconcileArgoCDPhase(ctx context.Context, 
 			return r.requeueWithRetry(ctx, pb, base, maxRetries, fmt.Sprintf("ArgoCD admin secret: %v", passErr))
 		}
 
-		// Step 4: Generate apiKey token for loopzero-api account (non-expiring).
+		// Step 4: Generate apiKey token for loop-runtime-api account (non-expiring).
 		// MEET-2026-03-28-013: replaced createArgoCDSession (24h session JWT) with
 		// generateArgoCDApiKey (non-expiring apiKey scoped to sync+get via RBAC).
 		apiKeyToken, err := argoClient.GenerateAPIKey(ctx, adminPassword)
@@ -134,12 +134,12 @@ func (c *argoCDHTTPClient) CheckReachable(ctx context.Context) error {
 	return nil
 }
 
-// GenerateAPIKey creates a non-expiring apiKey token for the loopzero-api account.
+// GenerateAPIKey creates a non-expiring apiKey token for the loop-runtime-api account.
 // MEET-2026-03-28-013: replaces createArgoCDSession which generated 24h session JWTs.
 //
 // Flow:
 //  1. Login as admin to get a temporary session token
-//  2. Use the session token to generate an apiKey for loopzero-api account
+//  2. Use the session token to generate an apiKey for loop-runtime-api account
 //  3. Return the apiKey JWT (non-expiring, scoped via ArgoCD RBAC)
 func (c *argoCDHTTPClient) GenerateAPIKey(ctx context.Context, password string) (string, error) {
 	// Step 1: Login as admin (temporary session, only used to generate apiKey)
@@ -173,7 +173,7 @@ func (c *argoCDHTTPClient) GenerateAPIKey(ctx context.Context, password string) 
 		return "", fmt.Errorf("decoding ArgoCD session response: %w", err)
 	}
 
-	// Step 2: Generate apiKey token for loopzero-api account
+	// Step 2: Generate apiKey token for loop-runtime-api account
 	tokenBody, err := json.Marshal(map[string]string{"name": "platform-deploy"})
 	if err != nil {
 		return "", fmt.Errorf("marshal ArgoCD token request: %w", err)
@@ -210,7 +210,7 @@ func (c *argoCDHTTPClient) GenerateAPIKey(ctx context.Context, password string) 
 
 // ensureRepoCredentialSecret creates or updates a repo credential Secret in the ArgoCD namespace.
 // Uses CreateOrUpdate so credential rotation (e.g., Gitea token refresh) is reflected.
-func (r *PlatformBootstrapReconciler) ensureRepoCredentialSecret(ctx context.Context, argoNS string, cred loopzerov1.ArgoCDRepoCredential, giteaToken string) error {
+func (r *PlatformBootstrapReconciler) ensureRepoCredentialSecret(ctx context.Context, argoNS string, cred loopruntimev1.ArgoCDRepoCredential, giteaToken string) error {
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cred.Name,

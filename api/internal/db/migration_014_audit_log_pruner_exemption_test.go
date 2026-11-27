@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Migration 000014 regression test — text-level invariants for the
 // audit_log_pruner trigger exemption (T7.3 of deep-review-remediation-plan).
@@ -48,8 +48,8 @@ func TestMigration014_BypassIsRestrictedToDelete(t *testing.T) {
 	// And the bypass var must be checked BY VALUE — current_setting with
 	// the missing_ok=true flag (second arg `true`) so the trigger never
 	// errors on sessions that did not set the var.
-	if !strings.Contains(sql, "current_setting('loopzero.audit_pruner', true)") {
-		t.Error("trigger must call current_setting('loopzero.audit_pruner', true)")
+	if !strings.Contains(sql, "current_setting('loop_runtime.audit_pruner', true)") {
+		t.Error("trigger must call current_setting('loop_runtime.audit_pruner', true)")
 	}
 }
 

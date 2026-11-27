@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // ScalingResolver — closes B40 gap: app_scaling_config table is read by the
-// deploy path. See loopzero-scale-end-to-end-plan (T1.1, D1, D2).
+// deploy path. See loop-runtime-scale-end-to-end-plan (T1.1, D1, D2).
 //
 // Precedence (D1): if app_scaling_config has a row for (tenant, project, env, app),
 // that row OVERRIDES the value from loopzero.yaml. Otherwise loopzero.yaml is preserved
@@ -16,9 +16,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ScalingResolver merges yaml-supplied AppSpecs with persisted scaling
@@ -48,7 +48,7 @@ type dbScalingResolver struct {
 // silently ignore every persisted scaling config.
 func NewDBScalingResolver(store ScalingConfigReader) (ScalingResolver, error) {
 	if store == nil {
-		return nil, &loopzeroerrors.LoopZeroError{Code: loopzeroerrors.ErrInternalError.Code, Message: "scaling resolver: store is required"}
+		return nil, &loopruntimeerrors.LoopRuntimeError{Code: loopruntimeerrors.ErrInternalError.Code, Message: "scaling resolver: store is required"}
 	}
 	return &dbScalingResolver{store: store}, nil
 }
@@ -60,7 +60,7 @@ func NewDBScalingResolver(store ScalingConfigReader) (ScalingResolver, error) {
 // Branches per row state:
 //   - ScaleToZero=true       → KEDA path (Replicas=0, Autoscaling={Min,Max})
 //   - MinReplicas==MaxReplicas → fixed (Replicas=Min, Autoscaling=nil)
-//   - MinReplicas<MaxReplicas  → HPA (Replicas=Min as baseline, Autoscaling={Min,Max,CPU})
+//   - MinReplicas<MaxReplicas  → HPA (Replicas=0, Autoscaling={Min,Max,CPU,Memory})
 func (r *dbScalingResolver) Resolve(
 	ctx context.Context,
 	tenantID, projectID, environment string,
@@ -94,27 +94,33 @@ func applyScalingRow(app deploycontracts.AppSpec, row *store.ScalingConfig) depl
 		// KEDA scale-to-zero (D4): Deployment.spec.replicas=0, ScaledObject manages.
 		app.Replicas = 0
 		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
-			MinReplicas: int(row.MinReplicas),
-			MaxReplicas: int(row.MaxReplicas),
-			TargetCPU:   resolveCPUTarget(row.TargetCPUPct),
+			MinReplicas:  int(row.MinReplicas),
+			MaxReplicas:  int(row.MaxReplicas),
+			TargetCPU:    resolveTarget(row.TargetCPUPct),
+			TargetMemory: resolveTarget(row.TargetMemoryPct),
 		}
 	case row.MinReplicas == row.MaxReplicas:
 		// Fixed replicas: HPA not needed.
 		app.Replicas = int(row.MinReplicas)
 		app.Autoscaling = nil
 	default:
-		// HPA: Deployment.spec.replicas=Min as baseline, HPA scales to Max.
-		app.Replicas = int(row.MinReplicas)
+		// HPA. Replicas stays 0: a spec carries a fixed count or a range, never
+		// both, and the renderer takes the baseline from the range's minimum.
+		app.Replicas = 0
 		app.Autoscaling = &deploycontracts.AppAutoscalingSpec{
-			MinReplicas: int(row.MinReplicas),
-			MaxReplicas: int(row.MaxReplicas),
-			TargetCPU:   resolveCPUTarget(row.TargetCPUPct),
+			MinReplicas:  int(row.MinReplicas),
+			MaxReplicas:  int(row.MaxReplicas),
+			TargetCPU:    resolveTarget(row.TargetCPUPct),
+			TargetMemory: resolveTarget(row.TargetMemoryPct),
 		}
 	}
 	return app
 }
 
-func resolveCPUTarget(pct *int32) int {
+// resolveTarget is a saved utilization target as the renderer reads it: 0 when
+// none is saved, which the renderer takes as its default for CPU and as no
+// metric for memory.
+func resolveTarget(pct *int32) int {
 	if pct == nil {
 		return 0
 	}

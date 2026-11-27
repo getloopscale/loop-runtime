@@ -1,0 +1,32 @@
+# staging overlay for gitea: its database on RDS and its session, cache and queue on
+# ElastiCache Valkey. Every credential comes from the gitea-backing-services Secret that
+# aws-secrets-manager writes from Secrets Manager; the values here are addresses only.
+gitea:
+  additionalConfigFromEnvs:
+    - name: GITEA__database__USER
+      valueFrom:
+        secretKeyRef: { name: gitea-backing-services, key: database-user }
+    - name: GITEA__database__PASSWD
+      valueFrom:
+        secretKeyRef: { name: gitea-backing-services, key: database-password }
+    - name: GITEA__session__PROVIDER_CONFIG
+      valueFrom:
+        secretKeyRef: { name: gitea-backing-services, key: session-url }
+    - name: GITEA__cache__HOST
+      valueFrom:
+        secretKeyRef: { name: gitea-backing-services, key: cache-url }
+    - name: GITEA__queue__CONN_STR
+      valueFrom:
+        secretKeyRef: { name: gitea-backing-services, key: queue-url }
+  config:
+    database:
+      HOST: '{{ env "LOOP_RUNTIME_DB_HOST" }}:{{ env "LOOP_RUNTIME_DB_PORT" | default "5432" }}'
+      NAME: gitea
+      USER: ""
+      SSL_MODE: require
+    session:
+      PROVIDER_CONFIG: ""
+    cache:
+      HOST: ""
+    queue:
+      CONN_STR: ""

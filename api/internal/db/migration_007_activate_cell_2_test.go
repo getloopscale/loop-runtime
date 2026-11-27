@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // cell-1-activation-plan T2.2 — text-level invariants of the cell-1
 // activation migration (no live Postgres required). Live behavior is

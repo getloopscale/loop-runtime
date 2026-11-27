@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -12,11 +12,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/bootstrap/bootstraphttp"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap/bootstraphttp"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // POST /internal/bootstrap is the engine's one provisioning path: placement
@@ -24,7 +24,7 @@ import (
 // written in the placement transaction. These tests run it against the
 // migrated schema, wired the way main wires it (on the cross-tenant pool).
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
 //	  go test ./tests/integration/ -run Bootstrap -v
 const bootstrapTestSecret = "bootstrap-test-secret"
 

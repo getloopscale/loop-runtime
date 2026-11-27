@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -9,9 +9,9 @@ import (
 	"errors"
 	"fmt"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/timeline"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline"
 )
 
 // SSEReader is the minimal read surface from sse.EventStore the deploy
@@ -91,7 +91,7 @@ func (s *PostgresDeployTimelineStore) GetAfterForDeploy(ctx context.Context, ten
 // so an outage answers 500 instead of reading as "not found".
 func (s *PostgresDeployTimelineStore) ownerOf(ctx context.Context, deployID string) (string, error) {
 	tenant, err := s.BuildLookup.GetTenantForBuild(ctx, deployID)
-	if errors.Is(err, loopzeroerrors.ErrBuildNotFound) || (err == nil && tenant == "") {
+	if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) || (err == nil && tenant == "") {
 		return "", timeline.ErrDeployNotFound
 	}
 	if err != nil {

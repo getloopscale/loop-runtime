@@ -4,10 +4,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
-// EnvRef is the canonical Value Object identifying an environment within LoopZero.
+// EnvRef is the canonical Value Object identifying an environment within LoopRuntime.
 // Per ADR D2 (decisions/2026-06-11-pkg-domain-env-ref-value-object.md):
 // replaces the unconstrained `(tenant_id, project, env_name) string` triple
 // that appears in 34 files / 70+ call sites. Closes pattern-suggester #58 +
@@ -96,7 +96,7 @@ func (e EnvRef) Equal(other EnvRef) bool {
 }
 
 // Namespace returns the canonical K8s workload namespace per ADR D2 +
-// pkg/naming.Namespace formula: "loopzero-{TenantID}-{Project}-{EnvName}".
+// pkg/naming.Namespace formula: "loop-runtime-{TenantID}-{Project}-{EnvName}".
 //
 // T1.3.b of plan 2026-06-11-code-review-remediation v1.2 — adds an
 // EnvRef-keyed wrapper around the existing (tenant, project, env)
@@ -119,7 +119,7 @@ func (e EnvRef) Equal(other EnvRef) bool {
 // from pkg/domain importing it.
 //
 // T1.3.f follow-through: an earlier draft built the namespace string
-// inline (`"loopzero-" + e.TenantID + ...`) to avoid an import. That draft
+// inline (`"loop-runtime-" + e.TenantID + ...`) to avoid an import. That draft
 // was caught by TestTenantCRManager_AddEnvironment_RejectsCombinedNamespaceOver63Chars
 // which legitimately expected the 63-char ceiling guard to fire BEFORE
 // the apiserver round-trip. Delegating to naming.Namespace restores the

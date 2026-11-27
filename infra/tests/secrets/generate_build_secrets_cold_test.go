@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -52,7 +52,7 @@ func init() {
 
 func TestABuildSecretsColdInstallReachesItsBackupStep(t *testing.T) {
 	run := runScript(t, "../../helmfile/scripts/generate-build-secrets.sh", coldBuildProfile,
-		[]string{"HOME=" + t.TempDir(), "LOOPZERO_BUCKET_NAME=loopzero-builds"}, "standalone")
+		[]string{"HOME=" + t.TempDir(), "LOOP_RUNTIME_BUCKET_NAME=loop-runtime-builds"}, "standalone")
 	if strings.Contains(run.output(), "No such file or directory") {
 		t.Fatalf("the script lost track of its own directory after generating the cosign key:\n%s", run)
 	}

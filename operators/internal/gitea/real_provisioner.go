@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package gitea
 
@@ -7,9 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/httpclient"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // Compile-time interface compliance check.

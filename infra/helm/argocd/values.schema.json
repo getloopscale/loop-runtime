@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopzero.platform/schemas/argocd/values.schema.json",
-  "title": "ArgoCD LoopZero wrapper values schema",
+  "$id": "https://loop-runtime.platform/schemas/argocd/values.schema.json",
+  "title": "ArgoCD LoopRuntime wrapper values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on ArgoCD bootstrap config drift. Protects: B17 (notifications.notifiers vs deprecated services key), T-05 (controller.replicas=3 for L3+ scale), fix-all-platform-issues T3.1 (duplicate ARGOCD_CONTROLLER_REPLICAS env var). Catches typos that silently break notifications + sync.",
   "type": "object",
   "properties": {

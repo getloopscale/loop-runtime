@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2025-2026 The LoopZero Authors
+# Copyright 2025-2026 The LoopRuntime Authors
 #
-# LoopZero Engine — public HTTP contract (OpenAPI 3.0.3).
+# LoopRuntime Engine — public HTTP contract (OpenAPI 3.0.3).
 # M1.4 (plan m1-4-openapi-contract-tests) started this CONSUMER-DRIVEN (cli/cloud
 # routes only). M11 (plan m11-api-validation) SUPERSEDES that scope: this spec now
 # documents 100% of the public /api/v1 router surface — enforced by
@@ -12,10 +12,10 @@
 # api/internal/server/router.go (+ helper registrations in api/internal/routes/).
 openapi: 3.0.3
 info:
-  title: LoopZero Engine API
+  title: LoopRuntime Engine API
   version: "1.0.0"
   description: >
-    Consumer-facing surface of the LoopZero engine consumed across the
+    Consumer-facing surface of the LoopRuntime engine consumed across the
     decomposition seams (cli ↔ engine, cloud ↔ engine). Frozen here so the
     M2/M3 extractions can be validated against a machine-checkable contract.
 
@@ -570,9 +570,29 @@ paths:
     post:
       tags: [projects]
       summary: Roll back to the previous release
+      description: >-
+        Answers once the target release's manifests are pushed and the sync is triggered.
+        The cells finish the rollout afterwards; the project status shows the target as the
+        active release when it completed, and the release rolled back from when it failed.
       responses:
-        "200": {description: rolled back}
+        "202": {description: "rollback started (status in_progress); rollback_id names its record"}
         "409": {description: no previous release}
+
+  /api/v1/projects/{name}/rollbacks:
+    parameters: [$ref: "#/components/parameters/ProjectName"]
+    get:
+      tags: [projects]
+      summary: List the rollbacks of a project
+      description: >-
+        One entry per rollback, newest first: its id, environment, the release and build it
+        left (from) and aimed at (to), who asked, when, and its status. The status is
+        in_progress, succeeded, failed (failure_reason says why; the release it left stayed
+        active) or interrupted (the API stopped before the rollback was confirmed).
+      parameters:
+      - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        "200": {description: "the rollbacks, under the key rollbacks"}
+        "400": {description: invalid limit}
 
   /api/v1/projects/{name}/scale:
     parameters: [$ref: "#/components/parameters/ProjectName"]
@@ -587,6 +607,7 @@ paths:
       responses:
         "200": {description: scaled}
         "402": {description: plan upgrade required}
+        "404": {description: "project not found (PROJECT_NOT_FOUND), or an app the active release of the environment does not declare (APP_NOT_FOUND)"}
 
   /api/v1/projects/{project}/previews:
     parameters:
@@ -667,6 +688,51 @@ paths:
           content:
             text/event-stream:
               schema: {type: string}
+  /api/v1/integrations/github/installations:
+    get:
+      tags: [integrations]
+      summary: List the GitHub App installations verified for the caller's tenant
+      responses:
+        "200":
+          description: installations bound to the tenant after GitHub confirmed a user's access
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubInstallationList"
+  /api/v1/integrations/github/installations/claim:
+    post:
+      tags: [integrations]
+      summary: Bind to the tenant the installations GitHub confirms the user can access
+      description: >-
+        Exchanges the one-time code of the GitHub App's user authorization and binds to the
+        caller's tenant the installations of this App that the GitHub user can access. An
+        installation that belongs to another tenant is left alone. Requires the admin role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: The code GitHub returned to the authorization callback.
+      responses:
+        "200":
+          description: the installations now verified for the tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitHubInstallationList"
+        "400":
+          description: INVALID_REQUEST (no code) or GITHUB_CODE_REJECTED (expired or already used)
+        "403":
+          description: INSUFFICIENT_ROLE
+        "502":
+          description: GITHUB_UNAVAILABLE; nothing was bound
+        "503":
+          description: GITHUB_OAUTH_NOT_CONFIGURED
   /api/v1/integrations/github/installations/{id}/repositories:
     parameters:
     - {name: id, in: path, required: true, schema: {type: string}}
@@ -729,6 +795,32 @@ paths:
       responses:
         '200':
           description: get build sbom
+  /api/v1/builds/{id}/sbom/{app}/download:
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    - name: app
+      in: path
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - builds
+      summary: Download the SBOM of one app of a build
+      description: >-
+        Streams the CycloneDX file of the app as an attachment. The path is the download_path
+        that GET /api/v1/builds/{id}/sbom reports for the app.
+      responses:
+        '200':
+          description: the SBOM file
+        '404':
+          description: the build has no SBOM for this app
+        '502':
+          description: the SBOM is recorded and the object store did not return it
   /api/v1/builds/stats:
     get:
       tags:
@@ -754,7 +846,7 @@ paths:
       - health
       summary: Readiness — the service can take traffic
       description: >-
-        The ecosystem-canonical readiness name (loopzero-contracts/httpsurface, D5). Checks the
+        The ecosystem-canonical readiness name (loop-runtime-contracts/httpsurface, D5). Checks the
         database and every registered service; 200 when all are healthy, 503 when any is degraded.
         Shares the handler with /api/v1/health/deep, whose name describes how the check is
         implemented rather than what it answers.
@@ -868,6 +960,19 @@ components:
       description: invalid request
 
   schemas:
+    GitHubInstallationList:
+      type: object
+      required: [installations]
+      properties:
+        installations:
+          type: array
+          items:
+            type: object
+            required: [id, account_login, account_type]
+            properties:
+              id: {type: integer, format: int64}
+              account_login: {type: string}
+              account_type: {type: string, description: User or Organization}
     Health:
       type: object
       additionalProperties: true

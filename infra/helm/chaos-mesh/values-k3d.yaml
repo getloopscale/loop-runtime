@@ -8,7 +8,7 @@
 # This file is applied ON TOP of values.yaml when deploying to k3d:
 #
 #   helm upgrade --install chaos-mesh infra/helm/chaos-mesh \
-#     --kube-context k3d-loopzero-core -n chaos-mesh --create-namespace \
+#     --kube-context k3d-loop-runtime-core -n chaos-mesh --create-namespace \
 #     -f infra/helm/chaos-mesh/values.yaml \
 #     -f infra/helm/chaos-mesh/values-k3d.yaml
 #

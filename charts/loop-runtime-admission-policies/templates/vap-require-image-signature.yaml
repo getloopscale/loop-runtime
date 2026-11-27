@@ -1,0 +1,61 @@
+{{- if .Values.vaps.requireImageSignature }}
+# ValidatingAdmissionPolicy: Require cosign-signed images for tenant workloads.
+# Sprint 6: Supply chain security — only signed images can run in tenant namespaces.
+#
+# This policy works alongside vap-restrict-registries (which limits to our registry).
+# Together they ensure: correct registry + signed image.
+#
+# Phase 1 (current): Audit mode — violations logged but not blocked.
+# Phase 2 (after validation): Enforce mode — unsigned images rejected.
+#
+# Note: This policy checks for the existence of a cosign signature tag in the
+# registry. The actual signature verification is done by the cosign policy
+# controller (Kyverno ClusterPolicy or sigstore/policy-controller) which
+# should be deployed separately. This VAP serves as a lightweight first gate.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: loop-runtime-require-image-signature
+  annotations:
+    runtime.getloopscale.com/sprint: "6"
+    runtime.getloopscale.com/security: "supply-chain"
+spec:
+  failurePolicy: Ignore
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+    namespaceSelector:
+      matchLabels:
+        runtime.getloopscale.com/managed-by: environment-controller
+  validations:
+    # All container images MUST use a digest reference (sha256:...) not a mutable tag.
+    # This ensures the image is pinned to the exact content that was signed.
+    # The gitops pusher already generates manifests with digests, so this catches
+    # any bypass attempts using mutable tags.
+    - expression: >-
+        object.spec.containers.all(c,
+          c.image.contains('@sha256:'))
+      message: "All container images must use digest references (@sha256:...) for supply chain verification. Mutable tags are not allowed in tenant namespaces."
+    - expression: >-
+        !has(object.spec.initContainers) ||
+        object.spec.initContainers.all(c,
+          c.image.contains('@sha256:'))
+      message: "All init container images must use digest references (@sha256:...)."
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: loop-runtime-require-image-signature-binding
+spec:
+  policyName: loop-runtime-require-image-signature
+  validationActions:
+    - Deny
+    - Audit
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        runtime.getloopscale.com/managed-by: environment-controller
+{{- end }}

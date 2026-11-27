@@ -1,7 +1,7 @@
 # Grafana Loki — log aggregation for build logs
 # Chart: grafana/loki
-# Purpose: Stores build output from Argo Workflows pods, queried by loopzero API
-# Storage: MinIO (S3-compatible) — bucket loopzero-logs
+# Purpose: Stores build output from Argo Workflows pods, queried by loop-runtime API
+# Storage: MinIO (S3-compatible) — bucket loop-runtime-logs
 #
 # LOCAL DEVELOPMENT (k3d) ONLY.
 # Production: Pulumi (infra/pulumi/src/components/build-loki.ts) overrides S3
@@ -14,7 +14,7 @@ loki:
     # Filesystem path config required by chart v6.24+ when storage.type=filesystem.
     path_prefix: /var/loki
   # LIVE-caught 2026-06-09 sponsor walkthrough: the previous S3 storage
-  # config pointed at `minio.loopzero-system:9000` which is unreachable from
+  # config pointed at `minio.loop-runtime-system:9000` which is unreachable from
   # the BUILD cluster (MinIO lives on MGMT cluster, no cross-cluster path
   # wired in k3d serverlb mappings). The secret_access_key field was also
   # left empty with a "T1.3: helmfile env or --set required" TODO that
@@ -41,7 +41,7 @@ loki:
     # streams require 90-day retention for forensic + compliance review.
     # Selector matches Vault server pod (secrets-system NS). Higher priority
     # overrides the default 168h. Other audit-bearing namespaces can be
-    # added here (e.g., argocd, loopzero-system) as separate retention_stream
+    # added here (e.g., argocd, loop-runtime-system) as separate retention_stream
     # entries.
     retention_stream:
       - selector: '{namespace="secrets-system"}'
@@ -79,7 +79,7 @@ loki:
           prefix: loki_index_
           period: 24h
 
-# Single binary mode — sufficient for LoopZero's scale (<100 builds/day)
+# Single binary mode — sufficient for LoopRuntime's scale (<100 builds/day)
 #
 # Loki primary Service stays ClusterIP (in-cluster Promtail ingest path).
 # Cross-cluster query path uses the SEPARATE `loki-cross-cluster` NodePort

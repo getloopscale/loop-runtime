@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // =============================================================================
-// LOOPZERO DR DRILL — Pulumi Project (PROD-IDENTICAL 4-CLUSTER TOPOLOGY)
+// LOOP_RUNTIME DR DRILL — Pulumi Project (PROD-IDENTICAL 4-CLUSTER TOPOLOGY)
 // =============================================================================
 //
 // Plan: 2026-05-16-drill-prod-identical-multicluster-plan.md (v1.1)
@@ -28,7 +28,7 @@
 //   D2: Sizing prod tier specs (mgmt=medium s-4vcpu-8gb-amd, runtime/build=small)
 //   D3: Cell mapping cell-0 → runtimeCluster, cell-1 → runtimeCluster2
 //   D4: Managed PG mgmt-tier (db-s-2vcpu-4gb) ephemeral per-run
-//   D5: Shared VPC loopzero-drill-vpc-sfo3 (10.40.0.0/16) — disjoint from prod 10.20/homolog 10.30
+//   D5: Shared VPC loop-runtime-drill-vpc-sfo3 (10.40.0.0/16) — disjoint from prod 10.20/homolog 10.30
 //   D6: Auto-destroy watchdog parameterizable via expiresInHours (default 8h, max 48h)
 //   D7: Drill credentials full isolation (DRILL_DO_TOKEN distinct from prod)
 //   EC-03 fix: CF Zone protect: false (ephemeral by design; isolation via account+token D7)
@@ -46,14 +46,14 @@ import * as pulumi from "@pulumi/pulumi";
 import * as digitalocean from "@pulumi/digitalocean";
 import * as cloudflare from "@pulumi/cloudflare";
 // Plan v1.2 T3.1 — Component Resources (incremental Pulumi componentization per ADR D1).
-import { LoopZeroSpacesBucket } from "./components/loopzero-spaces-bucket";
-import { LoopZeroVpc } from "./components/loopzero-vpc";
-import { LoopZeroCFZone } from "./components/loopzero-cf-zone";
-import { LoopZeroDOProject } from "./components/loopzero-do-project";
-import { LoopZeroManagedDb } from "./components/loopzero-managed-db";
-import { LoopZeroDOKSCluster } from "./components/loopzero-doks-cluster";
+import { LoopRuntimeSpacesBucket } from "./components/loop-runtime-spaces-bucket";
+import { LoopRuntimeVpc } from "./components/loop-runtime-vpc";
+import { LoopRuntimeCFZone } from "./components/loop-runtime-cf-zone";
+import { LoopRuntimeDOProject } from "./components/loop-runtime-do-project";
+import { LoopRuntimeManagedDb } from "./components/loop-runtime-managed-db";
+import { LoopRuntimeDOKSCluster } from "./components/loop-runtime-doks-cluster";
 
-const config = new pulumi.Config("loopzero-drill");
+const config = new pulumi.Config("loop-runtime-drill");
 
 // --- Stack-wide config ---
 const domain = config.require("domain");
@@ -75,13 +75,13 @@ const runtimeNodeCount = config.getNumber("runtimeNodeCount") ?? 2;
 // --- Safety: 48h ceiling on expires-at (T3.4.bis EC-01 fix) ---
 if (expiresInHours > 48) {
   throw new Error(
-    `loopzero-drill:expiresInHours=${expiresInHours} exceeds 48h safety ceiling. ` +
+    `loop-runtime-drill:expiresInHours=${expiresInHours} exceeds 48h safety ceiling. ` +
       `Drill is ephemeral; if you need longer, use prod canary stage instead.`,
   );
 }
 if (expiresInHours < 1) {
   throw new Error(
-    `loopzero-drill:expiresInHours=${expiresInHours} below 1h minimum. ` +
+    `loop-runtime-drill:expiresInHours=${expiresInHours} below 1h minimum. ` +
       `Provision time alone is ~25min; <1h cannot complete a smoke run.`,
   );
 }
@@ -98,8 +98,8 @@ const expiresAtTagSafe = expiresAtIso
   .toLowerCase()
   .slice(0, 64);
 const drillTags = [
-  "loopzero-drill",
-  `loopzero-drill-expires-at-${expiresAtTagSafe}`,
+  "loop-runtime-drill",
+  `loop-runtime-drill-expires-at-${expiresAtTagSafe}`,
 ];
 
 // =============================================================================
@@ -110,8 +110,8 @@ const drillTags = [
 // 71d6c460 left zone orphan). Drill is ephemeral by design; isolation
 // guarantees come from D7 (separate account + scoped token).
 
-// Plan v1.2 T3.1 — LoopZeroCFZone component (was inline new cloudflare.Zone).
-const drillZone = new LoopZeroCFZone("drill-zone", {
+// Plan v1.2 T3.1 — LoopRuntimeCFZone component (was inline new cloudflare.Zone).
+const drillZone = new LoopRuntimeCFZone("drill-zone", {
   domain,
   accountId: config.requireSecret("cfAccountId"),
   type: "full",
@@ -121,22 +121,22 @@ const drillZone = new LoopZeroCFZone("drill-zone", {
 // 2. DO Project (cost tracking + token scope isolation per D7)
 // =============================================================================
 
-// Plan v1.2 T3.1 — LoopZeroDOProject component (was inline new digitalocean.Project).
-const drillDOProject = new LoopZeroDOProject("drill-project", {
+// Plan v1.2 T3.1 — LoopRuntimeDOProject component (was inline new digitalocean.Project).
+const drillDOProject = new LoopRuntimeDOProject("drill-project", {
   projectName: doProject,
-  description: `LoopZero drill prod-identical stack — expires ${expiresAtIso} — destroyed after run`,
+  description: `LoopRuntime drill prod-identical stack — expires ${expiresAtIso} — destroyed after run`,
 });
 
 // =============================================================================
 // 3. VPC (D5 — shared across 4 clusters, prod-identical pattern)
 // =============================================================================
 
-// Plan v1.2 T3.1 — LoopZeroVpc component (was inline new digitalocean.Vpc).
-const drillVpc = new LoopZeroVpc("drill-vpc", {
+// Plan v1.2 T3.1 — LoopRuntimeVpc component (was inline new digitalocean.Vpc).
+const drillVpc = new LoopRuntimeVpc("drill-vpc", {
   vpcName: `${doProject}-vpc-${region}`,
   region,
   ipRange: "10.40.0.0/16", // disjoint from prod 10.20.0.0/16 + homolog 10.30.0.0/16
-  description: `LoopZero drill VPC (4 clusters share). Expires ${expiresAtIso}.`,
+  description: `LoopRuntime drill VPC (4 clusters share). Expires ${expiresAtIso}.`,
 });
 
 // =============================================================================
@@ -148,8 +148,8 @@ const drillVpc = new LoopZeroVpc("drill-vpc", {
 //   cell-0 → runtimeCluster
 //   cell-1 → runtimeCluster2
 
-// Plan v1.2 T3.1 — LoopZeroDOKSCluster component (4 instances replace inline declarations).
-const mgmtCluster = new LoopZeroDOKSCluster("drill-mgmt", {
+// Plan v1.2 T3.1 — LoopRuntimeDOKSCluster component (4 instances replace inline declarations).
+const mgmtCluster = new LoopRuntimeDOKSCluster("drill-mgmt", {
   clusterName: `${doProject}-core-cluster`,
   region,
   version: mgmtK8sVersion,
@@ -160,7 +160,7 @@ const mgmtCluster = new LoopZeroDOKSCluster("drill-mgmt", {
   tags: drillTags,
 });
 
-const buildCluster = new LoopZeroDOKSCluster("drill-build", {
+const buildCluster = new LoopRuntimeDOKSCluster("drill-build", {
   clusterName: `${doProject}-build-cluster`,
   region,
   version: buildK8sVersion,
@@ -171,7 +171,7 @@ const buildCluster = new LoopZeroDOKSCluster("drill-build", {
   tags: drillTags,
 });
 
-const runtimeCluster = new LoopZeroDOKSCluster("drill-runtime", {
+const runtimeCluster = new LoopRuntimeDOKSCluster("drill-runtime", {
   clusterName: `${doProject}-runtime-cluster`,
   region,
   version: runtimeK8sVersion,
@@ -182,7 +182,7 @@ const runtimeCluster = new LoopZeroDOKSCluster("drill-runtime", {
   tags: drillTags,
 });
 
-const runtimeCluster2 = new LoopZeroDOKSCluster("drill-runtime-2", {
+const runtimeCluster2 = new LoopRuntimeDOKSCluster("drill-runtime-2", {
   clusterName: `${doProject}-cell-1-cluster`,
   region,
   version: runtimeK8sVersion,
@@ -197,31 +197,31 @@ const runtimeCluster2 = new LoopZeroDOKSCluster("drill-runtime-2", {
 // 5. DO Spaces buckets (3 — mirroring prod use) — D8
 // =============================================================================
 
-// Plan v1.2 T3.1 — LoopZeroSpacesBucket component (replaces 4 inline SpacesBucket
+// Plan v1.2 T3.1 — LoopRuntimeSpacesBucket component (replaces 4 inline SpacesBucket
 // declarations). Each instance is 1 component call site. Pattern enables future
-// extraction of LoopZeroVPC, LoopZeroMgmtCluster, LoopZeroManagedPG, etc. (incremental
+// extraction of LoopRuntimeVPC, LoopRuntimeMgmtCluster, LoopRuntimeManagedPG, etc. (incremental
 // Pulumi componentize per ADR D1).
-const drillBuildsBucket = new LoopZeroSpacesBucket("drill-builds", {
-  bucketName: `loopzero-drill-builds-${region}`,
+const drillBuildsBucket = new LoopRuntimeSpacesBucket("drill-builds", {
+  bucketName: `loop-runtime-drill-builds-${region}`,
   region,
   forceDestroy: true,
 });
 
-const drillArtifactsBucket = new LoopZeroSpacesBucket("drill-artifacts", {
-  bucketName: `loopzero-drill-artifacts-${region}`,
+const drillArtifactsBucket = new LoopRuntimeSpacesBucket("drill-artifacts", {
+  bucketName: `loop-runtime-drill-artifacts-${region}`,
   region,
   forceDestroy: true,
 });
 
-const drillStaticBucket = new LoopZeroSpacesBucket("drill-static", {
-  bucketName: `loopzero-drill-static-${region}`,
+const drillStaticBucket = new LoopRuntimeSpacesBucket("drill-static", {
+  bucketName: `loop-runtime-drill-static-${region}`,
   region,
   forceDestroy: true,
 });
 
 // Plan v1.2 T6.1 — Velero backup bucket (closes finding-2026-05-20 Gap 1).
 // Velero BSL "default" was Unavailable in drill iter 2026-05-20 because
-// the bucket `loopzero-drill-velero-backups` (referenced by
+// the bucket `loop-runtime-drill-velero-backups` (referenced by
 // infra/helmfile/environments/drill.yaml velero.bucket) did not exist.
 // Operator action: re-run `pulumi up --stack drill` to provision this
 // bucket; after that, Velero BSL transitions to Available within ~60s
@@ -229,8 +229,8 @@ const drillStaticBucket = new LoopZeroSpacesBucket("drill-static", {
 //
 // lifecycleRule: 30-day expiration to keep storage cost bounded
 // (drill is iteration env; backups older than 30d have no recovery value).
-const drillVeleroBucket = new LoopZeroSpacesBucket("drill-velero", {
-  bucketName: `loopzero-drill-velero-backups`,
+const drillVeleroBucket = new LoopRuntimeSpacesBucket("drill-velero", {
+  bucketName: `loop-runtime-drill-velero-backups`,
   region,
   forceDestroy: true,
   acl: "private",
@@ -247,8 +247,8 @@ const drillVeleroBucket = new LoopZeroSpacesBucket("drill-velero", {
 // 6. Managed PostgreSQL (mgmt-tier per D4)
 // =============================================================================
 
-// Plan v1.2 T3.1 — LoopZeroManagedDb component (was inline new digitalocean.DatabaseCluster).
-const drillPG = new LoopZeroManagedDb("drill-pg", {
+// Plan v1.2 T3.1 — LoopRuntimeManagedDb component (was inline new digitalocean.DatabaseCluster).
+const drillPG = new LoopRuntimeManagedDb("drill-pg", {
   clusterName: `${doProject}-pg`,
   engine: "pg",
   version: "16",
@@ -285,16 +285,16 @@ const drillPgGitea = new digitalocean.DatabaseDb("drill-pg-gitea", {
   name: "gitea",
 });
 
-const drillPgLoopZero = new digitalocean.DatabaseDb("drill-pg-loopzero", {
+const drillPgLoopRuntime = new digitalocean.DatabaseDb("drill-pg-loop-runtime", {
   clusterId: drillPG.id,
-  name: "loopzero",
+  name: "loop-runtime",
 });
 
 // =============================================================================
 // 6.2. Per-app DatabaseUser resources (Phase 2 plan T1.2 + D1 — mirror pulumi-infra)
 // =============================================================================
 //
-// Each service gets its own user (no shared loopzero:loopzero-dev-password). Mirrors
+// Each service gets its own user (no shared loop-runtime:loop-runtime-dev-password). Mirrors
 // `infra/pulumi-infra/src/providers/digitalocean/database.ts:90-112`.
 //
 // EC-5 (SHOULD TEST): DO API accepts 4 paralel User creates without rate limit
@@ -315,9 +315,9 @@ const drillPgGiteaUser = new digitalocean.DatabaseUser("drill-pg-gitea-user", {
   name: "gitea",
 });
 
-const drillPgLoopZeroApiUser = new digitalocean.DatabaseUser("drill-pg-loopzero-api-user", {
+const drillPgLoopRuntimeApiUser = new digitalocean.DatabaseUser("drill-pg-loop-runtime-api-user", {
   clusterId: drillPG.id,
-  name: "loopzero_api",
+  name: "loop_runtime_api",
 });
 
 // =============================================================================
@@ -331,8 +331,8 @@ const drillPgLoopZeroApiUser = new digitalocean.DatabaseUser("drill-pg-loopzero-
 // Mirrors `infra/pulumi/src/providers/digitalocean/database.ts:75` +
 // `infra/pulumi-infra/src/providers/digitalocean/database.ts:62`.
 //
-// Rules: all 4 DOKS clusters need PG access (mgmt for loopzero-api/kratos/hydra/gitea
-// migrations, build for loopzero-api API calls into workflow steps, runtime+runtime-2
+// Rules: all 4 DOKS clusters need PG access (mgmt for loop-runtime-api/kratos/hydra/gitea
+// migrations, build for loop-runtime-api API calls into workflow steps, runtime+runtime-2
 // for cell-aware operator reconciles that read tenant state).
 
 new digitalocean.DatabaseFirewall("drill-pg-firewall", {
@@ -369,8 +369,8 @@ new digitalocean.DatabaseFirewall("drill-pg-firewall", {
 // Sizing: drill = non-prod tier (db-amd-1vcpu-2gb single-node) matching
 // non-prod prod config. Same engine version (valkey 8) for parity.
 
-// Plan v1.2 T3.1 — LoopZeroManagedDb component (Valkey variant).
-const drillRedis = new LoopZeroManagedDb("drill-redis", {
+// Plan v1.2 T3.1 — LoopRuntimeManagedDb component (Valkey variant).
+const drillRedis = new LoopRuntimeManagedDb("drill-redis", {
   clusterName: `${doProject}-redis`,
   engine: "valkey",
   version: "8",
@@ -486,7 +486,7 @@ export const redisUri = drillRedis.uri; // full rediss://user:pass@host:port/0 �
 export const kratosDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgKratos.name}?sslmode=require`);
 export const hydraDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgHydra.name}?sslmode=require`);
 export const giteaDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgGitea.name}?sslmode=require`);
-export const loopzeroApiDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopZero.name}?sslmode=require`);
+export const loopRuntimeApiDsn = pulumi.secret(pulumi.interpolate`postgres://${drillPG.user}:${drillPG.password}@${drillPG.host}:${drillPG.port}/${drillPgLoopRuntime.name}?sslmode=require`);
 
 // Shared infrastructure — Spaces buckets (D8)
 export const bucketBuilds = drillBuildsBucket.name;

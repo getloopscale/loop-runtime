@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package observability
 
@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/correlation"
-	"github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
 )
 
 // TestRequestLogger_BindsCorrelationIDIntoEnrichedLogger — the load-

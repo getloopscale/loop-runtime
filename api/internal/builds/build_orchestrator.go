@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,24 +9,16 @@ import (
 	"log/slog"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/scaling"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
-
-// StaticRoutingClient writes routing entries for static frontends (CF Workers KV).
-// The key is the flat subdomain (e.g., "tn-loopzero-e2e-project-web-production"),
-// the value is a JSON object with buildId and s3Prefix.
-// Nil is valid -- it means CF KV is not configured (local dev).
-type StaticRoutingClient interface {
-	Put(ctx context.Context, subdomain string, entry interface{}) error
-}
 
 // SyncClient abstracts ArgoCD sync operations (DIP).
 //
@@ -43,7 +35,7 @@ type StaticRoutingClient interface {
 
 // ProjectEnsurer guarantees a project exists in the projects table.
 // Used by the deploy flow so that deleted-then-redeployed projects
-// reappear in `loopzero project list`.
+// reappear in `loopscale project list`.
 type ProjectEnsurer interface {
 	EnsureProject(ctx context.Context, tx db.DBTX, tenantID, name, createdBy string) error
 }
@@ -58,6 +50,13 @@ type ProjectEnsurer interface {
 // the cap could not be verified; the submission is refused with it.
 type PlanCapChecker interface {
 	CheckReplicasValue(ctx context.Context, tenantID string, requested int) (allowed bool, plan string, limit int, err error)
+}
+
+// SignedImageFinder returns, per app name, the signed image an earlier build
+// of the same tenant, project and commit already pushed. Apps without one are
+// absent from the map. tx is the environment-lock transaction of the submit.
+type SignedImageFinder interface {
+	FindSignedImages(ctx context.Context, tx db.DBTX, tenantID, projectID, commitSHA string) (map[string]db.ReusedImage, error)
 }
 
 // BuildOrchestratorDeps holds all dependencies for BuildOrchestrator.
@@ -77,10 +76,8 @@ type BuildOrchestratorDeps struct {
 	// the composition root and shared with the rollback orchestrator, so both
 	// write through the same outbox and read manifests with the same reader.
 	Delivery          deploycontracts.DeliveryActivator
-	RegistryURL       string              // Container registry URL for BuildPlan image tag resolution
-	ArgocdSyncTimeout time.Duration       // 0 = default 120s
-	KVClient          StaticRoutingClient // CF KV client for static frontend routing (nil = disabled)
-	BaseDomain        string              // Base domain for app hostnames
+	RegistryURL       string        // Container registry URL for BuildPlan image tag resolution
+	ArgocdSyncTimeout time.Duration // 0 = default 120s
 	// B15: plan-cap enforcement for per-service replica count. nil = disabled.
 	PlanCap PlanCapChecker
 	// KEDAEnabled gates scale-to-zero (MinReplicas=0). When false, min:0 is rejected.
@@ -109,6 +106,10 @@ type BuildOrchestratorDeps struct {
 	// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox writer for the
 	// build-completed FAILED path. May be nil (emit skipped).
 	DeployEventStore store.DeployEventStore
+	// SignedImages finds the images earlier builds of the same commit already
+	// built and signed, so SubmitBuild reuses them instead of rebuilding an
+	// immutable tag. Nil disables reuse: every app is built.
+	SignedImages SignedImageFinder
 }
 
 // DeployTimelineSpawner is the canonical callback the orchestrator
@@ -123,7 +124,7 @@ type DeployTimelineSpawner func(ctx context.Context, deployID string)
 //   - build_orchestrator.go: constructor, types, interfaces, FindReleaseForBuild
 //   - build_orchestrator_submit.go: SubmitBuild, failQueuedBuild
 //   - build_orchestrator_cancel.go: CancelBuild
-//   - build_orchestrator_complete.go: OnBuildCompleted, writeStaticRoutingEntries
+//   - build_orchestrator_complete.go: OnBuildCompleted
 //   - build_orchestrator_retry.go: RetryReleaseActivation
 //
 // Release activation methods live in release_activator.go.
@@ -142,8 +143,6 @@ type BuildOrchestrator struct {
 	delivery            deploycontracts.DeliveryActivator // MEET-009: polymorphic release activation
 	registryURL         string                            // Container registry URL for BuildPlan image tag resolution
 	argocdSyncTimeout   time.Duration
-	kvClient            StaticRoutingClient // CF KV client for static frontend routing
-	baseDomain          string
 	planCap             PlanCapChecker          // B15: nil = enforcement disabled
 	kedaEnabled         bool                    // gates scale-to-zero (min=0)
 	scalingResolver     scaling.ScalingResolver // B40: nil = yaml-only (backward-compat)
@@ -152,6 +151,7 @@ type BuildOrchestrator struct {
 	// J-16 slice 3 (MEET-2026-07-04-001): stages deploy.failed on the outbox
 	// when the build workflow reports FAILED. Nil-safe (emit skipped).
 	deployEventStore store.DeployEventStore
+	signedImages     SignedImageFinder // nil = every app is built
 }
 
 // defaultArgocdSyncTimeout is used when no timeout is configured.
@@ -166,10 +166,8 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 	if syncTimeout == 0 {
 		syncTimeout = defaultArgocdSyncTimeout
 	}
+	// config.Validate guarantees a registry: the k3d default exists only in development.
 	registryURL := deps.RegistryURL
-	if registryURL == "" {
-		registryURL = "k3d-loopzero-registry:5000" // local dev default
-	}
 	return &BuildOrchestrator{
 		buildStore:          deps.BuildStore,
 		releaseStore:        deps.ReleaseStore,
@@ -183,14 +181,13 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 		delivery:            deps.Delivery,
 		registryURL:         registryURL,
 		argocdSyncTimeout:   syncTimeout,
-		kvClient:            deps.KVClient,
-		baseDomain:          deps.BaseDomain,
 		planCap:             deps.PlanCap, // B15: optional plan-cap enforcement
 		kedaEnabled:         deps.KEDAEnabled,
 		scalingResolver:     deps.ScalingResolver,     // B40: nil-safe (resolveScaling handles)
 		auditLogger:         deps.AuditLogger,         // T1.2 mitigation #3: nil = no-op
 		deployTimelineSpawn: deps.DeployTimelineSpawn, // plan T5.1: nil = no-op
 		deployEventStore:    deps.DeployEventStore,    // J-16 slice 3: nil = no emit
+		signedImages:        deps.SignedImages,
 	}
 }
 
@@ -200,7 +197,7 @@ func NewBuildOrchestrator(deps BuildOrchestratorDeps) *BuildOrchestrator {
 //
 // Per D1: when DB row exists, it overrides yaml; when absent, yaml preserved.
 // Race condition (T2.1 Deep Dive): resolve runs inside the submit transaction.
-// A concurrent `loopzero scale` Upsert running between resolve start and tx commit
+// A concurrent `loopscale scale` Upsert running between resolve start and tx commit
 // produces a stale BuildAppSpec snapshot — acceptable per eventual consistency
 // (next deploy picks up the newer state). The serializable isolation level
 // guarantees no torn reads within this transaction.
@@ -224,8 +221,8 @@ func (o *BuildOrchestrator) FindReleaseForBuild(ctx context.Context, buildID str
 // errDeliveryNotWired is returned when a build reaches activation on an
 // orchestrator constructed without a DeliveryActivator — a wiring bug that must
 // fail the activation loudly rather than panic on a nil interface.
-var errDeliveryNotWired = &loopzeroerrors.LoopZeroError{
-	Code:    loopzeroerrors.ErrInternalError.Code,
+var errDeliveryNotWired = &loopruntimeerrors.LoopRuntimeError{
+	Code:    loopruntimeerrors.ErrInternalError.Code,
 	Message: "build orchestrator: no delivery activator wired; set BuildOrchestratorDeps.Delivery at the composition root",
 }
 

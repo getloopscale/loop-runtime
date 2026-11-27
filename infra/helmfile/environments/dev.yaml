@@ -5,20 +5,20 @@
 # when invoked with `-e dev`.
 #
 # Convention: env vars from `pulumi stack output --stack dev` are injected
-# at runtime by `loopzero platform install --provider digitalocean` or directly
+# at runtime by `loop-runtime platform install --provider digitalocean` or directly
 # by the developer when running helmfile manually.
 
 # Domain
 domain: dev.getloopscale.com
 dnsZone: getloopscale.com
 
-# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Phase 3.4 of plan 2026-06-02-loop-runtime-api-vault-integration v1.8 (D11 ESO).
 # Opt-in flag: when true, core.helmfile installs ESO operator +
-# loopzero-external-secrets CRs (pulls secrets from loopzero-secrets cluster).
+# loop-runtime-external-secrets CRs (pulls secrets from loop-runtime-secrets cluster).
 # Default false → secrets continue via legacy env var / K8s Secret pattern.
-# Set to true ONLY after DOKS loopzero-secrets-dev cluster up + openbao-init Job ran +
-# ClusterSecretStore loopzero-secrets-secrets applied (Phase 3.1 manifests) +
-# seed-loopzero-secrets.sh ran for env=dev (T8.1 EC-21).
+# Set to true ONLY after DOKS loop-runtime-secrets-dev cluster up + openbao-init Job ran +
+# ClusterSecretStore loop-runtime-secrets-secrets applied (Phase 3.1 manifests) +
+# seed-loop-runtime-secrets.sh ran for env=dev (T8.1 EC-21).
 vaultEnabled: false
 
 # Cluster role identity (used by templates / tests).
@@ -48,7 +48,7 @@ certIssuer:
 
 # Image registries (must match Pulumi outputs).
 registries:
-  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  docrPrefix: "registry.digitalocean.com/loop-runtime-system/"
 
 # Loki capacity (B5)
 loki:
@@ -59,7 +59,7 @@ loki:
 # Policy mode (B16) — `warn` for dev so test workloads are not blocked.
 policyMode: warn
 
-# In-cluster Postgres — DISABLED for LoopZero Cloud (uses DO Managed PG via Pulumi L1).
+# In-cluster Postgres — DISABLED for LoopRuntime Cloud (uses DO Managed PG via Pulumi L1).
 # iter 20: explicit toggle so the postgresql release is only rendered in standalone.
 inClusterPostgres: false
 
@@ -78,7 +78,7 @@ cell0Id: cell-0
 cell1Id: cell-1
 
 # CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.4 — enable DynamicRouter
-# in loopzero-api so it consumes ClusterCredential CRs and routes per-tenant
+# in loop-runtime-api so it consumes ClusterCredential CRs and routes per-tenant
 # to cell-0 or cell-1. Audit T0.1 Gap 4 (was: silently single-cell).
 dynamicRouter: true
 
@@ -86,7 +86,7 @@ dynamicRouter: true
 # from Pulumi L1 (InfraOutputs.veleroBackupsBucketName). Region matches the
 # cloud region. s3Url targets the regional Spaces endpoint.
 velero:
-  bucket: loopzero-infra-sfo3-velero-backups
+  bucket: loop-runtime-infra-sfo3-velero-backups
   region: sfo3
   s3Url: https://sfo3.digitaloceanspaces.com
 
@@ -102,8 +102,11 @@ profile:
   managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
-  loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  loopRuntimeCloud: true               # install the control plane (loop-console), unless clusterRole is standalone
   smokeTest: true               # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
-  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
-  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  inClusterObjectStore: true    # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
+  awsSecretsManager: false      # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
+  awsLoadBalancerController: false  # install the AWS Load Balancer Controller and publish the edge through an ALB
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: false      # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public

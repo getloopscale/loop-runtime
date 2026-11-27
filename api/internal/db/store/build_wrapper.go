@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -34,17 +34,17 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/id"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/id"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // Compile-time assertion: BuildStoreSqlc satisfies db.BuildStore 1:1.
@@ -100,7 +100,7 @@ func (s *BuildStoreSqlc) Create(ctx context.Context, tx db.DBTX, build *db.Build
 	})
 	if err != nil {
 		if db.IsPGUniqueViolation(err) {
-			return loopzeroerrors.ErrDeployInProgress
+			return loopruntimeerrors.ErrDeployInProgress
 		}
 		return fmt.Errorf("sqlc: insert build: %w", err)
 	}
@@ -114,7 +114,7 @@ func (s *BuildStoreSqlc) GetByID(ctx context.Context, buildID string) (*db.Build
 	row, err := s.q.GetBuildByID(ctx, s.gen(nil), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrBuildNotFound
+			return nil, loopruntimeerrors.ErrBuildNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get build by id: %w", err)
 	}
@@ -131,7 +131,7 @@ func (s *BuildStoreSqlc) GetByIDForTenant(ctx context.Context, tenantID, buildID
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrBuildNotFound
+			return nil, loopruntimeerrors.ErrBuildNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get build by id for tenant: %w", err)
 	}
@@ -157,7 +157,7 @@ func (s *BuildStoreSqlc) HasActiveBuild(ctx context.Context, tx db.DBTX, tenantI
 // dispatches to one of 3 sqlc UPDATE queries based on the resulting phase
 // (timing fields are different across {Running, Terminal, Other}).
 // Returns ErrBuildNotFound when the build doesn't exist.
-// Returns loopzeroerrors.InvalidTransition on invalid transitions.
+// Returns loopruntimeerrors.InvalidTransition on invalid transitions.
 func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, buildID, event string) (*db.Build, error) {
 	// M9 5b (ADR 2026-07-03-m9-5b-nil-tx-status-atomicity): this read-modify-write
 	// MUST run in the caller's transaction under withEnvironmentLock. A nil tx
@@ -176,7 +176,7 @@ func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, buildID, 
 		statemachine.BuildPhaseEvent(event),
 	)
 	if err != nil {
-		return nil, loopzeroerrors.NewInvalidTransition(current.Status, event)
+		return nil, loopruntimeerrors.NewInvalidTransition(current.Status, event)
 	}
 
 	var row generated.Build
@@ -219,7 +219,7 @@ func (s *BuildStoreSqlc) UpdateStatus(ctx context.Context, tx db.DBTX, buildID, 
 func (s *BuildStoreSqlc) UpdateStatusIfCurrent(ctx context.Context, buildID, tenantID string, from statemachine.BuildPhase, event string) (*db.Build, error) {
 	newPhase, err := buildMachine.SafeTransition(from, statemachine.BuildPhaseEvent(event))
 	if err != nil {
-		return nil, loopzeroerrors.NewInvalidTransition(string(from), event)
+		return nil, loopruntimeerrors.NewInvalidTransition(string(from), event)
 	}
 
 	var row generated.Build
@@ -268,7 +268,7 @@ func (s *BuildStoreSqlc) SetErrorMessage(ctx context.Context, tx db.DBTX, buildI
 		return fmt.Errorf("sqlc: set build error message: %w", err)
 	}
 	if rows == 0 {
-		return loopzeroerrors.ErrBuildNotFound
+		return loopruntimeerrors.ErrBuildNotFound
 	}
 	return nil
 }
@@ -289,7 +289,7 @@ func (s *BuildStoreSqlc) SetWorkflowID(ctx context.Context, tx db.DBTX, buildID,
 		return fmt.Errorf("sqlc: set build workflow id: %w", err)
 	}
 	if rows == 0 {
-		return loopzeroerrors.ErrBuildNotFound
+		return loopruntimeerrors.ErrBuildNotFound
 	}
 	return nil
 }
@@ -321,7 +321,7 @@ func (s *BuildStoreSqlc) GetBuildApps(ctx context.Context, buildID string) ([]db
 	data, err := s.q.GetBuildApps(ctx, s.gen(nil), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrBuildNotFound
+			return nil, loopruntimeerrors.ErrBuildNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get build apps: %w", err)
 	}
@@ -474,7 +474,7 @@ func (s *BuildStoreSqlc) getBuildByIDViaTx(ctx context.Context, tx db.DBTX, buil
 	row, err := s.q.GetBuildByID(ctx, s.gen(tx), buildID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrBuildNotFound
+			return nil, loopruntimeerrors.ErrBuildNotFound
 		}
 		return nil, fmt.Errorf("sqlc: get build by id (tx): %w", err)
 	}

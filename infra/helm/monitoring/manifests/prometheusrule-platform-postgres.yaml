@@ -1,0 +1,137 @@
+# The platform's own PostgreSQL (infra/helm/platform-postgres, a CloudNativePG cluster):
+# what loses data or stops writes when nobody is looking.
+#
+# The metrics are the ones an instance exposes on :9187 with CloudNativePG 1.31 and the
+# Barman Cloud plugin, scraped by the `platform-postgres` job (values-prometheus.yaml).
+# The backup timestamps are the plugin's: with the plugin the operator's own
+# cnpg_collector_last_available_backup_timestamp stays 0.
+#
+# Not seen firing on staging: VolumeFilling. kubelet reports volume statistics for CSI
+# volumes (EBS); staging's local-path volumes report none.
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loop-runtime-platform-postgres-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: loop-runtime.platform-postgres
+      rules:
+        - alert: LoopRuntimePlatformPostgresDown
+          expr: up{job="platform-postgres"} == 0 or absent(up{job="platform-postgres"})
+          for: 3m
+          labels:
+            severity: critical
+          annotations:
+            summary: "A platform PostgreSQL instance is down or not scraped"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "No metrics from {{ $labels.pod }} for 3 minutes. With one instance the data-plane services have no database."
+
+        # A WAL segment that cannot be archived stays on the WAL volume, which fills, and
+        # recovery cannot go past the last archived segment.
+        - alert: LoopRuntimePlatformPostgresWALArchiveFailing
+          expr: increase(cnpg_pg_stat_archiver_failed_count{job="platform-postgres"}[15m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL {{ $labels.pod }} is failing to archive WAL"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "Archive attempts failed in the last 15 minutes. Recovery stops at the last archived segment and the WAL volume fills."
+
+        - alert: LoopRuntimePlatformPostgresWALArchiveBacklog
+          expr: cnpg_collector_pg_wal_archive_status{value="ready", job="platform-postgres"} > 10
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL {{ $labels.pod }} has {{ $value }} WAL segments waiting to be archived"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "Segments are produced faster than they reach the bucket, or the archive is stuck."
+
+        # 0 means no base backup was ever taken, and the subtraction is then the whole
+        # epoch, so the same rule covers it. Two days is twice the daily schedule.
+        - alert: LoopRuntimePlatformPostgresBackupStale
+          expr: time() - barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{job="platform-postgres"} > 172800
+          for: 30m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL {{ $labels.pod }} has no base backup from the last two days"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "Without a recent base backup a recovery replays every WAL segment since the last one, or has nothing to start from."
+
+        - alert: LoopRuntimePlatformPostgresBackupFailed
+          expr: >-
+            barman_cloud_cloudnative_pg_io_last_failed_backup_timestamp{job="platform-postgres"}
+            > barman_cloud_cloudnative_pg_io_last_available_backup_timestamp{job="platform-postgres"}
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "The latest base backup of PostgreSQL {{ $labels.pod }} failed"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "The most recent backup attempt failed and none has succeeded since."
+
+        - alert: LoopRuntimePlatformPostgresVolumeFilling
+          expr: >-
+            kubelet_volume_stats_available_bytes{namespace="loop-runtime-data-plane", persistentvolumeclaim=~"platform-postgres-.+"}
+            / kubelet_volume_stats_capacity_bytes{namespace="loop-runtime-data-plane", persistentvolumeclaim=~"platform-postgres-.+"} < 0.2
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL volume {{ $labels.persistentvolumeclaim }} has less than 20% free"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "A full data or WAL volume stops PostgreSQL."
+
+        - alert: LoopRuntimePlatformPostgresReplicaLagging
+          expr: cnpg_pg_replication_lag{job="platform-postgres"} > 30
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PostgreSQL standby {{ $labels.pod }} is {{ $value }}s behind"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "A standby that lags cannot acknowledge synchronous commits in time and loses more on a failover."
+
+        # CloudNativePG 1.31 counts every attached standby as observed, so observed can
+        # exceed expected. Only fewer than expected is a fault.
+        - alert: LoopRuntimePlatformPostgresSyncReplicaMissing
+          expr: >-
+            cnpg_collector_sync_replicas{value="observed", job="platform-postgres"}
+            < ignoring(value) cnpg_collector_sync_replicas{value="expected", job="platform-postgres"}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL {{ $labels.pod }} has fewer synchronous standbys than it requires"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "With required durability, commits wait until a standby is back."
+
+        # PostgreSQL stops accepting writes near 2 billion. Autovacuum normally keeps this
+        # under 200 million.
+        - alert: LoopRuntimePlatformPostgresTransactionIDAgeHigh
+          expr: max by (pod, datname) (cnpg_pg_database_xid_age{job="platform-postgres"}) > 1000000000
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Database {{ $labels.datname }} on {{ $labels.pod }} is halfway to transaction ID wraparound"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "Vacuum is not freezing rows. At 2 billion PostgreSQL refuses writes."
+
+        - alert: LoopRuntimePlatformPostgresConnectionsNearLimit
+          expr: >-
+            sum by (pod) (cnpg_backends_total{job="platform-postgres"})
+            / max by (pod) (cnpg_pg_settings_setting{name="max_connections", job="platform-postgres"}) > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PostgreSQL {{ $labels.pod }} uses more than 80% of max_connections"
+            runbook_url: "docs/runbooks.md#platform-postgresql-alerts"
+            description: "New connections are refused at the limit."

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,13 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // onWorkflowSucceeded handles a completed build workflow by creating a release
@@ -60,7 +60,10 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	// follows the deterministic pattern "sign-image-{appName}" /
 	// "build-image-{appName}", established in argo/cosign.go and
 	// argo/buildkit.go. We use API insert time (not workflow finish time)
-	// for SignedAt because pod clocks are not authoritative.
+	// for SignedAt because pod clocks are not authoritative. Apps whose
+	// image was reused ran no image step; their fields come from the
+	// stored reuse.
+	applyReusedImages(buildApps, apps)
 	enrichAppReleasesWithAttestation(buildApps, status)
 
 	// F-010: shared manifest building function (includes custom domains).
@@ -69,7 +72,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 	// CHG-2026-04-29-DOGFOOD iter 8: forward digest map from buildApps
 	// (populated by enrichAppReleasesWithAttestation just above) so the
 	// manifest renders use `image@sha256:...` instead of `image:tag`.
-	// Mutable tag refs are rejected by VAP `loopzero-require-image-signature`
+	// Mutable tag refs are rejected by VAP `loop-runtime-require-image-signature`
 	// in tenant namespaces — pods would be Forbidden at admission time.
 	digests := make(map[string]string, len(buildApps))
 	for _, ar := range buildApps {
@@ -121,7 +124,7 @@ func (r *BuildReconcileLoop) onWorkflowSucceeded(ctx context.Context, build *db.
 		return
 	}
 
-	// Ensure LoopZeroApplication CRs exist on mgmt cluster (non-fatal).
+	// Ensure LoopRuntimeApplication CRs exist on mgmt cluster (non-fatal).
 	// Enables hostname assignment, ExposedRoute creation, TLS monitoring, reachability probes.
 	r.ensureApplicationCRs(ctx, build, apps)
 
@@ -165,13 +168,13 @@ func (r *BuildReconcileLoop) completeBuild(ctx context.Context, build *db.Build)
 	}
 }
 
-// ensureApplicationCRs creates LoopZeroApplication CRs on the mgmt cluster for each app
+// ensureApplicationCRs creates LoopRuntimeApplication CRs on the mgmt cluster for each app
 // in the build. This wires the ApplicationController and ExposureController to provide
 // hostname assignment, ExposedRoute creation, TLS monitoring, and reachability probes.
 // CHG-2026-04-08-001: Non-fatal — failure is logged but does not block the deploy.
 func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db.Build, apps []db.BuildAppSpec) {
 	if r.appCRMgr == nil {
-		r.logger.Debug("reconcile loop: appCRMgr not configured, skipping LoopZeroApplication CR creation")
+		r.logger.Debug("reconcile loop: appCRMgr not configured, skipping LoopRuntimeApplication CR creation")
 		return
 	}
 	for _, app := range apps {
@@ -187,13 +190,13 @@ func (r *BuildReconcileLoop) ensureApplicationCRs(ctx context.Context, build *db
 			ServiceName: app.Name,
 			ServicePort: port,
 		}
-		if err := r.appCRMgr.EnsureLoopZeroApplication(ctx, input); err != nil {
+		if err := r.appCRMgr.EnsureLoopRuntimeApplication(ctx, input); err != nil {
 			metrics.ApplicationCREnsureTotal.WithLabelValues(build.TenantID, app.Name, "failure").Inc()
-			r.logger.Warn("reconcile loop: failed to ensure LoopZeroApplication CR (non-fatal)",
+			r.logger.Warn("reconcile loop: failed to ensure LoopRuntimeApplication CR (non-fatal)",
 				"build_id", build.ID, "app", app.Name, "error", err)
 		} else {
 			metrics.ApplicationCREnsureTotal.WithLabelValues(build.TenantID, app.Name, "success").Inc()
-			r.logger.Info("reconcile loop: LoopZeroApplication CR ensured",
+			r.logger.Info("reconcile loop: LoopRuntimeApplication CR ensured",
 				"build_id", build.ID, "app", app.Name,
 				"tenant", build.TenantID, "environment", build.Environment)
 		}
@@ -221,6 +224,9 @@ func enrichAppReleasesWithAttestation(apps []deploycontracts.AppRelease, status 
 		return
 	}
 	for i, app := range apps {
+		if app.ImageReused {
+			continue // no image step ran for it; applyReusedImages filled it
+		}
 		signStep := naming.SignStepName(app.Name)
 		buildStep := naming.BuildImageStepName(app.Name)
 		sbomStep := naming.SBOMStepName(app.Name)
@@ -287,6 +293,32 @@ func enrichAppReleasesWithAttestation(apps []deploycontracts.AppRelease, status 
 		// operator follow-up). The counters below are derived from the
 		// existing outputs map and give immediate SLO signal.
 		emitSigstoreObservations(status, app.Name, rekorURL)
+	}
+}
+
+// applyReusedImages copies the stored reused image (digest, signature,
+// signing time, SBOM) onto each app release whose build reused an image, and
+// marks it reused. specs is the build's stored apps spec.
+func applyReusedImages(apps []deploycontracts.AppRelease, specs []db.BuildAppSpec) {
+	reused := make(map[string]*db.ReusedImage, len(specs))
+	for _, spec := range specs {
+		if spec.ReusedImage != nil {
+			reused[spec.Name] = spec.ReusedImage
+		}
+	}
+	for i := range apps {
+		img, ok := reused[apps[i].Name]
+		if !ok {
+			continue
+		}
+		signedAt := img.SignedAt
+		apps[i].ImageReused = true
+		apps[i].ImageDigestSHA256 = img.Digest
+		apps[i].ImageSignature = img.Signature
+		apps[i].ImageSignedAt = &signedAt
+		apps[i].SBOMS3Key = img.SBOMS3Key
+		apps[i].SBOMFormat = img.SBOMFormat
+		apps[i].SBOMComponentCount = img.SBOMComponentCount
 	}
 }
 

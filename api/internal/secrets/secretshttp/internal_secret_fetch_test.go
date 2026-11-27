@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretshttp
 
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 	"github.com/go-chi/chi/v5"
 )
 

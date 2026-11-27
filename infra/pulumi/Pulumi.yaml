@@ -1,3 +1,3 @@
-name: loopzero-infra
+name: loop-runtime-infra
 runtime: nodejs
-description: LoopZero platform infrastructure on DigitalOcean (AS-IS legacy, retired at AM10; AWS is Terraform in loopzero-infra-live)
+description: LoopRuntime platform infrastructure on DigitalOcean (AS-IS legacy, retired at AM10; AWS is Terraform in loop-runtime-infra-live)

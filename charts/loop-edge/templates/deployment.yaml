@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "loop-edge.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "loop-edge.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "loop-edge.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Caddy runs without its admin endpoint, so a changed Caddyfile rolls the pods.
+        checksum/caddyfile: {{ include "loop-edge.caddyfile" . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "loop-edge.selectorLabels" . | nindent 14 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: caddy
+          image: {{ include "loop-edge.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ include "loop-edge.httpPort" . }}
+              protocol: TCP
+            - name: https
+              containerPort: {{ include "loop-edge.httpsPort" . }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ include "loop-edge.healthPort" . }}
+              protocol: TCP
+          env:
+            # Caddy keeps nothing on disk here: certificates are in the shared store.
+            - name: XDG_DATA_HOME
+              value: /tmp/caddy/data
+            - name: XDG_CONFIG_HOME
+              value: /tmp/caddy/config
+            - name: EDGE_ROUTE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.routeLookup.tokenSecret.name }}
+                  key: {{ .Values.routeLookup.tokenSecret.key }}
+            {{- if .Values.storage.passwordSecret.name }}
+            - name: EDGE_STORAGE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.storage.passwordSecret.name }}
+                  key: {{ required "storage.passwordSecret.key is not set" .Values.storage.passwordSecret.key }}
+            {{- end }}
+            {{- if .Values.storage.encryptionKeySecret.name }}
+            - name: EDGE_STORAGE_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.storage.encryptionKeySecret.name }}
+                  key: {{ required "storage.encryptionKeySecret.key is not set" .Values.storage.encryptionKeySecret.key }}
+            {{- end }}
+          # Caddy pings the store while it loads its configuration, so a pod that cannot
+          # reach it never becomes ready.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: caddyfile
+              mountPath: /etc/caddy
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.storage.caConfigMap.name }}
+            - name: storage-ca
+              mountPath: /etc/loop-edge/storage-ca
+              readOnly: true
+            {{- end }}
+            {{- if .Values.upstream.tls.caConfigMap.name }}
+            - name: upstream-ca
+              mountPath: /etc/loop-edge/upstream-ca
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: caddyfile
+          configMap:
+            name: {{ .Release.Name }}
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.storage.caConfigMap.name }}
+        - name: storage-ca
+          configMap:
+            name: {{ .Values.storage.caConfigMap.name }}
+        {{- end }}
+        {{- if .Values.upstream.tls.caConfigMap.name }}
+        - name: upstream-ca
+          configMap:
+            name: {{ .Values.upstream.tls.caConfigMap.name }}
+        {{- end }}

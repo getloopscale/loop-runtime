@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- 000037 is the account-POPULATION migration; its down DEPOPULATES the accounts
 -- table (the inverse). After 000039.down/000038.down have re-NULLed the tenant

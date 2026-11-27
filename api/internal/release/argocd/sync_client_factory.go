@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // SyncClientInterface abstracts ArgoCD sync operations.

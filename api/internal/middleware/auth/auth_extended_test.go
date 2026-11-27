@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package auth
 
@@ -92,7 +92,7 @@ func TestAuth_MultipleTenants_WrongTenant_Returns403(t *testing.T) {
 	// Act: request with tenant that user is NOT a member of
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("Authorization", "Bearer valid-token")
-	req.Header.Set("X-LoopZero-Tenant", "tn-nonexistent")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-nonexistent")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -141,7 +141,7 @@ func TestAuth_ServiceAuth_MissingIdentity_FallsToBearer(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Service-Auth", "valid-secret")
-	// No X-LoopZero-User-ID, no X-LoopZero-Tenant, no Bearer token
+	// No X-Loop-Runtime-User-ID, no X-Loop-Runtime-Tenant, no Bearer token
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -162,9 +162,9 @@ func TestAuth_ServiceAuth_MembershipNotFound_Returns403(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Service-Auth", "valid-secret")
-	req.Header.Set("X-LoopZero-User-ID", "svc-user")
-	req.Header.Set("X-LoopZero-Tenant", "tn-unknown") // not in memberships
-	req.Header.Set("X-LoopZero-Email", "svc@test.com")
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-unknown") // not in memberships
+	req.Header.Set("X-Loop-Runtime-Email", "svc@test.com")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -187,8 +187,8 @@ func TestAuth_ServiceAuth_PreviousSecret_DualKeyRotation(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Service-Auth", "old-secret") // previous secret
-	req.Header.Set("X-LoopZero-User-ID", "svc-user")
-	req.Header.Set("X-LoopZero-Tenant", "tn-1")
+	req.Header.Set("X-Loop-Runtime-User-ID", "svc-user")
+	req.Header.Set("X-Loop-Runtime-Tenant", "tn-1")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

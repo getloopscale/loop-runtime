@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -11,14 +11,14 @@ import (
 
 // The public edge serves the data plane at app-dev.getloopscale.com/v1/{memory,rag,lens}/*.
 // Until #470 it forwarded those paths to a docker-compose Traefik on :8092 that nothing
-// versioned any more, which authorised them against a second loopzero-cloud with its own
-// user database. The edge now asks the core cluster's loopzero-cloud (localhost:3002)
+// versioned any more, which authorised them against a second loop-console with its own
+// user database. The edge now asks the core cluster's loop-console (localhost:3002)
 // through forward_auth, and proxies to the services' NodePorts on the core cluster.
 
 // dataPlaneRoute is one data-plane prefix on the edge.
 type dataPlaneRoute struct {
 	prefix   string // /v1/memory/
-	authPath string // loopzero-cloud's forward-auth endpoint for it
+	authPath string // loop-console's forward-auth endpoint for it
 	upstream string // the service's host port on the core cluster
 }
 
@@ -64,10 +64,10 @@ func TestDataPlaneEdgeAuthorisesThroughTheCoreCloudBeforeProxying(t *testing.T) 
 				t.Fatal("not a route block — Caddy would reorder its directives")
 			}
 			order := []string{
-				"request_header -X-LoopZero-User-Id",
+				"request_header -X-Loop-Runtime-User-Id",
 				"forward_auth localhost:3002",
 				"uri " + r.authPath + "\n",
-				"copy_headers Authorization X-LoopZero-User-Id",
+				"copy_headers Authorization X-Loop-Runtime-User-Id",
 				"uri path_regexp ^" + r.prefix + " /v1/",
 				"reverse_proxy " + r.upstream,
 			}
@@ -92,10 +92,10 @@ func TestEdgeNoLongerUsesTheComposeTraefik(t *testing.T) {
 	}
 }
 
-// loopzero-cloud's /internal/* routes are its forward-auth and MCP resolve endpoints: they
+// loop-console's /internal/* routes are its forward-auth and MCP resolve endpoints: they
 // ARE the authorisation, so they sit outside every auth middleware. Reached from the
 // internet, /internal/authz/forward mints a per-tenant data-plane key for any valid
-// loopzero_live_* key and hands it back in a response header.
+// loop_runtime_live_* key and hands it back in a response header.
 func TestPublicEdgeRefusesTheCloudInternalRoutes(t *testing.T) {
 	app := caddyBlock(t, caddyfileText(t), "app-dev.getloopscale.com")
 	body := caddyHandle(t, app, "/internal/*")

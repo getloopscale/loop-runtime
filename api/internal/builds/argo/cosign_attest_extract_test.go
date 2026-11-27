@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -65,10 +65,10 @@ printf '%s' "$REKOR_ENTRY_URL"
 func TestRekorExtract_LiteralURL_Returned(t *testing.T) {
 	out := extractRekorURL(t,
 		"tlog entry created\n"+
-			"Logged to https://rekor.loopzero.test/api/v1/log/entries?uuid=abc123\n"+
+			"Logged to https://rekor.loop-runtime.test/api/v1/log/entries?uuid=abc123\n"+
 			"All set.",
 		"https://rekor.fallback.test")
-	want := "https://rekor.loopzero.test/api/v1/log/entries?uuid=abc123"
+	want := "https://rekor.loop-runtime.test/api/v1/log/entries?uuid=abc123"
 	if out != want {
 		t.Errorf("literal URL extraction: got %q want %q", out, want)
 	}
@@ -79,8 +79,8 @@ func TestRekorExtract_TlogIndex_ReconstructsURL(t *testing.T) {
 		"DEBUG: starting attest\n"+
 			"tlog entry created with index: 42\n"+
 			"done.",
-		"https://rekor.loopzero.test")
-	want := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=42"
+		"https://rekor.loop-runtime.test")
+	want := "https://rekor.loop-runtime.test/api/v1/log/entries?logIndex=42"
 	if out != want {
 		t.Errorf("tlog reconstruct: got %q want %q", out, want)
 	}
@@ -90,8 +90,8 @@ func TestRekorExtract_TlogIndex_TrailingSlashStripped(t *testing.T) {
 	// REKOR_URL with trailing slash — shell `${REKOR_URL%/}` strips it.
 	out := extractRekorURL(t,
 		"tlog entry created with index: 7\n",
-		"https://rekor.loopzero.test/")
-	want := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=7"
+		"https://rekor.loop-runtime.test/")
+	want := "https://rekor.loop-runtime.test/api/v1/log/entries?logIndex=7"
 	if out != want {
 		t.Errorf("trailing slash strip: got %q want %q", out, want)
 	}
@@ -103,9 +103,9 @@ func TestRekorExtract_BothLiteralAndIndex_LiteralWins(t *testing.T) {
 	// to a less-specific lookup. The script prefers the literal.
 	out := extractRekorURL(t,
 		"tlog entry created with index: 99\n"+
-			"Verified entry at https://rekor.loopzero.test/api/v1/log/entries?uuid=xyz\n",
-		"https://rekor.loopzero.test")
-	want := "https://rekor.loopzero.test/api/v1/log/entries?uuid=xyz"
+			"Verified entry at https://rekor.loop-runtime.test/api/v1/log/entries?uuid=xyz\n",
+		"https://rekor.loop-runtime.test")
+	want := "https://rekor.loop-runtime.test/api/v1/log/entries?uuid=xyz"
 	if out != want {
 		t.Errorf("literal-over-index: got %q want %q", out, want)
 	}
@@ -119,7 +119,7 @@ func TestRekorExtract_NoMatchableOutput_EmptyResult(t *testing.T) {
 	out := extractRekorURL(t,
 		"DEBUG: unrelated cosign trace\n"+
 			"Image signed successfully\n",
-		"https://rekor.loopzero.test")
+		"https://rekor.loop-runtime.test")
 	if out != "" {
 		t.Errorf("expected empty when no Rekor footprint, got %q", out)
 	}
@@ -144,8 +144,8 @@ func TestRekorExtract_MultiTlogEntries_HeadOneTaken(t *testing.T) {
 		"tlog entry created with index: 1\n"+
 			"tlog entry created with index: 2\n"+
 			"tlog entry created with index: 3\n",
-		"https://rekor.loopzero.test")
-	want := "https://rekor.loopzero.test/api/v1/log/entries?logIndex=1"
+		"https://rekor.loop-runtime.test")
+	want := "https://rekor.loop-runtime.test/api/v1/log/entries?logIndex=1"
 	if out != want {
 		t.Errorf("head -1 first-match: got %q want %q", out, want)
 	}

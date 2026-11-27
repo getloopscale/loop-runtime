@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package objectstore is the platform's one entry point to S3-compatible
-// object storage (MinIO in-cluster, DigitalOcean Spaces in production).
+// object storage (MinIO in-cluster, DigitalOcean Spaces, Amazon S3).
 //
 // Request signing is delegated to minio-go, the maintained client the
 // operators module already uses against the same stores: AWS Signature V4 is an
@@ -32,7 +32,7 @@ import (
 
 const (
 	// signingRegion is the SigV4 region both MinIO and DigitalOcean Spaces
-	// accept for path-style requests.
+	// accept for path-style requests, and the AWS region when none is set.
 	signingRegion = "us-east-1"
 	// uploadTimeout bounds one upload end to end.
 	uploadTimeout = 60 * time.Second
@@ -43,24 +43,33 @@ const (
 )
 
 // S3Store uploads objects and signs download URLs against one S3-compatible
-// endpoint, addressing objects path-style: {endpoint}/{bucket}/{key}.
+// endpoint. A static-key store addresses objects path-style,
+// {endpoint}/{bucket}/{key}; an AWS store does so on any host but amazonaws.com.
 type S3Store struct {
 	client *minio.Client
 }
 
 // NewS3Store builds a store for endpoint, which may be a full URL
 // ("https://nyc3.digitaloceanspaces.com") or a bare host[:port]; a bare host
-// is treated as plain HTTP, as in-cluster MinIO is.
+// is treated as plain HTTP, as in-cluster MinIO is. It signs with the static
+// key pair; NewAWSS3Store signs with the AWS credential chain instead.
 func NewS3Store(endpoint, accessKey, secretKey string) (*S3Store, error) {
+	if accessKey == "" || secretKey == "" {
+		return nil, fmt.Errorf("objectstore: a static key needs both an access key and a secret key")
+	}
+	return newS3Store(endpoint, signingRegion, minio.BucketLookupPath, miniocreds.NewStaticV4(accessKey, secretKey, ""))
+}
+
+func newS3Store(endpoint, region string, lookup minio.BucketLookupType, creds *miniocreds.Credentials) (*S3Store, error) {
 	host, secure, err := parseEndpoint(endpoint)
 	if err != nil {
 		return nil, err
 	}
 	client, err := minio.New(host, &minio.Options{
-		Creds:        miniocreds.NewStaticV4(accessKey, secretKey, ""),
+		Creds:        creds,
 		Secure:       secure,
-		Region:       signingRegion,
-		BucketLookup: minio.BucketLookupPath,
+		Region:       region,
+		BucketLookup: lookup,
 		Transport:    otelhttp.NewTransport(http.DefaultTransport),
 	})
 	if err != nil {
@@ -93,10 +102,10 @@ func parseEndpoint(endpoint string) (host string, secure bool, err error) {
 // Upload writes data to bucket/key: one signed PUT when the length is known,
 // otherwise a multipart upload in bounded parts.
 func (s *S3Store) Upload(ctx context.Context, bucket, key string, data io.Reader) error {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.upload",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.source.upload",
 		trace.WithAttributes(
-			attribute.String("loopzero.s3.bucket", bucket),
-			attribute.String("loopzero.s3.key", key),
+			attribute.String("loop-runtime.s3.bucket", bucket),
+			attribute.String("loop-runtime.s3.key", key),
 		))
 	defer span.End()
 
@@ -111,7 +120,7 @@ func (s *S3Store) Upload(ctx context.Context, bucket, key string, data io.Reader
 		span.SetStatus(codes.Error, "upload failed")
 		return fmt.Errorf("objectstore: upload %s/%s: %w", bucket, key, err)
 	}
-	span.SetAttributes(attribute.Int64("loopzero.s3.size_bytes", info.Size))
+	span.SetAttributes(attribute.Int64("loop-runtime.s3.size_bytes", info.Size))
 	return nil
 }
 
@@ -155,4 +164,24 @@ func (s *S3Store) Presign(ctx context.Context, bucket, key string, ttl time.Dura
 		return "", fmt.Errorf("objectstore: presign %s/%s: %w", bucket, key, err)
 	}
 	return u.String(), nil
+}
+
+// Open returns the content of an object. The caller closes it.
+//
+// GetObject is lazy: it answers before any request is sent. The Stat makes a
+// missing object, or a store that cannot be reached, an error here, before the
+// caller has started writing a response.
+func (s *S3Store) Open(ctx context.Context, bucket, key string) (io.ReadCloser, error) {
+	if bucket == "" || key == "" {
+		return nil, fmt.Errorf("objectstore: bucket and key are required")
+	}
+	object, err := s.client.GetObject(ctx, bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("objectstore: open %s/%s: %w", bucket, key, err)
+	}
+	if _, err := object.Stat(); err != nil {
+		_ = object.Close()
+		return nil, fmt.Errorf("objectstore: open %s/%s: %w", bucket, key, err)
+	}
+	return object, nil
 }

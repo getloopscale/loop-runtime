@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sse_test
 
@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -133,7 +133,7 @@ func (f *fakeBuildReader) GetByID(_ context.Context, id string) (*sse.BuildInfo,
 	defer f.mu.Unlock()
 	b, ok := f.builds[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	cp := *b
 	return &cp, nil

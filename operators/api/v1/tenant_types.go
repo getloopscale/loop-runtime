@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -37,7 +37,7 @@ const (
 )
 
 // Tenant is the Schema for the tenants API.
-// A Tenant represents a team/account in LoopZero, with its own namespaces,
+// A Tenant represents a team/account in LoopRuntime, with its own namespaces,
 // RBAC, quotas, and GitOps repository.
 //
 // +kubebuilder:object:root=true
@@ -120,10 +120,10 @@ type TenantEnvironmentEntry struct {
 	Cluster string `json:"cluster"`
 
 	// Project is the project segment of the canonical namespace formula
-	// `loopzero-<tenant>-<project>-<env>`. J-23 LIVE catch 2026-06-07
+	// `loop-runtime-<tenant>-<project>-<env>`. J-23 LIVE catch 2026-06-07
 	// (#69, sponsor verbatim "Atacar #69 fix tenant_gitops + CRD"): the
 	// renderer canonical refactor (commit a567cdbb5) emits manifests with
-	// namespace `loopzero-<tenant>-<project>-<env>` for ALL envs. The API
+	// namespace `loop-runtime-<tenant>-<project>-<env>` for ALL envs. The API
 	// populates it when creating / updating the Tenant CR
 	// (api/internal/k8s/tenant_cr_manager.go), the operator reads it in
 	// reconcileArgoCDApp (tenant_gitops.go) to compute the canonical

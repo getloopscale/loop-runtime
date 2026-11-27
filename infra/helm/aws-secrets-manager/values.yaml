@@ -1,0 +1,70 @@
+# The AWS region the secrets live in.
+region: ""
+
+# The ClusterSecretStore every ExternalSecret below reads through. It carries no
+# credentials: the External Secrets controller authenticates with its own IRSA role
+# (the `eks.amazonaws.com/role-arn` annotation on its ServiceAccount).
+store:
+  name: aws-secrets-manager
+
+refreshInterval: 1h
+
+# Render the core cluster's ExternalSecrets. The other clusters get the store only.
+coreSecrets: false
+
+# security/secrets in infra-live: one JSON object with the values the platform generates
+# for itself. infra/helmfile/scripts/seed-aws-platform-secret.sh fills in missing keys.
+platformSecret: ""
+
+# data/rds. masterSecret is the secret RDS manages for the master user
+# (manage_master_user_password), JSON with `username` and `password`.
+database:
+  host: ""
+  port: 5432
+  name: loop-runtime
+  masterSecret: ""
+  # RDS forces TLS (rds.force_ssl); `require` encrypts without pinning the RDS CA.
+  sslmode: require
+  # The databases the identity services and Gitea keep their state in, on the same
+  # instance. database-bootstrap creates them.
+  kratosDatabase: kratos
+  hydraDatabase: hydra
+  giteaDatabase: gitea
+
+# data/valkey. authTokenSecret holds the AUTH token as a plain string.
+cache:
+  host: ""
+  port: 6379
+  authTokenSecret: ""
+
+# A registry pull credential (templates/image-pull-secret.yaml), written into each of
+# `namespaces` as the Secret `name`. Off while secretsManagerKey is empty. Staging only:
+# production pulls from ECR with the node role.
+imagePullSecret:
+  name: ghcr-pull
+  registry: ghcr.io
+  secretsManagerKey: ""
+  namespaces: []
+
+# The build's cosign signing key (templates/build-signing-key.yaml), written into
+# `namespace` of the build cluster as the Secret cosign-signing-key. Off while
+# secretsManagerKey is empty; only the build cluster's release sets it.
+buildSigningKey:
+  namespace: argo
+  secretsManagerKey: ""
+
+# Third-party credentials staging cannot generate, each a Secrets Manager secret of its own
+# (a JSON object). Empty: the key Resend issues is read from the platform secret
+# (`resend-api-key`), and loop-console gets no Stripe keys.
+#   resendSecret: {"api-key": "re_..."}
+#   stripeSecret: {"api-key": "sk_test_...", "webhook-secret": "whsec_...",
+#                  "price-starter": "price_...", "price-pro": "price_...", "price-team": "price_..."}
+resendSecret: ""
+stripeSecret: ""
+# The GitHub App loop-runtime-api deploys from, {"app-id": "123", "private-key": "-----BEGIN
+# RSA PRIVATE KEY-----...", "webhook-secret": "...", "client-id": "Iv1...",
+# "client-secret": "..."}, written into loop-runtime-system as the Secret loop-runtime-api-github.
+# All five keys are required: the client id and secret are how the API confirms on GitHub
+# that a user can access an installation before a repository is connected through it.
+# Empty: no such Secret, and the API keeps its repository features off.
+githubAppSecret: ""

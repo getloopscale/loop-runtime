@@ -541,7 +541,7 @@ type InsertReleaseParams struct {
 //
 // Every multi-tenant SELECT / UPDATE / DELETE carries `tenant_id` predicate
 // per platform-security-engineer condition 1 + M-1 + M-2 (enforced by
-// cmd/loopzero-ops/internal/quality/tenantpredicate gate).
+// cmd/loop-runtime-ops/internal/quality/tenantpredicate gate).
 //
 // Initial query set (5/13 total — remaining 8 queries added incrementally as
 // callers migrate per T1.1 sub-step):
@@ -604,20 +604,32 @@ func (q *Queries) InsertRelease(ctx context.Context, db DBTX, arg InsertReleaseP
 }
 
 const listLatestActiveReleasePerEnv = `-- name: ListLatestActiveReleasePerEnv :many
-SELECT DISTINCT ON (environment) environment, git_commit, created_at
-FROM releases
-WHERE tenant_id = $1 AND status = 'ACTIVE'
-ORDER BY environment, created_at DESC
+SELECT DISTINCT ON (r.project_id, r.environment) r.project_id, r.environment, r.git_commit,
+       b.commit_sha AS source_commit,
+       COALESCE((SELECT max(rb.finished_at) FROM rollbacks rb
+                 WHERE rb.tenant_id = $1 AND rb.to_release_id = r.id AND rb.status = 'SUCCEEDED'),
+                r.created_at)::timestamptz AS deployed_at
+FROM releases r
+LEFT JOIN builds b ON b.id = r.build_id AND b.tenant_id = r.tenant_id
+WHERE r.tenant_id = $1 AND r.status = 'ACTIVE'
+ORDER BY r.project_id, r.environment, r.created_at DESC
 `
 
 type ListLatestActiveReleasePerEnvRow struct {
-	Environment string             `json:"environment"`
-	GitCommit   *string            `json:"git_commit"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	ProjectID    string             `json:"project_id"`
+	Environment  string             `json:"environment"`
+	GitCommit    *string            `json:"git_commit"`
+	SourceCommit *string            `json:"source_commit"`
+	DeployedAt   pgtype.Timestamptz `json:"deployed_at"`
 }
 
-// The most recent ACTIVE release per environment across all of a tenant's
-// projects: the dashboard's per-environment last-deploy KPI.
+// The most recent ACTIVE release of each (project, environment) of a tenant:
+// the dashboard's per-environment last-deploy KPI. Two projects share
+// environment names, so the project is part of the key. deployed_at is when
+// the release became active: the end of the last rollback that ended on it,
+// or its creation when no rollback did. git_commit is the
+// GitOps repository commit; source_commit is the commit the user deployed (the
+// release's build), NULL when that build is gone.
 func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, tenantID string) ([]ListLatestActiveReleasePerEnvRow, error) {
 	rows, err := db.Query(ctx, listLatestActiveReleasePerEnv, tenantID)
 	if err != nil {
@@ -627,7 +639,56 @@ func (q *Queries) ListLatestActiveReleasePerEnv(ctx context.Context, db DBTX, te
 	var items []ListLatestActiveReleasePerEnvRow
 	for rows.Next() {
 		var i ListLatestActiveReleasePerEnvRow
-		if err := rows.Scan(&i.Environment, &i.GitCommit, &i.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.Environment,
+			&i.GitCommit,
+			&i.SourceCommit,
+			&i.DeployedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLatestReleaseStatusByBuild = `-- name: ListLatestReleaseStatusByBuild :many
+SELECT DISTINCT ON (r.build_id) r.build_id, r.status
+FROM releases r
+JOIN builds b ON b.id = r.build_id AND b.environment = r.environment
+WHERE r.tenant_id = $1
+  AND r.build_id = ANY($2::text[])
+ORDER BY r.build_id, r.created_at DESC
+`
+
+type ListLatestReleaseStatusByBuildParams struct {
+	TenantID string   `json:"tenant_id"`
+	BuildIds []string `json:"build_ids"`
+}
+
+type ListLatestReleaseStatusByBuildRow struct {
+	BuildID string `json:"build_id"`
+	Status  string `json:"status"`
+}
+
+// The status of the latest release each of the given builds has in its own
+// environment. A release that a promotion created elsewhere from the same
+// build is left out by the join on environment: it says nothing about how the
+// deploy of the build itself did. A build with no release has no row.
+func (q *Queries) ListLatestReleaseStatusByBuild(ctx context.Context, db DBTX, arg ListLatestReleaseStatusByBuildParams) ([]ListLatestReleaseStatusByBuildRow, error) {
+	rows, err := db.Query(ctx, listLatestReleaseStatusByBuild, arg.TenantID, arg.BuildIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLatestReleaseStatusByBuildRow
+	for rows.Next() {
+		var i ListLatestReleaseStatusByBuildRow
+		if err := rows.Scan(&i.BuildID, &i.Status); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

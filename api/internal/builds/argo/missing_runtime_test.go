@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -9,7 +9,7 @@ import (
 )
 
 // A MISSING field and an UNSUPPORTED value are different errors and used to
-// share one message: `loopzero: runtime "" is not supported`. It names what the
+// share one message: `loop-runtime: runtime "" is not supported`. It names what the
 // user did NOT write as if they had written it wrong, and does not say what to
 // write (B-154).
 func TestMissingRuntimeSaysTheFieldIsMissingAndWhatToWrite(t *testing.T) {

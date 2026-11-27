@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // CHG-2026-04-29-DOGFOOD-FB — Helper tests for PreviewReconciler.ingressNS().

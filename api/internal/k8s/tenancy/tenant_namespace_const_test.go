@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenancy
 
@@ -8,15 +8,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
 )
 
 // T-01 (MEET-ADR-0018 / change-validation-planner) — assert that the
-// canonical namespace constant equals "loopzero-system" regardless of any
+// canonical namespace constant equals "loop-runtime-system" regardless of any
 // environmental input. Pure unit test, no cluster, no client.
-func TestTenantNamespace_AlwaysLoopZeroSystem(t *testing.T) {
-	if tenantNamespace != "loopzero-system" {
-		t.Errorf("ADR-0018 C1 regression: tenantNamespace = %q, want %q", tenantNamespace, "loopzero-system")
+func TestTenantNamespace_AlwaysLoopRuntimeSystem(t *testing.T) {
+	if tenantNamespace != "loop-runtime-system" {
+		t.Errorf("ADR-0018 C1 regression: tenantNamespace = %q, want %q", tenantNamespace, "loop-runtime-system")
 	}
 }
 
@@ -46,8 +46,8 @@ func TestTenantNamespace_EnvVarHasNoEffect(t *testing.T) {
 			} else {
 				_ = os.Setenv("TENANT_NAMESPACE", tt)
 			}
-			if tenantNamespace != "loopzero-system" {
-				t.Errorf("ADR-0018 C1 regression: env=%q, tenantNamespace=%q (want loopzero-system)", tt, tenantNamespace)
+			if tenantNamespace != "loop-runtime-system" {
+				t.Errorf("ADR-0018 C1 regression: env=%q, tenantNamespace=%q (want loop-runtime-system)", tt, tenantNamespace)
 			}
 		})
 	}
@@ -66,13 +66,13 @@ func TestTenantNamespace_NoEnvVarReadInSource(t *testing.T) {
 	if strings.Contains(src, `os.Getenv("TENANT_NAMESPACE")`) {
 		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must NOT read TENANT_NAMESPACE env (removed per MEET-ADR-0018)")
 	}
-	if !strings.Contains(src, `const tenantNamespace = "loopzero-system"`) {
-		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must declare `const tenantNamespace = \"loopzero-system\"`")
+	if !strings.Contains(src, `const tenantNamespace = "loop-runtime-system"`) {
+		t.Error("ADR-0018 C1 regression: tenant_cr_manager.go must declare `const tenantNamespace = \"loop-runtime-system\"`")
 	}
 }
 
 // TestTenantNamespace_MatchesControlPlaneNamespace — the B-058 split left the
-// literal "loopzero-system" spelled out twice: here, because ADR-0018 C1's source-level
+// literal "loop-runtime-system" spelled out twice: here, because ADR-0018 C1's source-level
 // guard requires it spelled out in tenant_cr_manager.go, and in
 // k8s.ControlPlaneNamespace, which k8s/workload reads. Before the split the workload
 // files reached into this package's unexported constant, so there was one literal

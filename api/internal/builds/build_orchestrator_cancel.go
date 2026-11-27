@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // CancelBuild cancels a running or queued build.
@@ -36,7 +36,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 
 	// Check if already terminal before acquiring lock (fast path, no race risk)
 	if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-		return loopzeroerrors.ErrBuildAlreadyCompleted
+		return loopruntimeerrors.ErrBuildAlreadyCompleted
 	}
 
 	// Step 2: acquire environment lock -- all state mutations inside (Rule 6)
@@ -49,7 +49,7 @@ func (o *BuildOrchestrator) CancelBuild(ctx context.Context, buildID string) err
 
 		// Step 4: re-check terminal state inside lock
 		if statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-			return loopzeroerrors.ErrBuildAlreadyCompleted
+			return loopruntimeerrors.ErrBuildAlreadyCompleted
 		}
 
 		// Step 5: transition via state machine: BuildCancelRequested

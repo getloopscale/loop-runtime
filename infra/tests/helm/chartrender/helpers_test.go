@@ -32,10 +32,10 @@ func TestChartPath_resolves_known_charts(t *testing.T) {
 		wantDir   string // expected to contain this segment
 	}{
 		{"chaos-mesh lives in infra/helm/ with Chart.yaml", "chaos-mesh", "infra/helm/chaos-mesh"},
-		{"loopzero-app-operator lives in charts/", "loopzero-app-operator", "charts/loopzero-app-operator"},
-		{"loopzero-common (library) lives in charts/", "loopzero-common", "charts/loopzero-common"},
-		{"loopzero-cloud lives in charts/ only since its bootstrap copy was deleted", "loopzero-cloud", "charts/loopzero-cloud"},
-		{"loopzero-api lives in charts/ only since its bootstrap copy was deleted", "loopzero-api", "charts/loopzero-api"},
+		{"loop-runtime-app-operator lives in charts/", "loop-runtime-app-operator", "charts/loop-runtime-app-operator"},
+		{"loop-runtime-common (library) lives in charts/", "loop-runtime-common", "charts/loop-runtime-common"},
+		{"loop-console lives in charts/ only since its bootstrap copy was deleted", "loop-console", "charts/loop-console"},
+		{"loop-runtime-api lives in charts/ only since its bootstrap copy was deleted", "loop-runtime-api", "charts/loop-runtime-api"},
 	}
 
 	for _, tc := range cases {
@@ -79,7 +79,7 @@ func TestChartPath_rejects_empty_name(t *testing.T) {
 	}
 }
 
-// TestIsLibraryChart_detects_loopzero_common confirms library chart detection
+// TestIsLibraryChart_detects_loop_runtime_common confirms library chart detection
 // per ADR D12 (EC-3 fix).
 // TestChartPath_refuses_a_colliding_name asserts that a name declared in BOTH
 // chart trees resolves to no chart at all.
@@ -90,7 +90,7 @@ func TestChartPath_rejects_empty_name(t *testing.T) {
 // function. The error must do more than fail: it names both paths and both explicit
 // resolvers, so the caller is told what to call instead.
 //
-// No name collides in the repository any more (the last pair, loopzero-api, became one
+// No name collides in the repository any more (the last pair, loop-runtime-api, became one
 // chart), so the collision is built in a fixture tree.
 func TestChartPath_refuses_a_colliding_name(t *testing.T) {
 	t.Parallel()
@@ -126,12 +126,12 @@ func TestChartPath_refuses_a_colliding_name(t *testing.T) {
 	}
 }
 
-func TestIsLibraryChart_detects_loopzero_common(t *testing.T) {
+func TestIsLibraryChart_detects_loop_runtime_common(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := ChartPath("loopzero-common")
+	chartPath, err := ChartPath("loop-runtime-common")
 	if err != nil {
-		t.Fatalf("resolve loopzero-common: %v", err)
+		t.Fatalf("resolve loop-runtime-common: %v", err)
 	}
 
 	isLib, err := IsLibraryChart(chartPath)
@@ -139,18 +139,18 @@ func TestIsLibraryChart_detects_loopzero_common(t *testing.T) {
 		t.Fatalf("IsLibraryChart: %v", err)
 	}
 	if !isLib {
-		t.Error("loopzero-common should be detected as library chart")
+		t.Error("loop-runtime-common should be detected as library chart")
 	}
 }
 
-// TestIsLibraryChart_rejects_application_chart confirms loopzero-api is NOT
+// TestIsLibraryChart_rejects_application_chart confirms loop-runtime-api is NOT
 // classified as library (regression guard).
 func TestIsLibraryChart_rejects_application_chart(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := PublishedChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loop-runtime-api")
 	if err != nil {
-		t.Fatalf("resolve loopzero-api: %v", err)
+		t.Fatalf("resolve loop-runtime-api: %v", err)
 	}
 
 	isLib, err := IsLibraryChart(chartPath)
@@ -158,7 +158,7 @@ func TestIsLibraryChart_rejects_application_chart(t *testing.T) {
 		t.Fatalf("IsLibraryChart: %v", err)
 	}
 	if isLib {
-		t.Error("loopzero-api should NOT be detected as library chart (it's type: application)")
+		t.Error("loop-runtime-api should NOT be detected as library chart (it's type: application)")
 	}
 }
 
@@ -192,9 +192,9 @@ func TestNewOptions_no_env_values(t *testing.T) {
 func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := PublishedChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loop-runtime-api")
 	if err != nil {
-		t.Fatalf("resolve loopzero-api: %v", err)
+		t.Fatalf("resolve loop-runtime-api: %v", err)
 	}
 
 	// Use an actual .gotmpl file from helmfile values dir
@@ -202,7 +202,7 @@ func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repo root: %v", err)
 	}
-	gotmplPath := filepath.Join(root, "infra", "helmfile", "values", "drill", "loopzero-api.yaml.gotmpl")
+	gotmplPath := filepath.Join(root, "infra", "helmfile", "values", "drill", "loop-runtime-api.yaml.gotmpl")
 	if _, err := os.Stat(gotmplPath); err != nil {
 		t.Skipf("gotmpl file not present: %v", err)
 	}
@@ -220,9 +220,9 @@ func TestNewOptions_rejects_gotmpl_values(t *testing.T) {
 func TestNewOptions_rejects_missing_env_file(t *testing.T) {
 	t.Parallel()
 
-	chartPath, err := PublishedChartPath("loopzero-api")
+	chartPath, err := PublishedChartPath("loop-runtime-api")
 	if err != nil {
-		t.Fatalf("resolve loopzero-api: %v", err)
+		t.Fatalf("resolve loop-runtime-api: %v", err)
 	}
 
 	_, err = NewOptions(chartPath, "/nonexistent/path/values.yaml")
@@ -250,11 +250,11 @@ func TestBootstrapChartPath_resolves_a_bootstrap_chart(t *testing.T) {
 
 // TestPublishedChartPath_resolves_overlapping_charts confirms explicit
 // published-variant resolution for the charts that had a bootstrap copy in
-// infra/helm/ (loopzero-api, loopzero-cloud) until each pair became one chart.
+// infra/helm/ (loop-runtime-api, loop-console) until each pair became one chart.
 func TestPublishedChartPath_resolves_overlapping_charts(t *testing.T) {
 	t.Parallel()
 
-	cases := []string{"loopzero-api", "loopzero-cloud"}
+	cases := []string{"loop-runtime-api", "loop-console"}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
 			got, err := PublishedChartPath(name)
@@ -271,13 +271,13 @@ func TestPublishedChartPath_resolves_overlapping_charts(t *testing.T) {
 
 // TestBootstrapChartPath_rejects_published_only_chart confirms that
 // asking for the bootstrap variant of a published-only chart errors
-// clearly (no fallback). loopzero-dashboard exists ONLY in charts/.
+// clearly (no fallback). loop-console-dashboard exists ONLY in charts/.
 func TestBootstrapChartPath_rejects_published_only_chart(t *testing.T) {
 	t.Parallel()
 
-	_, err := BootstrapChartPath("loopzero-dashboard")
+	_, err := BootstrapChartPath("loop-console-dashboard")
 	if err == nil {
-		t.Fatal("BootstrapChartPath(loopzero-dashboard) should error — chart " +
+		t.Fatal("BootstrapChartPath(loop-console-dashboard) should error — chart " +
 			"exists only in charts/, no bootstrap variant")
 	}
 	if !strings.Contains(err.Error(), "infra/helm") {
@@ -326,7 +326,7 @@ func TestRepoRoot_resolves_from_anywhere(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RepoRoot from /tmp: %v", err)
 	}
-	if !strings.Contains(root, "/loopzero") {
-		t.Errorf("expected root to contain /loopzero, got %s", root)
+	if !strings.Contains(root, "/loop-runtime") {
+		t.Errorf("expected root to contain /loop-runtime, got %s", root)
 	}
 }

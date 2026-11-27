@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package chaos_test
 
@@ -29,7 +29,7 @@ import (
 // EC-5 of plan v1.1 (echoing existing chaos_test.go skip-guard pattern):
 // MUST Skip when chaos-mesh CRDs absent — running this spec without the
 // CRDs would emit kubectl error noise without any LIVE chaos. The spec
-// chains TWO skip checks: (a) LOOPZERO_CHAOS_TEST env gate (operator opt-in)
+// chains TWO skip checks: (a) LOOP_RUNTIME_CHAOS_TEST env gate (operator opt-in)
 // + (b) chaos-mesh CRD existence (capability check). Both gates must
 // open for the spec to attempt the scenario.
 
@@ -75,10 +75,10 @@ var _ = Describe("Fulcio down during cosign sign", Label("chaos", "sigstore", "T
 	It("FAILs the build cleanly when Fulcio scales to 0 mid-sign", func() {
 		// EC-5: scenario stays as documented intent until an operator
 		// (a) installs chaos-mesh in the build cluster, (b) bootstraps
-		// Sigstore LOCAL/DOKS, then re-runs `LOOPZERO_CHAOS_TEST=1`.
+		// Sigstore LOCAL/DOKS, then re-runs `LOOP_RUNTIME_CHAOS_TEST=1`.
 		//
 		// Expected LIVE flow when both gates open:
-		//   1. loopzero build submit (CosignKeyless=true)
+		//   1. loop-runtime build submit (CosignKeyless=true)
 		//   2. await sign-image-* step entering Running phase
 		//   3. kubectl scale deploy/fulcio --replicas=0 -n sigstore-system
 		//   4. await build state → FAILED (timeout 5min per RUNNING budget)

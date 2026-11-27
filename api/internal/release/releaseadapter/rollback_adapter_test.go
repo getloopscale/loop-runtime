@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package releaseadapter
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Quality-Gate Phase 2: Rollback method removed; test exercises the type

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Group C: Preview controller.
 // Needs the CELL_0_KUBECONFIG cluster (the default for unplaced tenants), the
@@ -23,15 +23,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
-	"github.com/getloopscale/loopzero/operators/internal/preview"
-	"github.com/getloopscale/loopzero/operators/internal/tracing"
-	"github.com/getloopscale/loopzero/pkg/healthcheck"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/internal/preview"
+	"github.com/getloopscale/loop-runtime/operators/internal/tracing"
+	"github.com/getloopscale/loop-runtime/pkg/healthcheck"
 
-	_ "github.com/getloopscale/loopzero/operators/internal/metrics"
+	_ "github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()
@@ -40,8 +40,8 @@ func init() {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
 	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register loop-runtime/v1 scheme: %v", err))
 	}
 }
 
@@ -65,7 +65,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-preview-operator")
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loop-runtime-preview-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
@@ -92,7 +92,7 @@ func main() {
 		},
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "loopzero-preview-operator.loopzero.io",
+		LeaderElectionID:       "loop-runtime-preview-operator.runtime.getloopscale.com",
 		Cache:                  cacheOpts,
 	})
 	if err != nil {
@@ -139,7 +139,7 @@ func main() {
 // managerCacheOptions scopes the manager's informers.
 //
 // The only Secret this operator reads on this cluster is a cell's kubeconfig,
-// in loopzero-system (CellAwareRuntimeClientFactory). The chart grants exactly
+// in loop-runtime-system (CellAwareRuntimeClientFactory). The chart grants exactly
 // that through a namespaced Role, so the Secret informer watches that
 // namespace and nothing else. PreviewEnvironment stays cluster-wide
 // (ADR-0018 C9).

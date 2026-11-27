@@ -1,6 +1,6 @@
-# LoopZero — k6 Load Testing Suite
+# LoopRuntime — k6 Load Testing Suite
 
-Industry-standard load testing for the LoopZero platform using
+Industry-standard load testing for the LoopRuntime platform using
 [k6](https://k6.io). Covers deploy pipeline validation, API
 benchmarking, soak testing, SSE streaming, and chaos resilience.
 
@@ -65,7 +65,7 @@ increasing load.
 
 | File | Purpose |
 |------|---------|
-| `scripts/lib/loopzero-api.js` | Shared API client (auth, request helpers, custom metrics) |
+| `scripts/lib/loop-runtime-api.js` | Shared API client (auth, request helpers, custom metrics) |
 | `scripts/lib/thresholds.js` | SLO thresholds — the `cell-budget.md` they were derived from exists in no commit |
 
 ### Fixtures
@@ -83,18 +83,18 @@ A failed threshold fails the k6 exit code → fails the Job → fails CI.
 // Base thresholds (all levels)
 http_req_failed:            rate < 1%
 http_req_duration:          p50 < 2s, p95 < 10s, p99 < 30s
-loopzero_build_succeeded:       rate > 99%
-loopzero_app_verified:          rate > 99%
-loopzero_deploy_duration_ms:    p95 < 600s
+loop_runtime_build_succeeded:       rate > 99%
+loop_runtime_app_verified:          rate > 99%
+loop_runtime_deploy_duration_ms:    p95 < 600s
 
 // API-specific (api-endpoints.js)
-loopzero_api_health_duration:   p99 < 100ms
-loopzero_api_projects_list:     p99 < 500ms
-loopzero_api_builds_get:        p99 < 200ms
+loop_runtime_api_health_duration:   p99 < 100ms
+loop_runtime_api_projects_list:     p99 < 500ms
+loop_runtime_api_builds_get:        p99 < 200ms
 
 // SSE-specific (sse-deploy-stream.js)
-loopzero_sse_connect_duration:  p95 < 5000ms
-loopzero_sse_terminal_received: rate > 95%
+loop_runtime_sse_connect_duration:  p95 < 5000ms
+loop_runtime_sse_terminal_received: rate > 95%
 ```
 
 ## Coordinated Omission
@@ -153,7 +153,7 @@ task k6:distributed:l4
 task k6:distributed:l5
 
 # Monitor
-kubectl -n loopzero-system get testrun -w
+kubectl -n loop-runtime-system get testrun -w
 ```
 
 ### Soak Test (Weekly CronJob)
@@ -163,10 +163,10 @@ kubectl -n loopzero-system get testrun -w
 task k6:soak:apply
 
 # Manual trigger
-kubectl -n loopzero-system create job k6-soak-manual --from=cronjob/k6-soak-weekly
+kubectl -n loop-runtime-system create job k6-soak-manual --from=cronjob/k6-soak-weekly
 
 # Check next schedule
-kubectl -n loopzero-system get cronjob k6-soak-weekly
+kubectl -n loop-runtime-system get cronjob k6-soak-weekly
 ```
 
 ## Observability
@@ -177,14 +177,14 @@ All scripts output metrics to Prometheus via `--out experimental-prometheus-rw`.
 Configuration:
 
 ```
-K6_PROMETHEUS_RW_SERVER_URL=http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write
+K6_PROMETHEUS_RW_SERVER_URL=http://prometheus-server.loop-runtime-system.svc.cluster.local/api/v1/write
 K6_PROMETHEUS_RW_TREND_STATS=p(50),p(95),p(99)
 K6_PROMETHEUS_RW_PUSH_INTERVAL=5s  (30s for soak)
 ```
 
 ### Grafana Dashboard
 
-`load-test.json` (both `infra/helm/monitoring/dashboards/` and `charts/loopzero-monitoring/dashboards/`)
+`load-test.json` (both `infra/helm/monitoring/dashboards/` and `charts/loop-runtime-monitoring/dashboards/`)
 shows:
 - Real-time: RPS, latency p50/p95/p99, error rate, VU count
 - Soak: memory RSS slope, FD count, goroutine count
@@ -193,9 +193,9 @@ shows:
 ### Alerts (Soak)
 
 PrometheusRule `k6-soak-alerts` fires:
-- `LoopZeroSoakTestFailed` — Job exited non-zero (warning)
-- `LoopZeroAPIMemoryLeak` — RSS growing 2+ hours during soak (critical)
-- `LoopZeroAPIFDExhaustion` — FDs growing 2+ hours during soak (critical)
+- `LoopRuntimeSoakTestFailed` — Job exited non-zero (warning)
+- `LoopRuntimeAPIMemoryLeak` — RSS growing 2+ hours during soak (critical)
+- `LoopRuntimeAPIFDExhaustion` — FDs growing 2+ hours during soak (critical)
 
 Investigate: check k6 Job logs and API memory/FD metrics in Grafana.
 
@@ -257,7 +257,7 @@ k6/
 ├── README.md                          ← this file
 ├── scripts/
 │   ├── lib/
-│   │   ├── loopzero-api.js                ← shared API client
+│   │   ├── loop-runtime-api.js                ← shared API client
 │   │   └── thresholds.js             ← SLO thresholds
 │   ├── l1-10-tenants.js              ← L1 smoke
 │   ├── l2-50-tenants.js              ← L2 sustained

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // M-08: Concurrent reconciliation safety tests.
 //
@@ -15,7 +15,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/operators/internal/argocd"
+	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
 )
 
 func TestFakeGitProvisioner_ConcurrentAccess(t *testing.T) {

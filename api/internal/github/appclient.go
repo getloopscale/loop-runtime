@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package github provides clients for the GitHub API.
 // AppClient authenticates as a GitHub App using JWT + installation tokens.
@@ -48,6 +48,9 @@ type cachedToken struct {
 	Token     string
 	ExpiresAt time.Time
 }
+
+// AppID is the id of the GitHub App this client authenticates as.
+func (c *AppClient) AppID() int64 { return c.appID }
 
 // NewAppClient creates a GitHub App client from App ID and PEM-encoded private key.
 // Returns nil if credentials are missing (acceptable in local dev).
@@ -202,12 +205,17 @@ func (c *AppClient) DownloadSource(ctx context.Context, installationID int64, ow
 
 // --- Commit Status ---
 
+// DeployStatusContext is the context of every commit status a deploy posts. It is what the
+// customer reads beside their commit and what a branch protection of theirs names, so it
+// carries the product name and changing it is a contract change.
+const DeployStatusContext = "loopscale/deploy"
+
 // CommitStatus represents a GitHub commit status.
 type CommitStatus struct {
 	State       string // "pending", "success", "failure", "error"
-	TargetURL   string // URL to LoopZero deploy/logs
+	TargetURL   string // URL to LoopRuntime deploy/logs
 	Description string // Short description (max 140 chars)
-	Context     string // "loopzero/deploy" or "loopzero/preview"
+	Context     string // DeployStatusContext
 }
 
 // SetCommitStatus updates the commit status on GitHub.
@@ -274,7 +282,7 @@ func (c *AppClient) BranchExists(ctx context.Context, installationID int64, owne
 }
 
 // FileNotFoundError is returned by GetFileContent when the path is absent
-// on the requested ref. Lets the Connect handler distinguish MISSING_LOOPZERO_YAML
+// on the requested ref. Lets the Connect handler distinguish MISSING_DEPLOY_DESCRIPTOR
 // from any other HTTP error class.
 type FileNotFoundError struct {
 	Owner, Repo, Ref, Path string

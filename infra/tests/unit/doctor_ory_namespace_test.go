@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -10,7 +10,7 @@ import (
 )
 
 // The doctor must look for the Ory services where setup installs them. It kept
-// checking loopzero-system after Ory moved to loopzero-auth, so a healthy install printed four
+// checking loop-runtime-system after Ory moved to loop-runtime-auth, so a healthy install printed four
 // "not installed (required for cloud auth)" warnings — a doctor that cries wolf on a
 // clean run is one nobody reads (#407).
 func TestTheDoctorLooksForOryWhereTheHelmfileInstallsIt(t *testing.T) {

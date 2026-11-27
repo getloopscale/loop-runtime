@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package contract
 
@@ -11,21 +11,21 @@ import (
 	"strings"
 	"testing"
 
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 
 	// The api registers the codes it owns from httpio's init; every route
 	// package imports httpio, so production always has them. Importing it
 	// here makes the test see the same registry the server answers from.
-	_ "github.com/getloopscale/loopzero/api/internal/httpio"
+	_ "github.com/getloopscale/loop-runtime/api/internal/httpio"
 )
 
-// A LoopZeroError code with no registered HTTP status is answered as 500 by the
+// A LoopRuntimeError code with no registered HTTP status is answered as 500 by the
 // problem+json writer, whatever status its constructor was passed (the
 // argument is ignored). INVALID_APP_NAME and INVALID_APP_PATH reached users
 // as 500 that way while the code intended 400. Every code the HTTP layer
 // constructs must therefore be registered — by pkg/errors/http for the codes
 // pkg/errors owns, by its owning module for every other code.
-var constructedCodeRE = regexp.MustCompile(`(?:NewLoopZeroError\(\s*|Code:\s*)"([A-Z][A-Z0-9_]*)"`)
+var constructedCodeRE = regexp.MustCompile(`(?:NewLoopRuntimeError\(\s*|Code:\s*)"([A-Z][A-Z0-9_]*)"`)
 
 func TestEveryErrorCodeTheHTTPLayerConstructsHasARegisteredStatus(t *testing.T) {
 	unregistered := map[string][]string{}

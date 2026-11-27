@@ -1,4 +1,4 @@
-module github.com/getloopscale/loopzero/infra/tests
+module github.com/getloopscale/loop-runtime/infra/tests
 
 go 1.26.1
 
@@ -9,8 +9,8 @@ require (
 	github.com/onsi/ginkgo/v2 v2.31.0
 	github.com/onsi/gomega v1.42.0
 	github.com/stretchr/testify v1.11.1
-	github.com/getloopscale/loopzero/infra/scripts v0.0.0
-	github.com/getloopscale/loopzero/pkg v0.0.0
+	github.com/getloopscale/loop-runtime/infra/scripts v0.0.0
+	github.com/getloopscale/loop-runtime/pkg v0.0.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.35.2
 	k8s.io/apiextensions-apiserver v0.35.2
@@ -144,8 +144,8 @@ require (
 )
 
 replace (
-	github.com/getloopscale/loopzero/api => ../../api
-	github.com/getloopscale/loopzero/infra/scripts => ../scripts
-	github.com/getloopscale/loopzero/operators => ../../operators
-	github.com/getloopscale/loopzero/pkg => ../../pkg
+	github.com/getloopscale/loop-runtime/api => ../../api
+	github.com/getloopscale/loop-runtime/infra/scripts => ../scripts
+	github.com/getloopscale/loop-runtime/operators => ../../operators
+	github.com/getloopscale/loop-runtime/pkg => ../../pkg
 )

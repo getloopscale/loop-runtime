@@ -1,0 +1,34 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "loop-runtime-common.fullname" . }}-test-connection"
+  labels:
+    {{- include "loop-runtime-common.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: wget
+      # Pinned by digest, not by tag: a tag is mutable in the registry, and the next
+      # `helm test` would pull different content under the same name. Pinning here does
+      # not age — the third-party version was already pinned (1.36), so the digest
+      # does not move either. Resolved with `docker buildx imagetools inspect` on
+      # 2026-08-17 (B-119).
+      image: busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+      command: ['wget']
+      args: ['--spider', '--timeout=5', 'http://{{ include "loop-runtime-common.fullname" . }}:{{ .Values.service.port }}/api/v1/health']
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        capabilities:
+          drop:
+            - ALL

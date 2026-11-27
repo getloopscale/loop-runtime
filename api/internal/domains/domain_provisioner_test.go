@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // validImageDigest is a 64-hex sha256 string used in DomainProvisioner
@@ -40,6 +40,8 @@ type fakeDomainProvisionerStore struct {
 	deletedDomains    []string
 	cfZoneStatuses    map[string]string
 	activeByApp       map[string][]ports.CustomDomain
+	staleProvisioning []ports.CustomDomain
+	staleAge          time.Duration
 }
 
 func newFakeDomainProvisionerStore() *fakeDomainProvisionerStore {
@@ -56,6 +58,10 @@ func (f *fakeDomainProvisionerStore) FindAndClaimVerified(_ context.Context) ([]
 }
 func (f *fakeDomainProvisionerStore) FindRemoving(_ context.Context) ([]ports.CustomDomain, error) {
 	return f.removingDomains, nil
+}
+func (f *fakeDomainProvisionerStore) FindStaleProvisioning(_ context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
+	f.staleAge = maxAge
+	return f.staleProvisioning, nil
 }
 func (f *fakeDomainProvisionerStore) ListActiveByApp(_ context.Context, tenant, project, app, env string) ([]ports.CustomDomain, error) {
 	key := tenant + "-" + project + "-" + app + "-" + env

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package auth
 
@@ -27,7 +27,7 @@ type Config struct {
 	// admin modes of user routes; AdminServiceSecretPrevious during a
 	// rotation. It is never the proxy secret: the proxy attaches that one to
 	// every forwarded user request, so honouring it here would hand any user
-	// the admin routes (loopzero-cloud#16).
+	// the admin routes (loop-console#16).
 	AdminServiceSecret         string
 	AdminServiceSecretPrevious string
 

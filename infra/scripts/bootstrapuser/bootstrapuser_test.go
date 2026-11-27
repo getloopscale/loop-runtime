@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package bootstrapuser
 
@@ -11,8 +11,8 @@ import (
 
 func validUser() User {
 	return User{
-		ID:          "loopzero-bootstrap",
-		Email:       "bootstrap@loopzero.local",
+		ID:          "loop-runtime-bootstrap",
+		Email:       "bootstrap@loop-runtime.local",
 		DisplayName: "Bootstrap User",
 		Username:    "bootstrap",
 		AccountID:   "acct-bootstrap",
@@ -68,7 +68,7 @@ func TestSQLRemovesEveryMembershipOutsideTheCanonicalTenant(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "DELETE FROM tenant_members WHERE user_id = 'loopzero-bootstrap' AND tenant_id <> 'tn-e2etest';"
+	want := "DELETE FROM tenant_members WHERE user_id = 'loop-runtime-bootstrap' AND tenant_id <> 'tn-e2etest';"
 	if !strings.Contains(sql, want) {
 		t.Errorf("SQL lacks %q:\n%s", want, sql)
 	}
@@ -81,7 +81,7 @@ func TestSQLUpsertsTheMembershipRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sql, "VALUES ('tn-e2etest', 'loopzero-bootstrap', 'admin')") ||
+	if !strings.Contains(sql, "VALUES ('tn-e2etest', 'loop-runtime-bootstrap', 'admin')") ||
 		!strings.Contains(sql, "ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role") {
 		t.Errorf("membership is not upserted with role admin:\n%s", sql)
 	}
@@ -94,7 +94,7 @@ func TestSQLDerivesTheSlugFromTheTenantID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(sql, "SELECT 'Tn_Seed.One', 'tn-seed-one', 'loopzero-bootstrap'") {
+	if !strings.Contains(sql, "SELECT 'Tn_Seed.One', 'tn-seed-one', 'loop-runtime-bootstrap'") {
 		t.Errorf("slug not derived as tn-seed-one:\n%s", sql)
 	}
 }

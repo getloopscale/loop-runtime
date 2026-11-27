@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/billing/billinghttp"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 type roleMember struct{ role string }
@@ -25,7 +25,7 @@ func (m roleMember) GetMemberships(_ context.Context, _ string) ([]auth.TenantMe
 }
 
 // Opening the billing portal session shows invoices, payment method and
-// history, and loopzero-cloud requires `owner` for the same capability. The engine
+// history, and loop-console requires `owner` for the same capability. The engine
 // route must require the same role; an authenticated member must be refused
 // before the handler runs.
 func TestBillingPortalRequiresTheOwnerRole(t *testing.T) {

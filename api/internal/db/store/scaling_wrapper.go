@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -21,7 +21,7 @@ package store
 //   - GetByApp NoRows → ErrScalingConfigNotFound (legacy sentinel)
 //   - Delete idempotent (silent on missing row)
 //   - DeleteByProject nil-tx fallback to s.db preserved
-//   - Validate runs BEFORE any DB call (LoopZeroError actionable
+//   - Validate runs BEFORE any DB call (LoopRuntimeError actionable
 //     feedback)
 //   - CanonicalHash deterministic format preserved verbatim in
 //     scaling_types.go
@@ -32,12 +32,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // pgtypeUUIDToString formats a pgtype.UUID into the canonical
@@ -94,16 +94,17 @@ func (s *PostgresScalingStore) Upsert(ctx context.Context, tx db.DBTX, incoming 
 	q := generated.New()
 
 	out, err := q.UpsertScalingConfig(ctx, gdb, generated.UpsertScalingConfigParams{
-		TenantID:     incoming.TenantID,
-		ProjectID:    incoming.ProjectID,
-		Environment:  incoming.Environment,
-		AppName:      incoming.AppName,
-		MinReplicas:  incoming.MinReplicas,
-		MaxReplicas:  incoming.MaxReplicas,
-		TargetCpuPct: incoming.TargetCPUPct,
-		ScaleToZero:  incoming.ScaleToZero,
-		UpdatedBy:    incoming.UpdatedBy,
-		ConfigHash:   incoming.ConfigHash,
+		TenantID:        incoming.TenantID,
+		ProjectID:       incoming.ProjectID,
+		Environment:     incoming.Environment,
+		AppName:         incoming.AppName,
+		MinReplicas:     incoming.MinReplicas,
+		MaxReplicas:     incoming.MaxReplicas,
+		TargetCpuPct:    incoming.TargetCPUPct,
+		TargetMemoryPct: incoming.TargetMemoryPct,
+		ScaleToZero:     incoming.ScaleToZero,
+		UpdatedBy:       incoming.UpdatedBy,
+		ConfigHash:      incoming.ConfigHash,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("scaling_store: Upsert: %w", err)
@@ -188,17 +189,18 @@ func (s *PostgresScalingStore) CountByTenant(ctx context.Context, tenantID strin
 // the public type. pgtype.Timestamptz.Valid → time.Time.
 func generatedScalingToScalingConfig(row generated.AppScalingConfig) *ScalingConfig {
 	c := &ScalingConfig{
-		ID:           pgtypeUUIDToString(row.ID),
-		TenantID:     row.TenantID,
-		ProjectID:    row.ProjectID,
-		Environment:  row.Environment,
-		AppName:      row.AppName,
-		MinReplicas:  row.MinReplicas,
-		MaxReplicas:  row.MaxReplicas,
-		TargetCPUPct: row.TargetCpuPct,
-		ScaleToZero:  row.ScaleToZero,
-		UpdatedBy:    row.UpdatedBy,
-		ConfigHash:   row.ConfigHash,
+		ID:              pgtypeUUIDToString(row.ID),
+		TenantID:        row.TenantID,
+		ProjectID:       row.ProjectID,
+		Environment:     row.Environment,
+		AppName:         row.AppName,
+		MinReplicas:     row.MinReplicas,
+		MaxReplicas:     row.MaxReplicas,
+		TargetCPUPct:    row.TargetCpuPct,
+		TargetMemoryPct: row.TargetMemoryPct,
+		ScaleToZero:     row.ScaleToZero,
+		UpdatedBy:       row.UpdatedBy,
+		ConfigHash:      row.ConfigHash,
 	}
 	if row.UpdatedAt.Valid {
 		c.UpdatedAt = row.UpdatedAt.Time

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -14,7 +14,7 @@ import (
 // setupCrossTenantTestDB returns a pool for tests whose FIXTURE spans tenants —
 // creating a tenant and writing its rows in the same breath.
 //
-// It is `loopzero_worker`, the role whose reach is the named *_worker_cross_tenant
+// It is `loop_runtime_worker`, the role whose reach is the named *_worker_cross_tenant
 // policies (migration 000062), for the same reason production uses it for
 // background work: the alternative is a standing bypass, which migration 000064
 // removed. Falls back to DATABASE_URL when the worker DSN is unset so a machine
@@ -28,7 +28,7 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 		cancel()
 		// Machine without a database. In CI the integration job provisions one, so this
 		// path does not run there; the "skip by default" tension is in:
-		// https://github.com/getloopscale/loopzero/issues/289
+		// https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("skipping: cannot connect to PostgreSQL: %v", err)
 	}
 
@@ -38,7 +38,7 @@ func setupCrossTenantTestDB(t *testing.T) *pgxpool.Pool {
 		cancel()
 		pool.Close()
 		// Database without the isolation migrations — the fixture has nothing to exercise.
-		// https://github.com/getloopscale/loopzero/issues/289
+		// https://github.com/getloopscale/loop-runtime/issues/289
 		t.Skipf("skipping: isolation migrations not applied (RLS off on builds)")
 	}
 

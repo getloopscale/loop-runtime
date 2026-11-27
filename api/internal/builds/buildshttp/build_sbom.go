@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -7,14 +7,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"mime"
 	"net/http"
-	"time"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // AppSBOMSummary is one entry in the /builds/:id/sbom response array.
@@ -23,7 +25,9 @@ type AppSBOMSummary struct {
 	SBOMFormat     string `json:"sbom_format,omitempty"`
 	ComponentCount int    `json:"component_count,omitempty"`
 	GeneratedAt    string `json:"generated_at,omitempty"`
-	DownloadURL    string `json:"download_url,omitempty"`
+	// DownloadPath is the path of this API that serves the file. It is absent
+	// when this boot has no object store to read it from.
+	DownloadPath string `json:"download_path,omitempty"`
 }
 
 // BuildSBOMResponse is the JSON shape of GET /api/v1/builds/{id}/sbom.
@@ -51,38 +55,37 @@ type AppSBOMStore interface {
 	GetBuildAppSBOMs(ctx context.Context, tenantID, buildID string) ([]AppSBOMInfo, error)
 }
 
-// SBOMURLGenerator builds presigned download URLs for SBOM blobs in S3.
-// Implementations: s3.Uploader (Presign method).
-type SBOMURLGenerator interface {
-	Presign(ctx context.Context, bucket, key string, ttl time.Duration) (string, error)
+// SBOMObjectReader opens a stored SBOM. The API streams the file itself: a
+// presigned URL carries the storage endpoint, which a browser cannot always
+// reach (getloopscale/loop-runtime#104).
+type SBOMObjectReader interface {
+	Open(ctx context.Context, bucket, key string) (io.ReadCloser, error)
 }
 
 // BuildSBOMHandler serves GET /api/v1/builds/:id/sbom.
 //
 // Sprint 6 / T1.2 — exposes per-app SBOM metadata + presigned download
-// URLs. The SBOM blob itself lives in S3 (bucket: loopzero-static-assets);
+// URLs. The SBOM blob itself lives in S3 (bucket: loop-runtime-static-assets);
 // the DB only stores the key + counts.
 type BuildSBOMHandler struct {
 	store      AppSBOMStore
-	urlSigner  SBOMURLGenerator
+	objects    SBOMObjectReader
 	bucketName string
-	urlTTL     time.Duration
 	logger     *slog.Logger
 }
 
 // NewBuildSBOMHandler wires the handler. urlSigner may be nil (no S3
-// configured); in that case download_url is omitted from the response.
+// configured); in that case download_path is omitted from the response.
 func NewBuildSBOMHandler(
 	store AppSBOMStore,
-	urlSigner SBOMURLGenerator,
+	objects SBOMObjectReader,
 	bucketName string,
 	logger *slog.Logger,
 ) *BuildSBOMHandler {
 	return &BuildSBOMHandler{
 		store:      store,
-		urlSigner:  urlSigner,
+		objects:    objects,
 		bucketName: bucketName,
-		urlTTL:     time.Hour, // D2: presigned URLs expire in 1h
 		logger:     logger,
 	}
 }
@@ -111,7 +114,7 @@ func (h *BuildSBOMHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	infos, err := h.store.GetBuildAppSBOMs(r.Context(), tenantID, buildID)
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+		if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 			http.Error(w, `{"error":"build not found"}`, http.StatusNotFound)
 			return
 		}
@@ -136,17 +139,8 @@ func (h *BuildSBOMHandler) Get(w http.ResponseWriter, r *http.Request) {
 			ComponentCount: in.SBOMComponentCount,
 			GeneratedAt:    in.SBOMGeneratedAt,
 		}
-		if h.urlSigner != nil && h.bucketName != "" {
-			url, signErr := h.urlSigner.Presign(r.Context(), h.bucketName, in.SBOMS3Key, h.urlTTL)
-			if signErr != nil {
-				h.logger.Warn("sbom presign failed (returning metadata only)",
-					"build_id", buildID,
-					"app", in.AppName,
-					"error", signErr,
-				)
-			} else {
-				summary.DownloadURL = url
-			}
+		if h.canServeFiles() {
+			summary.DownloadPath = "/api/v1/builds/" + url.PathEscape(buildID) + "/sbom/" + url.PathEscape(in.AppName) + "/download"
 		}
 		apps = append(apps, summary)
 	}
@@ -161,4 +155,63 @@ func (h *BuildSBOMHandler) Get(w http.ResponseWriter, r *http.Request) {
 		BuildID: buildID,
 		Apps:    apps,
 	})
+}
+
+func (h *BuildSBOMHandler) canServeFiles() bool {
+	return h.objects != nil && h.bucketName != ""
+}
+
+// Download handles GET /api/v1/builds/{id}/sbom/{app}/download: the SBOM file
+// of one app of the build, as an attachment.
+func (h *BuildSBOMHandler) Download(w http.ResponseWriter, r *http.Request) {
+	buildID := chi.URLParam(r, "id")
+	appName := chi.URLParam(r, "app")
+	if buildID == "" || appName == "" {
+		http.Error(w, `{"error":"build_id and app are required"}`, http.StatusBadRequest)
+		return
+	}
+	uc := auth.GetUserContext(r.Context())
+	if uc == nil || uc.TenantID == "" {
+		http.Error(w, `{"error":"unauthenticated"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// The lookup is by tenant, so the key that is opened below always belongs
+	// to the caller: no key comes from the request.
+	infos, err := h.store.GetBuildAppSBOMs(r.Context(), uc.TenantID, buildID)
+	if err != nil {
+		if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
+			http.Error(w, `{"error":"build not found"}`, http.StatusNotFound)
+			return
+		}
+		h.logger.Error("sbom lookup failed", "build_id", buildID, "tenant_id", uc.TenantID, "error", err)
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+		return
+	}
+	key := ""
+	for _, in := range infos {
+		if in.AppName == appName {
+			key = in.SBOMS3Key
+		}
+	}
+	if key == "" || !h.canServeFiles() {
+		http.Error(w, `{"error":"no SBOM available for this app"}`, http.StatusNotFound)
+		return
+	}
+
+	body, err := h.objects.Open(r.Context(), h.bucketName, key)
+	if err != nil {
+		h.logger.Error("sbom object could not be opened", "build_id", buildID, "app", appName, "error", err)
+		http.Error(w, `{"error":"the SBOM could not be read from storage"}`, http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = body.Close() }()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+		"filename": buildID + "-" + appName + ".cdx.json",
+	}))
+	if _, err := io.Copy(w, body); err != nil {
+		h.logger.Warn("sbom download interrupted", "build_id", buildID, "app", appName, "error", err)
+	}
 }

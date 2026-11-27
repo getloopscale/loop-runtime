@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // TestExtractReaperReason_PopulatedFromSideEffects asserts that the reaper_reason
@@ -16,7 +16,7 @@ import (
 // Plan T2.1 RED #1.
 func TestExtractReaperReason_PopulatedFromSideEffects(t *testing.T) {
 	sideEffects, _ := json.Marshal(map[string]any{
-		"reaper_reason":    "Release was READY for more than 5 minutes. Likely cause: repository write is slow. Next: run `loopzero deploy` to retry.",
+		"reaper_reason":    "Release was READY for more than 5 minutes. Likely cause: repository write is slow. Next: run `loopscale deploy` to retry.",
 		"reaper_event":     "GIT_PUSH_TIMEOUT",
 		"reaper_from":      "READY",
 		"reaper_at":        "2026-05-15T13:55:18Z",
@@ -55,7 +55,7 @@ func TestExtractReaperReason_EmptyOnNil(t *testing.T) {
 // Plan T2.1 RED #3.
 func TestFormatBuildFailureReason_PrefersReaperReason(t *testing.T) {
 	sideEffects, _ := json.Marshal(map[string]any{
-		"reaper_reason": "Release was PENDING for more than 10 minutes. Likely cause: app /health not 200. Next: check `loopzero logs --runtime`.",
+		"reaper_reason": "Release was PENDING for more than 10 minutes. Likely cause: app /health not 200. Next: check `loopscale logs --runtime`.",
 	})
 	rel := &db.Release{ID: "rel-y", Status: "SYNC_FAILED", SideEffects: sideEffects}
 

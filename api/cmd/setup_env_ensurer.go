@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -7,10 +7,10 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/environments"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // newEnvironmentEnsurer builds the one EnvironmentEnsurer that deploy
@@ -36,7 +36,7 @@ func newEnvironmentEnsurer(cfg config.Config, k8sDeps *K8sDeps, logger *slog.Log
 	// per deploy, so it is opt-in.
 	if cfg.EnvReadinessChecker {
 		if mgmtDynamic := buildMgmtDynamicClient(cfg, logger); mgmtDynamic != nil {
-			ensurer.ReadinessChecker = environmentsadapter.NewEnvironmentCRReader(mgmtDynamic, "loopzero-system")
+			ensurer.ReadinessChecker = environmentsadapter.NewEnvironmentCRReader(mgmtDynamic, "loop-runtime-system")
 			logger.Info("env readiness checker wired: EnsureEnvironment polls Environment CR status.phase")
 		}
 	}

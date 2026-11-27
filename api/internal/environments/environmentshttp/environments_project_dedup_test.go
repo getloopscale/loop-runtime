@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// RED test for issue #142: `loopzero env list --project <p>` returns each
+// RED test for issue #142: `loopscale env list --project <p>` returns each
 // environment TWICE — `production, preview, production, preview`.
 //
 // The duplicate is manufactured by the `?project=` filter itself. Red Team
@@ -28,7 +28,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // listEnvNamesFiltered drives List with a `?project=` filter and returns the
@@ -151,7 +151,7 @@ func TestEnvListProjectFilter_ExcludesOtherProjects(t *testing.T) {
 // TestEnvListProjectFilter_PrefersProjectScopedRow asserts WHICH of the two
 // rows survives when both exist. They are not interchangeable: the
 // project-scoped row is the one whose 3-segment namespace
-// `loopzero-<tenant>-<project>-<env>` routes post-M2. Returning the legacy row
+// `loop-runtime-<tenant>-<project>-<env>` routes post-M2. Returning the legacy row
 // would dedup the list correctly and still hand the caller the wrong entry.
 func TestEnvListProjectFilter_PrefersProjectScopedRow(t *testing.T) {
 	envs := []EnvironmentEntry{

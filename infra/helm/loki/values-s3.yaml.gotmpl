@@ -1,0 +1,43 @@
+# The AWS profile: Loki keeps chunks and indexes in the environment's logs bucket
+# (storage/s3 in infra-live) and reaches it through the IRSA role infra-live creates for
+# it (`identity/build-loki`, trusting monitoring:loki).
+loki:
+  storage:
+    type: s3
+    bucketNames:
+      chunks: {{ printf "%s-logs-%s" .Values.aws.namePrefix .Values.aws.accountId | quote }}
+      ruler: {{ printf "%s-logs-%s" .Values.aws.namePrefix .Values.aws.accountId | quote }}
+      admin: {{ printf "%s-logs-%s" .Values.aws.namePrefix .Values.aws.accountId | quote }}
+    s3:
+      region: {{ .Values.aws.region | quote }}
+{{- with .Values | get "emulator.endpoint" "" }}
+      # Staging only (environments/staging.yaml `emulator:`): Loki's S3 client takes its
+      # endpoint from its own configuration, not from AWS_ENDPOINT_URL.
+      endpoint: {{ . | quote }}
+      s3ForcePathStyle: true
+{{- end }}
+  schemaConfig:
+    configs:
+      - from: "2026-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+{{- if .Values | get "emulator.endpoint" "" }}
+# Staging only: the emulator's EKS layer sets AWS_CA_BUNDLE, and Loki 3.3's S3 client
+# (aws-sdk-go v1) cannot apply a CA bundle to its hedged HTTP transport and exits
+# (LoadCustomCABundleError). Setting it empty here keeps the layer from injecting it; the
+# emulator CA still reaches Loki through SSL_CERT_FILE, which Go's TLS reads.
+singleBinary:
+  extraEnv:
+    - name: AWS_CA_BUNDLE
+      value: ""
+{{- end }}
+
+serviceAccount:
+  name: loki
+  annotations:
+    eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-build-loki" .Values.aws.accountId .Values.aws.namePrefix | quote }}

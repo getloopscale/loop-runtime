@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // scriptedRecoveryClient answers TriggerSync from a script, one error per call (nil = success),
@@ -38,7 +38,7 @@ func (s *scriptedRecoveryClient) TerminateOperation(_ context.Context, _ string)
 	return s.terminateErr
 }
 
-var errStuck = fmt.Errorf("wrapped: %w", loopzeroerrors.ErrSyncOperationInProgress)
+var errStuck = fmt.Errorf("wrapped: %w", loopruntimeerrors.ErrSyncOperationInProgress)
 
 func silentLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 

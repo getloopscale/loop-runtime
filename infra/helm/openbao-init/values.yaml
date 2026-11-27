@@ -2,7 +2,7 @@
 # F2+ openbao-init values — what to provision in OpenBao via `bao` CLI Job.
 #
 # Per VK validation (vault-local): root token comes inline from devMode
-# (`server.dev.devRootToken` = "loopzero-dev-vault-root" in secrets.helmfile).
+# (`server.dev.devRootToken` = "loop-runtime-dev-vault-root" in secrets.helmfile).
 # Per prod: root token is provided OUT-OF-BAND via K8s Secret created
 # after Shamir init ceremony (operator runbook openbao-init-runbook.md).
 
@@ -59,7 +59,7 @@ job:
 secretsEngines:
   - path: secret  # kv-v2 already mounted by default in dev; harmless re-enable
     type: kv-v2
-    description: "Generic kv-v2 store for LoopZero platform secrets"
+    description: "Generic kv-v2 store for LoopRuntime platform secrets"
     options:
       version: "2"
   - path: transit
@@ -71,10 +71,10 @@ secretsEngines:
     options: {}
   # T6.1 of openbao-adoption v1.3 — Vault database secrets engine for
   # dynamic PG credentials with TTL 1h max 24h. Replaces static
-  # loopzero-dev-password (T6.5) + generate-secrets.sh:149 placeholder.
+  # loop-runtime-dev-password (T6.5) + generate-secrets.sh:149 placeholder.
   - path: database
     type: database
-    description: "T6.1 dynamic PG creds — v-k8s-loopzero-api-* short-lived"
+    description: "T6.1 dynamic PG creds — v-k8s-loop-runtime-api-* short-lived"
     options: {}
   # T7.1 of openbao-adoption v1.3 — Vault kubernetes secrets engine for
   # dynamic SA tokens with TTL 24h audience kubernetes.default.svc.
@@ -94,7 +94,7 @@ secretsEngines:
 # Mount layout:
 #   - kubernetes        : legacy/backward-compat for in-cluster mgmt workloads
 #                          (eso, snapshot-agent, tenant-controller, spki-extractor)
-#   - k8s-core          : NEW T5.1 — explicit mgmt cluster auth (loopzero-api, operators)
+#   - k8s-core          : NEW T5.1 — explicit mgmt cluster auth (loop-runtime-api, operators)
 #   - k8s-build         : NEW T5.2 — build cluster auth (argo-workflows, BuildKit)
 #   - k8s-cell-0        : NEW T5.3/T5.4 — cell-0 workload cluster (ESO broker)
 #   - k8s-cell-1        : NEW T5.4 — cell-1 workload cluster (ESO broker)
@@ -109,7 +109,7 @@ authMethods:
     description: "K8s ServiceAccount auth — legacy mount for in-cluster mgmt workloads"
   - path: k8s-core
     type: kubernetes
-    description: "T5.1 mgmt cluster auth (loopzero-api, operators)"
+    description: "T5.1 mgmt cluster auth (loop-runtime-api, operators)"
   - path: k8s-build
     type: kubernetes
     description: "T5.2 build cluster auth (argo-workflows, BuildKit)"
@@ -124,26 +124,26 @@ authMethods:
 #
 # TWO SIMILAR NAMES still live here, and only one is a policy (B-098):
 #
-#   loopzero-api  (policy) — IT IS THIS ONE. The k8s-core role carries it.
-#   loopzero-api  (role)   — a role on the k8s-core mount, not a policy
+#   loop-runtime-api  (policy) — IT IS THIS ONE. The k8s-core role carries it.
+#   loop-runtime-api  (role)   — a role on the k8s-core mount, not a policy
 #
-# There were FOUR until 2026-08-19. `loopzero-api-read` and `loopzero-api-transit-encrypt` were removed:
-# no role carried them, and both were EARLIER and BROADER versions of the current `loopzero-api`
-# (`transit/encrypt/+` versus `transit/encrypt/loopzero-tenants-*`; the whole tenant tree versus
+# There were FOUR until 2026-08-19. `loop-runtime-api-read` and `loop-runtime-api-transit-encrypt` were removed:
+# no role carried them, and both were EARLIER and BROADER versions of the current `loop-runtime-api`
+# (`transit/encrypt/+` versus `transit/encrypt/loop-runtime-tenants-*`; the whole tenant tree versus
 # the `+/api/*` branch). They were not neutral leftovers: wiring them by mistake would grant TOO MUCH.
 #
 # The confusion already cost a patch in the wrong place — when fixing B-072 the change was applied
-# to `loopzero-api-transit-encrypt` because the pattern matched it first, and only a new test caught it.
+# to `loop-runtime-api-transit-encrypt` because the pattern matched it first, and only a new test caught it.
 #
 # The `openbao-init-auth-mounts` gate now refuses a declared policy that no role carries,
 # so the list of candidates does not grow back in silence.
 policies:
   - name: eso-read
     ruleHcl: |
-      path "secret/data/loopzero/*" {
+      path "secret/data/loop-runtime/*" {
         capabilities = ["read"]
       }
-      path "secret/metadata/loopzero/*" {
+      path "secret/metadata/loop-runtime/*" {
         capabilities = ["list"]
       }
   # Phase 8 D12 — snapshot-agent capability per
@@ -170,7 +170,7 @@ policies:
       #
       # Meanwhile, the grant was irreversible destruction with zero function — and over
       # a namespace nobody fills: this read `tenant-<id>` while the `api` creates
-      # `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix). Wiring that
+      # `loop-runtime-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix). Wiring that
       # path would have deleted nothing and reported success.
       #
       # It comes back together with the shredder, pointed at the right prefix, and the
@@ -192,31 +192,31 @@ policies:
   # Scoped intentionally narrow: only the SPKI pin key.
   - name: spki-extractor-write
     ruleHcl: |
-      path "secret/data/loopzero/+/platform/secrets/vault-spki-pin/+" {
+      path "secret/data/loop-runtime/+/platform/secrets/vault-spki-pin/+" {
         capabilities = ["create", "update"]
       }
-      path "secret/metadata/loopzero/+/platform/secrets/vault-spki-pin/+" {
+      path "secret/metadata/loop-runtime/+/platform/secrets/vault-spki-pin/+" {
         capabilities = ["read"]
       }
-  # T5.5 of openbao-adoption v1.3 — loopzero-api least-priv read.
-  # Identity templating per T5.10: loopzero-api authenticates as a single SA;
-  # path scope covers all loopzero/<env>/api/* secrets but excludes operator
+  # T5.5 of openbao-adoption v1.3 — loop-runtime-api least-priv read.
+  # Identity templating per T5.10: loop-runtime-api authenticates as a single SA;
+  # path scope covers all loop-runtime/<env>/api/* secrets but excludes operator
   # paths (tenant-operator owns its own secrets per binary separation).
-  - name: loopzero-api
+  - name: loop-runtime-api
     ruleHcl: |
-      path "secret/data/loopzero/+/api/*" {
+      path "secret/data/loop-runtime/+/api/*" {
         capabilities = ["read"]
       }
-      path "secret/metadata/loopzero/+/api/*" {
+      path "secret/metadata/loop-runtime/+/api/*" {
         capabilities = ["read", "list"]
       }
       # Scoped to the prefix the client actually names. `+` matched ANY single
       # segment, letting the api encrypt with any key in the engine; the only key
       # it ever names comes from tenantKeyName (pkg/vault/transit_client.go:133).
-      path "transit/encrypt/loopzero-tenants-*" {
+      path "transit/encrypt/loop-runtime-tenants-*" {
         capabilities = ["update"]
       }
-      path "transit/decrypt/loopzero-tenants-*" {
+      path "transit/decrypt/loop-runtime-tenants-*" {
         capabilities = ["update"]
       }
       # This IS the policy the client runs under, since 2026-08-13.
@@ -242,7 +242,7 @@ policies:
       # evidence; narrowing it is part of the LIVE-validated fix, not a guess.
       #
       # Lazy key creation: Encrypt reacts to a 404 by POSTing to
-      # /v1/transit/keys/loopzero-tenants-<id> (createTransitKey). This path was
+      # /v1/transit/keys/loop-runtime-tenants-<id> (createTransitKey). This path was
       # ABSENT until 2026-08-13, so that create was denied by design in every
       # environment loading this chart — while the cutover runbook and the dev
       # script both granted it. Drift, not a missing decision (B-072).
@@ -252,25 +252,25 @@ policies:
       # key does not exist. LIVE-caught 2026-06-10 (J-22) — with ["create","read"]
       # the token reported both and the PUT still returned 403.
       #
-      # The separator is a HYPHEN. `loopzero-tenants/<id>` makes transit return 404
+      # The separator is a HYPHEN. `loop-runtime-tenants/<id>` makes transit return 404
       # "unsupported path": the engine reads the slash as an endpoint delimiter.
       # Same walkthrough.
-      path "transit/keys/loopzero-tenants-*" {
+      path "transit/keys/loop-runtime-tenants-*" {
         capabilities = ["create", "read", "update"]
       }
-  # T5.6 of openbao-adoption v1.3 — loopzero-tenant-operator with cross-binary
+  # T5.6 of openbao-adoption v1.3 — loop-runtime-tenant-operator with cross-binary
   # READ access to api/ paths (D6 shared secrets per vault-INT plan: gitea/
   # token + minio creds shared between binaries). Identity templating
   # restricts writes to operators/<binary> paths only.
-  - name: loopzero-tenant-operator
+  - name: loop-runtime-tenant-operator
     ruleHcl: |
-      path "secret/data/loopzero/+/operators/tenant-operator/*" {
+      path "secret/data/loop-runtime/+/operators/tenant-operator/*" {
         capabilities = ["read", "list"]
       }
-      path "secret/data/loopzero/+/api/secrets/gitea/token" {
+      path "secret/data/loop-runtime/+/api/secrets/gitea/token" {
         capabilities = ["read"]
       }
-      path "secret/data/loopzero/+/api/secrets/minio/*" {
+      path "secret/data/loop-runtime/+/api/secrets/minio/*" {
         capabilities = ["read"]
       }
       # `delete` was REMOVED on 2026-08-16 (`B-075`, ratified). Per-tenant crypto-shredding
@@ -280,7 +280,7 @@ policies:
       #
       # Meanwhile, the grant was irreversible destruction with zero function — and over
       # a namespace nobody fills: this read `tenant-<id>` while the `api` creates
-      # `loopzero-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix). Wiring that
+      # `loop-runtime-tenants-<id>` (`pkg/vault/transit_client.go` tenantKeyPrefix). Wiring that
       # path would have deleted nothing and reported success.
       #
       # It comes back together with the shredder, pointed at the right prefix, and the
@@ -294,32 +294,32 @@ policies:
       path "transit/keys/tenant-+/rotate" {
         capabilities = ["update"]
       }
-  # T5.7 of openbao-adoption v1.3 — loopzero-app-operator least-priv.
-  - name: loopzero-app-operator
+  # T5.7 of openbao-adoption v1.3 — loop-runtime-app-operator least-priv.
+  - name: loop-runtime-app-operator
     ruleHcl: |
-      path "secret/data/loopzero/+/operators/app-operator/*" {
+      path "secret/data/loop-runtime/+/operators/app-operator/*" {
         capabilities = ["read", "list"]
       }
-  # T5.7 of openbao-adoption v1.3 — loopzero-preview-operator least-priv.
-  - name: loopzero-preview-operator
+  # T5.7 of openbao-adoption v1.3 — loop-runtime-preview-operator least-priv.
+  - name: loop-runtime-preview-operator
     ruleHcl: |
-      path "secret/data/loopzero/+/operators/preview-operator/*" {
+      path "secret/data/loop-runtime/+/operators/preview-operator/*" {
         capabilities = ["read", "list"]
       }
-  # T5.7 of openbao-adoption v1.3 — loopzero-platform-operator least-priv.
-  - name: loopzero-platform-operator
+  # T5.7 of openbao-adoption v1.3 — loop-runtime-platform-operator least-priv.
+  - name: loop-runtime-platform-operator
     ruleHcl: |
-      path "secret/data/loopzero/+/operators/platform-operator/*" {
+      path "secret/data/loop-runtime/+/operators/platform-operator/*" {
         capabilities = ["read", "list"]
       }
   # T5.8 of openbao-adoption v1.3 — argo-workflows in build cluster.
   # Reads cosign passphrase + DOCR push credentials only.
   - name: argo-workflows
     ruleHcl: |
-      path "secret/data/loopzero/+/build/secrets/cosign/*" {
+      path "secret/data/loop-runtime/+/build/secrets/cosign/*" {
         capabilities = ["read"]
       }
-      path "secret/data/loopzero/+/build/secrets/registry/*" {
+      path "secret/data/loop-runtime/+/build/secrets/registry/*" {
         capabilities = ["read"]
       }
 
@@ -327,12 +327,12 @@ policies:
 # Maps Vault role name → SA(s) allowed to login.
 # R1+R2 of plan dev-public-cross-cluster-secrets (issue #111, sponsor approved
 # 2026-06-19): the `eso` role moves from the legacy `kubernetes` mount (intended
-# for in-cluster loopzero-secrets workloads) to the canonical multi-cluster
+# for in-cluster loop-runtime-secrets workloads) to the canonical multi-cluster
 # `k8s-core` mount (core-cluster workloads). The `boundAudiences` field
 # enforces EC-5 (TokenRequest aud claim == role bound_audiences) as
 # defence-in-depth — closes the "any-audience login" gap. The
 # `serviceAccountRef.audiences` in the ClusterSecretStore that consumes
-# this role (canonical: infra/manifests/cluster-secret-stores/loopzero-secrets-secrets.yaml)
+# this role (canonical: infra/manifests/cluster-secret-stores/loop-runtime-secrets-secrets.yaml)
 # MUST match this list exactly, else ESO's TokenRequest emits an `aud`
 # claim the role won't accept → 403 at login.
 authRoles:
@@ -341,9 +341,9 @@ authRoles:
     boundServiceAccountNames:
       - eso-vault-reader
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     boundAudiences:
-      - openbao.vault.loopzero.io
+      - openbao.vault.runtime.getloopscale.com
     policies:
       - eso-read
     ttl: "24h"
@@ -361,9 +361,9 @@ authRoles:
   # T3.3 of openbao-adoption v1.3 — tenant-controller per-tenant transit key role.
   - name: tenant-controller-transit
     boundServiceAccountNames:
-      - loopzero-tenant-operator
+      - loop-runtime-tenant-operator
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     policies:
       - tenant-controller-transit
     ttl: "1h"
@@ -378,60 +378,60 @@ authRoles:
       - spki-extractor-write
     ttl: "1h"
     description: "SPKI extractor CronJob (intra-cluster; pins Vault TLS SPKI every 5min)"
-  # T5.5 of openbao-adoption v1.3 — loopzero-api role on auth/k8s-core.
+  # T5.5 of openbao-adoption v1.3 — loop-runtime-api role on auth/k8s-core.
   # TTL 1h per plan + audience claim enforced via Deployment projected token.
-  - name: loopzero-api
+  - name: loop-runtime-api
     mount: k8s-core
     boundServiceAccountNames:
-      - loopzero-api
+      - loop-runtime-api
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     policies:
-      - loopzero-api
+      - loop-runtime-api
     ttl: "1h"
-    description: "T5.5 loopzero-api Vault role (mgmt cluster — secret read + Transit encrypt/decrypt)"
-  # T5.6 of openbao-adoption v1.3 — loopzero-tenant-operator on auth/k8s-core.
-  - name: loopzero-tenant-operator
+    description: "T5.5 loop-runtime-api Vault role (mgmt cluster — secret read + Transit encrypt/decrypt)"
+  # T5.6 of openbao-adoption v1.3 — loop-runtime-tenant-operator on auth/k8s-core.
+  - name: loop-runtime-tenant-operator
     mount: k8s-core
     boundServiceAccountNames:
-      - loopzero-tenant-operator
+      - loop-runtime-tenant-operator
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     policies:
-      - loopzero-tenant-operator
+      - loop-runtime-tenant-operator
     ttl: "1h"
     description: "T5.6 tenant-operator Vault role (D6 shared paths + per-tenant Transit key)"
-  # T5.7 of openbao-adoption v1.3 — loopzero-app-operator on auth/k8s-core.
-  - name: loopzero-app-operator
+  # T5.7 of openbao-adoption v1.3 — loop-runtime-app-operator on auth/k8s-core.
+  - name: loop-runtime-app-operator
     mount: k8s-core
     boundServiceAccountNames:
-      - loopzero-app-operator
+      - loop-runtime-app-operator
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     policies:
-      - loopzero-app-operator
+      - loop-runtime-app-operator
     ttl: "1h"
     description: "T5.7 app-operator Vault role (operators/app-operator path only)"
-  # T5.7 of openbao-adoption v1.3 — loopzero-preview-operator on auth/k8s-core.
-  - name: loopzero-preview-operator
+  # T5.7 of openbao-adoption v1.3 — loop-runtime-preview-operator on auth/k8s-core.
+  - name: loop-runtime-preview-operator
     mount: k8s-core
     boundServiceAccountNames:
-      - loopzero-preview-operator
+      - loop-runtime-preview-operator
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     policies:
-      - loopzero-preview-operator
+      - loop-runtime-preview-operator
     ttl: "1h"
     description: "T5.7 preview-operator Vault role (operators/preview-operator path only)"
-  # T5.7 of openbao-adoption v1.3 — loopzero-platform-operator on auth/k8s-core.
-  - name: loopzero-platform-operator
+  # T5.7 of openbao-adoption v1.3 — loop-runtime-platform-operator on auth/k8s-core.
+  - name: loop-runtime-platform-operator
     mount: k8s-core
     boundServiceAccountNames:
-      - loopzero-platform-operator
+      - loop-runtime-platform-operator
     boundServiceAccountNamespaces:
-      - loopzero-system
+      - loop-runtime-system
     policies:
-      - loopzero-platform-operator
+      - loop-runtime-platform-operator
     ttl: "1h"
     description: "T5.7 platform-operator Vault role (operators/platform-operator path only)"
   # T5.8 of openbao-adoption v1.3 — argo-workflows on auth/k8s-build.
@@ -488,12 +488,12 @@ transitKeys:
 
 # T2.5 SPKI extractor config — CronJob runs in secrets-system NS, extracts SPKI
 # hash from openbao-tls Secret tls.crt, writes to KV path
-# secret/data/loopzero/<env>/platform/secrets/vault-spki-pin/spki_hash.
+# secret/data/loop-runtime/<env>/platform/secrets/vault-spki-pin/spki_hash.
 # ESO mgmt-side reads this path → materializes K8s Secret vault-spki-pin in
-# loopzero-system NS → loopzero-api consumes via env var LOOPZERO_VAULT_SPKI_PIN.
+# loop-runtime-system NS → loop-runtime-api consumes via env var LOOP_RUNTIME_VAULT_SPKI_PIN.
 # Per EC-09 v1.1: CronJob (NOT one-shot Job) because cert-manager auto-renews
 # Vault cert every 60-90d independently of ArgoCD sync-waves; without periodic
-# re-extraction, loopzero-api pins stale SPKI and Vault auth fails periodically.
+# re-extraction, loop-runtime-api pins stale SPKI and Vault auth fails periodically.
 # T6.1-T6.3 of openbao-adoption v1.3 — database engine connections + roles.
 # Each connection: { name, plugin, connectionUrl, allowedRoles, username, password }.
 # Operator-time: connectionUrl + username + password come from K8s Secret
@@ -501,21 +501,21 @@ transitKeys:
 # docs/runbooks.md).
 #
 # Each role: { name, dbName, creationStatements, defaultTtl, maxTtl, revocationStatements }.
-# loopzero-api role: TTL 1h / max 24h per plan T6.3.
+# loop-runtime-api role: TTL 1h / max 24h per plan T6.3.
 databaseConnections: []
   # Example (operator fills via overlay):
-  # - name: postgres-loopzero-api
+  # - name: postgres-loop-runtime-api
   #   plugin: postgresql-database-plugin
-  #   connectionUrl: "postgresql://{{username}}:{{password}}@loopzero-pg.loopzero-system:5432/loopzero?sslmode=require"
-  #   allowedRoles: loopzero-api
-  #   usernameSecretRef: loopzero-pg-vault-admin-username  # NOT templated — operator provides
-  #   passwordSecretRef: loopzero-pg-vault-admin-password
+  #   connectionUrl: "postgresql://{{username}}:{{password}}@loop-runtime-pg.loop-runtime-system:5432/loop_runtime?sslmode=require"
+  #   allowedRoles: loop-runtime-api
+  #   usernameSecretRef: loop-runtime-pg-vault-admin-username  # NOT templated — operator provides
+  #   passwordSecretRef: loop-runtime-pg-vault-admin-password
 databaseRoles:
-  - name: loopzero-api
-    dbName: postgres-loopzero-api
+  - name: loop-runtime-api
+    dbName: postgres-loop-runtime-api
     creationStatements: |
       CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}';
-      GRANT loopzero_api_app TO "{{name}}";
+      GRANT loop_runtime_api_app TO "{{name}}";
     defaultTtl: "1h"
     maxTtl: "24h"
     revocationStatements: |
@@ -525,29 +525,29 @@ databaseRoles:
 # T7.1-T7.2 of openbao-adoption v1.3 — kubernetes engine roles.
 # Each role: { name, allowedKubernetesNamespaces, serviceAccountName, tokenDefaultTtl, tokenMaxTtl }.
 kubernetesRoles:
-  - name: loopzero-cell-0-mgmt
+  - name: loop-runtime-cell-0-mgmt
     allowedKubernetesNamespaces:
-      - loopzero-system
+      - loop-runtime-system
       - argocd
       - external-secrets
-    serviceAccountName: loopzero-cell-0
+    serviceAccountName: loop-runtime-cell-0
     tokenDefaultTtl: "1h"
     tokenMaxTtl: "24h"
-  - name: loopzero-cell-0-build
+  - name: loop-runtime-cell-0-build
     allowedKubernetesNamespaces:
       - argo
-    serviceAccountName: loopzero-build
+    serviceAccountName: loop-runtime-build
     tokenDefaultTtl: "1h"
     tokenMaxTtl: "24h"
-  - name: loopzero-cell-0-workload
+  - name: loop-runtime-cell-0-workload
     allowedKubernetesNamespaces:
-      - loopzero-system
-    serviceAccountName: loopzero-cell-0
+      - loop-runtime-system
+    serviceAccountName: loop-runtime-cell-0
     tokenDefaultTtl: "1h"
     tokenMaxTtl: "24h"
 
 spkiExtractor:
-  enabled: false  # opt-in per env; flip to true when loopzero-secrets TLS active
+  enabled: false  # opt-in per env; flip to true when loop-runtime-secrets TLS active
   schedule: "*/5 * * * *"
   image:
     repository: alpine

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenantshttp_test
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/tenants/tenantshttp"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // fakeTenantDeletionStore is a test double for TenantDeletionStore.

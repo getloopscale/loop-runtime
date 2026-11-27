@@ -3,7 +3,7 @@
 #
 # Validates the full chain login → JWT exchange → /v1/billing/portal returns
 # a Stripe Customer Portal URL. Regression-protection for the 2026-06-04
-# bug where LOOPZERO_STRIPE_SECRET_KEY in .env was sk_test_*SX4hL (rotated/
+# bug where LOOP_RUNTIME_STRIPE_SECRET_KEY in .env was sk_test_*SX4hL (rotated/
 # invalid) while the working canonical key is rk_test_*TZGhm — cloud
 # returned 401 from Stripe API. Operator browser-validated by clicking
 # "Manage Plan" + receiving "Failed to open billing portal".
@@ -19,7 +19,7 @@
 #   KRATOS_PUBLIC      default https://auth-dev.getloopscale.com
 #   CLOUD_HOST         default https://cloud-dev.getloopscale.com
 #   TEST_USER          default admin@getloopscale.com
-#   TEST_PASSWORD      default loopzero-dev-password
+#   TEST_PASSWORD      default loop-runtime-dev-password
 #
 # Exit: 0 if Stripe portal URL returned; 1 otherwise (with diagnostic).
 
@@ -28,7 +28,7 @@ set -euo pipefail
 KRATOS_PUBLIC="${KRATOS_PUBLIC:-https://auth-dev.getloopscale.com}"
 CLOUD_HOST="${CLOUD_HOST:-https://app-dev.getloopscale.com}"
 TEST_USER="${TEST_USER:-admin@getloopscale.com}"
-TEST_PASSWORD="${TEST_PASSWORD:-loopzero-dev-password}"
+TEST_PASSWORD="${TEST_PASSWORD:-loop-runtime-dev-password}"
 
 PASS=0
 FAIL=0

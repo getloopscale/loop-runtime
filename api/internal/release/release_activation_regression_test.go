@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package unit — regression tests for bugs found in MEET-2026-03-31-024.
 //
@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	releasesvc "github.com/getloopscale/loopzero/api/internal/release"
+	releasesvc "github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // --- BUG-03: SetGitCommit failure is fatal ---

@@ -1,4 +1,4 @@
-# loopzero-syft-scanner: Alpine image with syft baked in.
+# loop-runtime-syft-scanner: Alpine image with syft baked in.
 # Used by the sbom-{app} Argo Workflow step (Sprint 6 / T1.1) to scan
 # signed container images and produce CycloneDX SBOMs.
 #
@@ -35,16 +35,16 @@ FROM mirror.gcr.io/library/alpine:3.23@sha256:469c9ea410b9215eaee7976ba6c0639039
 ARG SYFT_TAG=v1.57.2
 ARG SYFT_COMMIT=1a72047fd46c72e0a12ee77e24b23d2316753d08
 
-LABEL org.opencontainers.image.source="https://github.com/getloopscale/loopzero" \
-      org.opencontainers.image.title="loopzero-syft-scanner" \
-      org.opencontainers.image.description="syft SBOM scanner for LoopZero build pipeline, built from anchore/syft@${SYFT_COMMIT}" \
-      io.loopzero.syft.release="${SYFT_TAG}" \
-      io.loopzero.syft.revision="${SYFT_COMMIT}"
+LABEL org.opencontainers.image.source="https://github.com/getloopscale/loop-runtime" \
+      org.opencontainers.image.title="loop-runtime-syft-scanner" \
+      org.opencontainers.image.description="syft SBOM scanner for LoopRuntime build pipeline, built from anchore/syft@${SYFT_COMMIT}" \
+      io.loop-runtime.syft.release="${SYFT_TAG}" \
+      io.loop-runtime.syft.revision="${SYFT_COMMIT}"
 
 COPY --from=syft-build /out/syft /usr/local/bin/syft
 
 RUN apk add --no-cache ca-certificates aws-cli \
-    && adduser -D -u 1000 loopzero
+    && adduser -D -u 1000 loop-runtime
 
 USER 1000
 ENTRYPOINT ["/bin/sh"]

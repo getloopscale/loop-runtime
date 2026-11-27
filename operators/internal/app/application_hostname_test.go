@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app
 
@@ -9,15 +9,15 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 const hostnameTestBaseDomain = "dev.getloopscale.com"
 
-func hostnameTestApp(appName, appLabel, hostname string) *loopzerov1.LoopZeroApplication {
-	app := &loopzerov1.LoopZeroApplication{
-		Spec: loopzerov1.LoopZeroApplicationSpec{
+func hostnameTestApp(appName, appLabel, hostname string) *loopruntimev1.LoopRuntimeApplication {
+	app := &loopruntimev1.LoopRuntimeApplication{
+		Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 			TenantRef:   "tn-acme",
 			Project:     "shop",
 			Environment: "production",

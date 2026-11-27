@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -8,7 +8,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtest"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtest"
 )
 
 // errRow is a Row whose Scan fails with err.

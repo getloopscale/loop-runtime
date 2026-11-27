@@ -1,0 +1,43 @@
+# staging overlay for infra/helm/data-plane-service: looptrace, the trace store behind the
+# console's observability screens.
+#
+# Reached from inside the cluster only: the console reads it at its Service address and
+# nothing publishes it at the edge. Its database is `looptrace` on the platform's
+# CloudNativePG cluster (platformPostgres in environments/staging.yaml), and both of its
+# Secrets come from the platform secret in Secrets Manager.
+image:
+  repository: {{ required "platformImages.registry is not set" .Values.platformImages.registry }}looptrace
+  tag: {{ required "platformImages.tags.looptrace is not set" (index .Values.platformImages.tags "looptrace") | quote }}
+
+port: 4318
+healthPath: /v1/healthz
+runAsUser: 1000
+
+existingSecret: looptrace
+env:
+  LOOPTRACE_PORT: "4318"
+  NODE_ENV: production
+  LOOPTRACE_REQUIRE_CREDENTIAL: "true"
+  DISABLE_ERROR_REPORTING: "1"
+secretEnv:
+  - { name: LOOPTRACE_PLATFORM_ADMIN_BOOTSTRAP, key: admin-bootstrap-token }
+
+externalSecret:
+  store: aws-secrets-manager
+  remoteKey: {{ required "aws.platformSecret is not set" .Values.aws.platformSecret | quote }}
+  keys:
+    postgres-password: looptrace-db-password
+    admin-bootstrap-token: looptrace-admin-bootstrap-token
+  postgresRoleSecret: looptrace-postgres-role
+
+postgres:
+  # The init container that waits for the database; the service's database is external.
+  image: mirror.gcr.io/library/postgres:19-alpine@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
+  database: looptrace
+  user: looptrace
+  uriEnv: LOOPTRACE_PG_URI
+  external:
+    host: platform-postgres-rw.loop-runtime-data-plane.svc.cluster.local
+    port: 5432
+    # The cluster refuses plaintext; this is the CA its certificate is signed by.
+    caSecret: platform-postgres-ca

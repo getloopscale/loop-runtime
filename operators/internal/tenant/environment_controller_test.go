@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant_test
 
@@ -17,25 +17,25 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
-func newEnvironmentCR(name, tenantName, envName, nsName string, plan loopzerov1.PlanTier) *loopzerov1.Environment {
-	return &loopzerov1.Environment{
+func newEnvironmentCR(name, tenantName, envName, nsName string, plan loopruntimev1.PlanTier) *loopruntimev1.Environment {
+	return &loopruntimev1.Environment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
-		Spec: loopzerov1.EnvironmentCRSpec{
-			TenantRef:   loopzerov1.TenantRef{Name: tenantName},
+		Spec: loopruntimev1.EnvironmentCRSpec{
+			TenantRef:   loopruntimev1.TenantRef{Name: tenantName},
 			Environment: envName,
-			Namespace:   loopzerov1.NamespaceSpec{Name: nsName},
-			NetworkPolicy: loopzerov1.NetworkPolicyConfig{
+			Namespace:   loopruntimev1.NamespaceSpec{Name: nsName},
+			NetworkPolicy: loopruntimev1.NetworkPolicyConfig{
 				Isolate: true,
 			},
 			Plan: plan,
-			ResourceQuota: &loopzerov1.ResourceQuotaSpec{
+			ResourceQuota: &loopruntimev1.ResourceQuotaSpec{
 				CPU:     "8",
 				Memory:  "16Gi",
 				Storage: "50Gi",
@@ -47,8 +47,8 @@ func newEnvironmentCR(name, tenantName, envName, nsName string, plan loopzerov1.
 // createWithParentTenant creates env together with the Tenant it references.
 // An Environment is always born from a Tenant, and the Environment controller
 // refuses to provision one whose Tenant (and so whose cell) it cannot read.
-func createWithParentTenant(env *loopzerov1.Environment) {
-	parent := newTenant(env.Spec.TenantRef.Name, loopzerov1.PlanStarter, nil)
+func createWithParentTenant(env *loopruntimev1.Environment) {
+	parent := newTenant(env.Spec.TenantRef.Name, loopruntimev1.PlanStarter, nil)
 	if err := k8sClient.Create(ctx, parent); err != nil && !apierrors.IsAlreadyExists(err) {
 		Expect(err).NotTo(HaveOccurred())
 	}
@@ -62,23 +62,23 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-test-production"
 			tenantName = "env-test"
 			envName    = "production"
-			nsName     = "loopzero-env-test-production"
+			nsName     = "loop-runtime-env-test-production"
 		)
 
 		BeforeAll(func() {
-			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanStarter)
+			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopruntimev1.PlanStarter)
 			createWithParentTenant(envCR)
 		})
 
 		It("should set Phase to Active", func() {
-			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
-				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+			withEnv(envCRName, func(g Gomega, env *loopruntimev1.Environment) {
+				g.Expect(env.Status.Phase).To(Equal(loopruntimev1.EnvironmentPhaseActive))
 			})
 		})
 
 		It("should add the environment-cleanup finalizer", func() {
-			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
-				g.Expect(env.Finalizers).To(ContainElement("loopzero.io/environment-cleanup"))
+			withEnv(envCRName, func(g Gomega, env *loopruntimev1.Environment) {
+				g.Expect(env.Finalizers).To(ContainElement("runtime.getloopscale.com/environment-cleanup"))
 			})
 		})
 
@@ -86,9 +86,9 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			Eventually(func(g Gomega) {
 				var ns corev1.Namespace
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/tenant", tenantName))
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/environment", envName))
-				g.Expect(ns.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "environment-controller"))
+				g.Expect(ns.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/tenant", tenantName))
+				g.Expect(ns.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/environment", envName))
+				g.Expect(ns.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/managed-by", "environment-controller"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -104,13 +104,13 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		// Task 7.4: Dedicated ServiceAccount for app workloads
-		It("should create loopzero-app ServiceAccount for workloads", func() {
+		It("should create loop-runtime-app ServiceAccount for workloads", func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-app", Namespace: nsName,
+					Name: "loop-runtime-app", Namespace: nsName,
 				}, &sa)).To(Succeed())
-				g.Expect(sa.Labels).To(HaveKeyWithValue("loopzero.io/managed-by", "environment-controller"))
+				g.Expect(sa.Labels).To(HaveKeyWithValue("runtime.getloopscale.com/managed-by", "environment-controller"))
 				// automountServiceAccountToken should be false
 				g.Expect(sa.AutomountServiceAccountToken).NotTo(BeNil())
 				g.Expect(*sa.AutomountServiceAccountToken).To(BeFalse())
@@ -121,12 +121,12 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			Eventually(func(g Gomega) {
 				var sa corev1.ServiceAccount
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &sa)).To(Succeed())
 
 				var role rbacv1.Role
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &role)).To(Succeed())
 				// Starter plan: should have deployments
 				hasDeployments := false
@@ -141,11 +141,11 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 				var rb rbacv1.RoleBinding
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
-					Name: "loopzero-deployer", Namespace: nsName,
+					Name: "loop-runtime-deployer", Namespace: nsName,
 				}, &rb)).To(Succeed())
-				g.Expect(rb.RoleRef.Name).To(Equal("loopzero-deployer"))
+				g.Expect(rb.RoleRef.Name).To(Equal("loop-runtime-deployer"))
 				g.Expect(rb.Subjects).To(HaveLen(1))
-				g.Expect(rb.Subjects[0].Name).To(Equal("loopzero-deployer"))
+				g.Expect(rb.Subjects[0].Name).To(Equal("loop-runtime-deployer"))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -186,7 +186,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		It("should set all conditions to True", func() {
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
@@ -212,13 +212,13 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 		})
 
 		It("should set status.namespace to the actual namespace name", func() {
-			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
+			withEnv(envCRName, func(g Gomega, env *loopruntimev1.Environment) {
 				g.Expect(env.Status.Namespace).To(Equal(nsName))
 			})
 		})
 
 		It("should set observedGeneration", func() {
-			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
+			withEnv(envCRName, func(g Gomega, env *loopruntimev1.Environment) {
 				g.Expect(env.Status.ObservedGeneration).To(Equal(env.Generation))
 			})
 		})
@@ -237,20 +237,20 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-idemp-production"
 			tenantName = "env-idemp"
 			envName    = "production"
-			nsName     = "loopzero-env-idemp-production"
+			nsName     = "loop-runtime-env-idemp-production"
 		)
 
 		BeforeAll(func() {
-			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanStarter)
+			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopruntimev1.PlanStarter)
 			createWithParentTenant(envCR)
 
 			// Wait for Active
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
-				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				g.Expect(env.Status.Phase).To(Equal(loopruntimev1.EnvironmentPhaseActive))
 			}, timeout, interval).Should(Succeed())
 		})
 
@@ -267,7 +267,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 				Expect(k8sClient.List(ctx, &saList, client.InNamespace(nsName))).To(Succeed())
 				saCount := 0
 				for _, sa := range saList.Items {
-					if sa.Name == "loopzero-deployer" {
+					if sa.Name == "loop-runtime-deployer" {
 						saCount++
 					}
 				}
@@ -279,7 +279,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 			// Trigger re-reconcile via spec update — use retry loop for conflict
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
@@ -288,7 +288,7 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 
 			// Wait for reconcile to complete with new generation
-			withEnv(envCRName, func(g Gomega, env *loopzerov1.Environment) {
+			withEnv(envCRName, func(g Gomega, env *loopruntimev1.Environment) {
 				g.Expect(env.Status.ObservedGeneration).To(Equal(env.Generation))
 			})
 
@@ -323,24 +323,24 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-del-production"
 			tenantName = "env-del"
 			envName    = "production"
-			nsName     = "loopzero-env-del-production"
+			nsName     = "loop-runtime-env-del-production"
 		)
 
 		It("should clean up namespace when Environment is deleted", func() {
-			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanStarter)
+			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopruntimev1.PlanStarter)
 			createWithParentTenant(envCR)
 
 			// Wait for Active
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
-				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				g.Expect(env.Status.Phase).To(Equal(loopruntimev1.EnvironmentPhaseActive))
 			}, timeout, interval).Should(Succeed())
 
 			// Delete
-			var env loopzerov1.Environment
+			var env loopruntimev1.Environment
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: envCRName, Namespace: "default",
 			}, &env)).To(Succeed())
@@ -357,18 +357,18 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			var ns corev1.Namespace
 			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: nsName}, &ns)).To(Succeed())
 			ns.Finalizers = nil
-			delete(ns.Labels, "loopzero.io/tenant")
+			delete(ns.Labels, "runtime.getloopscale.com/tenant")
 			Expect(k8sClient.Update(ctx, &ns)).To(Succeed())
 
 			// Environment CR should be fully deleted (finalizer removed -> K8s deletes)
 			Eventually(func(g Gomega) {
-				var deleted loopzerov1.Environment
+				var deleted loopruntimev1.Environment
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &deleted)
 				if err == nil {
 					// Still exists — check finalizer is gone (will be garbage collected)
-					g.Expect(deleted.Finalizers).ToNot(ContainElement("loopzero.io/environment-cleanup"))
+					g.Expect(deleted.Finalizers).ToNot(ContainElement("runtime.getloopscale.com/environment-cleanup"))
 				}
 				// Either NotFound or finalizer removed is success
 			}, timeout, interval).Should(Succeed())
@@ -380,23 +380,23 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-noquota-staging"
 			tenantName = "env-noquota"
 			envName    = "staging"
-			nsName     = "loopzero-env-noquota-staging"
+			nsName     = "loop-runtime-env-noquota-staging"
 		)
 
 		BeforeAll(func() {
-			envCR := &loopzerov1.Environment{
+			envCR := &loopruntimev1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      envCRName,
 					Namespace: "default",
 				},
-				Spec: loopzerov1.EnvironmentCRSpec{
-					TenantRef:   loopzerov1.TenantRef{Name: tenantName},
+				Spec: loopruntimev1.EnvironmentCRSpec{
+					TenantRef:   loopruntimev1.TenantRef{Name: tenantName},
 					Environment: envName,
-					Namespace:   loopzerov1.NamespaceSpec{Name: nsName},
-					NetworkPolicy: loopzerov1.NetworkPolicyConfig{
+					Namespace:   loopruntimev1.NamespaceSpec{Name: nsName},
+					NetworkPolicy: loopruntimev1.NetworkPolicyConfig{
 						Isolate: true,
 					},
-					Plan: loopzerov1.PlanStarter,
+					Plan: loopruntimev1.PlanStarter,
 					// No ResourceQuota
 				},
 			}
@@ -405,11 +405,11 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		It("should reach Active without creating ResourceQuota", func() {
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
-				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				g.Expect(env.Status.Phase).To(Equal(loopruntimev1.EnvironmentPhaseActive))
 			}, timeout, interval).Should(Succeed())
 
 			// Namespace should exist
@@ -435,23 +435,23 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-noisol-production"
 			tenantName = "env-noisol"
 			envName    = "production"
-			nsName     = "loopzero-env-noisol-production"
+			nsName     = "loop-runtime-env-noisol-production"
 		)
 
 		BeforeAll(func() {
-			envCR := &loopzerov1.Environment{
+			envCR := &loopruntimev1.Environment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      envCRName,
 					Namespace: "default",
 				},
-				Spec: loopzerov1.EnvironmentCRSpec{
-					TenantRef:   loopzerov1.TenantRef{Name: tenantName},
+				Spec: loopruntimev1.EnvironmentCRSpec{
+					TenantRef:   loopruntimev1.TenantRef{Name: tenantName},
 					Environment: envName,
-					Namespace:   loopzerov1.NamespaceSpec{Name: nsName},
-					NetworkPolicy: loopzerov1.NetworkPolicyConfig{
+					Namespace:   loopruntimev1.NamespaceSpec{Name: nsName},
+					NetworkPolicy: loopruntimev1.NetworkPolicyConfig{
 						Isolate: false,
 					},
-					Plan: loopzerov1.PlanStarter,
+					Plan: loopruntimev1.PlanStarter,
 				},
 			}
 			createWithParentTenant(envCR)
@@ -459,11 +459,11 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 
 		It("should still create NetworkPolicies even with Isolate=false", func() {
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
-				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				g.Expect(env.Status.Phase).To(Equal(loopruntimev1.EnvironmentPhaseActive))
 
 				var policies networkingv1.NetworkPolicyList
 				g.Expect(k8sClient.List(ctx, &policies, client.InNamespace(nsName))).To(Succeed())
@@ -486,19 +486,19 @@ var _ = Describe("EnvironmentController", Ordered, func() {
 			envCRName  = "env-ent-production"
 			tenantName = "env-ent"
 			envName    = "production"
-			nsName     = "loopzero-env-ent-production"
+			nsName     = "loop-runtime-env-ent-production"
 		)
 
 		BeforeAll(func() {
-			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopzerov1.PlanEnterprise)
+			envCR := newEnvironmentCR(envCRName, tenantName, envName, nsName, loopruntimev1.PlanEnterprise)
 			createWithParentTenant(envCR)
 
 			Eventually(func(g Gomega) {
-				var env loopzerov1.Environment
+				var env loopruntimev1.Environment
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: envCRName, Namespace: "default",
 				}, &env)).To(Succeed())
-				g.Expect(env.Status.Phase).To(Equal(loopzerov1.EnvironmentPhaseActive))
+				g.Expect(env.Status.Phase).To(Equal(loopruntimev1.EnvironmentPhaseActive))
 			}, timeout, interval).Should(Succeed())
 		})
 

@@ -1,0 +1,10 @@
+# Every night at 03:00 in Brasilia (06:00 UTC), when nobody is expected on staging.
+[Unit]
+Description=Rebuild staging every night
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target

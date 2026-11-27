@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Sprint A T1.1 — Wire SecretEnvLocker (closes comp-001 CRITICAL).
 //
@@ -29,10 +29,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
-	"github.com/getloopscale/loopzero/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
 	"github.com/go-chi/chi/v5"
 )
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package cfkv provides a client for the Cloudflare Workers KV API.
 // Used by the static frontend delivery pipeline to write routing entries
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // RoutingEntry is the value stored in KV for each static frontend hostname.
@@ -50,7 +50,7 @@ func NewClient(accountID, namespaceID, apiToken string) *Client {
 }
 
 // Put writes a routing entry to KV. The key is the flat subdomain
-// (e.g., "tn-loopzero-e2e-project-web-production").
+// (e.g., "tn-loop-runtime-e2e-project-web-production").
 // The entry is JSON-serialized before writing.
 func (c *Client) Put(ctx context.Context, subdomain string, entry interface{}) error {
 	start := time.Now()

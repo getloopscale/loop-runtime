@@ -1,0 +1,30 @@
+# staging overlay for ory-kratos: DSN and secrets from the ory-kratos-credentials Secret
+# aws-secrets-manager writes (database `kratos` on RDS, keys from the platform secret).
+secret:
+  enabled: false
+  nameOverride: ory-kratos-credentials
+kratos:
+  config:
+    session:
+      cookie:
+        domain: {{ .Values.cookieDomain | quote }}
+    # The courier sends through Resend's HTTP API from getloopscale.com, the domain the
+    # staging Resend account verifies. The key is not rendered into the config: the
+    # ory-kratos-resend Secret (aws-secrets-manager, from loop-runtime/staging/resend) sets
+    # COURIER_HTTP_REQUEST_CONFIG_AUTH_CONFIG_VALUE, which overrides `auth.config.value`,
+    # and the base values render no Authorization header where aws.resendSecret is set.
+    courier:
+      http:
+        request_config:
+          auth:
+            type: api_key
+            config:
+              in: header
+              name: Authorization
+              value: "set by COURIER_HTTP_REQUEST_CONFIG_AUTH_CONFIG_VALUE"
+          body: "base64://{{ `function(ctx) {
+  from: "LoopScale <noreply@getloopscale.com>",
+  to: [ctx.recipient],
+  subject: ctx.subject,
+  html: ctx.html_body,
+}` | b64enc }}"

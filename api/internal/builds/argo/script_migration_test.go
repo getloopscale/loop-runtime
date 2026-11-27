@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -7,16 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-
 	"sigs.k8s.io/yaml"
 )
 
 // Script-migration regression tests.
 //
-// Background: 4 templates (deliver-artifact, sbom, sign-image keyless,
-// sign-image key-based) previously emitted as Argo `container:` blocks
-// with `command: ["sh","-c","<script>"]`. The forge SDK ships a dedicated
+// Background: the sbom, sign-image keyless and sign-image key-based
+// templates previously emitted as Argo `container:` blocks with
+// `command: ["sh","-c","<script>"]`. The forge SDK ships a dedicated
 // `forge.Script` builder that emits `script:` blocks — the semantically
 // correct shape for "run a script source through an interpreter". These
 // tests lock in the migration:
@@ -56,30 +54,9 @@ func marshalTemplate(t *testing.T, tpl interface{}) string {
 	return string(out)
 }
 
-func TestScriptMigration_DeliverArtifact_EmitsScriptBlock(t *testing.T) {
-	b := NewWorkflowBuilder(testInfraParams())
-	spec := deploycontracts.WorkflowSpec{
-		TenantID:  "tn-1",
-		ProjectID: "proj-1",
-		BuildID:   "build-1",
-		CommitSHA: "abc1234",
-	}
-	plan := deploycontracts.AppBuildPlan{
-		AppName:  "api",
-		AppPath:  ".",
-		ImageTag: "registry.example.com/tn-1/api:abc1234",
-	}
-	s := b.uploadAssetsTemplate(spec, plan)
-	tpl, err := s.BuildTemplate()
-	if err != nil {
-		t.Fatalf("BuildTemplate: %v", err)
-	}
-	assertScriptShape(t, "deliver-artifact", marshalTemplate(t, tpl))
-}
-
 func TestScriptMigration_SyftSBOM_EmitsScriptBlock(t *testing.T) {
 	s := syftScanTemplate("tn-1", "proj-1", "abc1234", "api",
-		"registry.example.com/tn-1/api:abc1234", false, "")
+		"registry.example.com/tn-1/api:abc1234", false, "", objectStore{})
 	tpl, err := s.BuildTemplate()
 	if err != nil {
 		t.Fatalf("BuildTemplate: %v", err)

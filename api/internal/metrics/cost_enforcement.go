@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -46,7 +46,7 @@ import (
 // system can say about its own protection.
 var CostCapDecisionsTotal = promauto.NewCounterVec(
 	prometheus.CounterOpts{
-		Name: "loopzero_cost_cap_decisions_total",
+		Name: "loop_runtime_cost_cap_decisions_total",
 		Help: "Cost cap decisions by metric and reason. reason=unmeasured means there was no counter to evaluate.",
 	},
 	[]string{"metric", "reason"},

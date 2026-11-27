@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -119,7 +119,7 @@ func TestEnvironmentTypedMachine_WireFormat(t *testing.T) {
 }
 
 // =============================================================================
-// LoopZeroApplication (cyclic — Reachable↔Degraded)
+// LoopRuntimeApplication (cyclic — Reachable↔Degraded)
 // =============================================================================
 
 func TestApplicationTypedMachine_FullHappyPath(t *testing.T) {
@@ -306,7 +306,7 @@ func TestPhase3_AllTypedMachines_Name(t *testing.T) {
 	}{
 		{"Tenant", NewTenantTypedMachine().Name(), "Tenant"},
 		{"Environment", NewEnvironmentTypedMachine().Name(), "Environment"},
-		{"Application", NewApplicationTypedMachine().Name(), "LoopZeroApplication"},
+		{"Application", NewApplicationTypedMachine().Name(), "LoopRuntimeApplication"},
 		{"Domain", NewDomainTypedMachine().Name(), "Domain"},
 	}
 	for _, c := range cases {

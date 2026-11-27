@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package main is the entrypoint for the LoopZero API server.
+// Package main is the entrypoint for the LoopRuntime API server.
 package main
 
 import (
@@ -14,28 +14,28 @@ import (
 	"sync"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/secrets"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/promotehttp"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/admission"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
-	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/tracing"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/admission"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/tracing"
 
 	"k8s.io/klog/v2"
 )
@@ -52,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	tracingShutdown, err := tracing.Init(context.Background(), "loopzero-api", tracing.Options{Enabled: cfg.TracingEnabled, Endpoint: cfg.OTelEndpoint, Environment: cfg.Env})
+	tracingShutdown, err := tracing.Init(context.Background(), "loop-runtime-api", tracing.Options{Enabled: cfg.TracingEnabled, Endpoint: cfg.OTelEndpoint, Environment: cfg.Env})
 	if err != nil {
 		logger.Warn("tracing disabled", "error", err)
 	} else {
@@ -165,7 +165,7 @@ func main() {
 		// project-creating stores (this API store and the orchestrator's deploy
 		// store) count through the background pool. Measured: an account with 2
 		// tenants and 1 project each read 1 through the request pool and 2
-		// through loopzero_worker. See internal/db/store/project_wrapper.go.
+		// through loop_runtime_worker. See internal/db/store/project_wrapper.go.
 		wireCrossTenantLookups(dbDeps, bgAdapter)
 		wirePlanEnforcement(dbDeps, bgAdapter, logger)
 		projectCap := newProjectCapEnforcement(dbDeps.PlanLimiter, bgAdapter)
@@ -175,8 +175,10 @@ func main() {
 			logger.Error("failed to setup workflows", "error", err)
 			os.Exit(1)
 		}
-		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer)
-		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, shutdownCtx, logger)
+		orchDeps = setupOrchestrator(dbAdapter, stores, workflows, cfg, httpTransport, logger, projectCap, envEnsurer,
+			deployEnvironmentSecrets(k8sDeps, logger), promotionAppExposer(k8sDeps))
+		buildQuota := newPushBuildQuota(dbDeps.PlanLimiter, store.NewPostgresPlanUsageStore(dbAdapter.Pool).BuildsThisMonth, cfg.BillingUpgradeURL)
+		ghDeps = setupGitHub(dbAdapter, bgAdapter, stores, orchDeps.Orchestrator, k8sDeps, cfg, buildQuota, shutdownCtx, logger)
 	}
 
 	// Plan J-17 T1.3 — start the Argo step watcher in a background
@@ -254,8 +256,8 @@ func main() {
 	})
 	srvCfg.Guards.IPRateLimit = ipRateLimiter
 	srvCfg.Auth = authenticator
-	srvCfg.Admin.APIEnabled = os.Getenv("LOOPZERO_ADMIN_API") == "true"
-	srvCfg.Maintenance = policy.ParseMaintenanceSetting(os.Getenv("LOOPZERO_MAINTENANCE_MODE"))
+	srvCfg.Admin.APIEnabled = os.Getenv("LOOP_RUNTIME_ADMIN_API") == "true"
+	srvCfg.Maintenance = policy.ParseMaintenanceSetting(os.Getenv("LOOP_RUNTIME_MAINTENANCE_MODE"))
 
 	// M3 of qa-readiness-roadmap-2026-06-23 — J11D7 LOCKED ADR:
 	// per-(tenant, domain) rate-limit for POST /api/v1/domains/{domain}/verify
@@ -269,7 +271,7 @@ func main() {
 	srvCfg.EdgeRoute = newEdgeRoute(cfg, bgAdapter, shutdownCtx, &bgWg, logger)
 	// T4.1 of plan 2026-06-09-m2-operator-canonical-fix v1.4: ADR D4 —
 	// every project gets a `production` env auto-created on POST
-	// /api/v1/projects. Same EnvironmentEnsurer that powers loopzero deploy
+	// /api/v1/projects. Same EnvironmentEnsurer that powers loop-runtime deploy
 	// --env <novo> (T2.2 D5); zero new infrastructure. nil-safe — when
 	// projectEnvEnsurer is nil (k8sDeps unavailable or test boot), the
 	// project Create handler falls back to pre-T4.1 behavior.
@@ -298,6 +300,9 @@ func setupBuildHandler(
 		return nil
 	}
 	buildHandler := buildshttp.NewBuildHandler(orchDeps.BuildOrchestrator, logger)
+	if orchDeps.ReleaseStatuses != nil {
+		buildHandler = buildHandler.WithReleaseStatuses(orchDeps.ReleaseStatuses)
+	}
 	if crossTenant == nil {
 		return buildHandler
 	}
@@ -340,7 +345,7 @@ func leaseHolder() string {
 	if n, err := os.Hostname(); err == nil {
 		return n
 	}
-	return "loopzero-api"
+	return "loop-runtime-api"
 }
 
 // validateProductionEnv refuses to boot a production API without the secrets
@@ -350,10 +355,10 @@ func validateProductionEnv(cfg config.Config, logger *slog.Logger) error {
 		return nil
 	}
 	return server.ValidateProductionEnv(logger, map[string]string{
-		"DATABASE_URL":                  os.Getenv("DATABASE_URL"),
-		"LOOPZERO_ARGO_CALLBACK_SECRET": os.Getenv("LOOPZERO_ARGO_CALLBACK_SECRET"),
-		"GITEA_TOKEN":                   cfg.GiteaToken,
-		"ARGOCD_TOKEN":                  cfg.ArgocdToken,
+		"DATABASE_URL":                      os.Getenv("DATABASE_URL"),
+		"LOOP_RUNTIME_ARGO_CALLBACK_SECRET": os.Getenv("LOOP_RUNTIME_ARGO_CALLBACK_SECRET"),
+		"GITEA_TOKEN":                       cfg.GiteaToken,
+		"ARGOCD_TOKEN":                      cfg.ArgocdToken,
 	})
 }
 

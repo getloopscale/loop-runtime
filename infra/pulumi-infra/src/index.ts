@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import * as digitalocean from "@pulumi/digitalocean";
@@ -175,7 +175,7 @@ export const cellRegistry = pulumi.output(
 );
 
 // --- Legacy-compatible outputs (consumed by CI pipelines) ---
-// These will be deprecated once loopzero-platform migrates to clusterRegistry.
+// These will be deprecated once loop-runtime-platform migrates to clusterRegistry.
 const mgmt = getMgmtCluster(clusters);
 export const mgmtClusterName = mgmt.clusterName;
 export const mgmtClusterEndpoint = mgmt.endpoint;

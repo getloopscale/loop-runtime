@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenancy
 
 import (
 	"sort"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // resolveEnvEntry picks the Tenant CR environment entry that answers a lookup
@@ -16,7 +16,7 @@ import (
 //
 // Issue #139. The previous rule was strict tuple equality
 // (`entry.Name == envName && entry.Project == project`). The CLI's
-// `loopzero env inspect <name>` has no `--project` flag, so it always asks with
+// `loopscale env inspect <name>` has no `--project` flag, so it always asks with
 // project="". Before the #124 backfill that resolved the legacy entry, which
 // was the only entry a tenant had. After the backfill the entry carries a real
 // project, strict equality can never match, and a live environment reports

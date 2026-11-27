@@ -18,7 +18,7 @@
 # Terminating that needs an authority outside the file tree — a REQUIRED status
 # check — and this repository cannot have one. Measured 2026-09-06: branch
 # protection and rulesets both return 403, "Upgrade to GitHub Pro or make this
-# repository public" (org `getloopscale` is on the `free` plan; `loopzero` is PRIVATE).
+# repository public" (org `getloopscale` is on the `free` plan; `loop-runtime` is PRIVATE).
 # So this check NOTIFIES and does not block, and no amount of work inside the
 # repository changes that — it is a purchase or a visibility change.
 #
@@ -42,7 +42,7 @@
 #
 #   2. ci.yml IS RED AND HAS BEEN. Its last 15 runs all failed (32084704925
 #      through 32197072865, measured 2026-09-06), the failing step is `Test the
-#      hermetic modules`, and `go test ./... -count=1` in cmd/loopzero-ops is red on
+#      hermetic modules`, and `go test ./... -count=1` in cmd/loop-runtime-ops is red on
 #      `trufflehogscan.TestRealTreeIsAdjudicated` in a clean worktree today.
 #      A new signal added to an already-red job is not a signal. This one stands
 #      or falls on its own subject.

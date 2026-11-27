@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds_test
 
@@ -12,17 +12,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // --- In-memory fakes for BuildOrchestrator unit tests ---
@@ -30,7 +30,8 @@ import (
 // fakeBuildStoreOrch implements db.BuildStore with in-memory state.
 type fakeBuildStoreOrch struct {
 	builds      map[string]*db.Build
-	activeBuild bool // controls HasActiveBuild return
+	appsSpec    map[string][]db.BuildAppSpec // SetAppsSpec writes, GetBuildApps reads
+	activeBuild bool                         // controls HasActiveBuild return
 	createErr   error
 	getErr      error
 	updateErr   error
@@ -61,7 +62,7 @@ func (f *fakeBuildStoreOrch) GetByID(ctx context.Context, id string) (*db.Build,
 	}
 	b, ok := f.builds[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	// Return a copy
 	copy := *b
@@ -93,7 +94,7 @@ func (f *fakeBuildStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id st
 	}
 	b, ok := f.builds[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	// Use real state machine for transition validation
 	newState, err := safeFakeTransition(buildMachine, statemachine.State(b.Status), statemachine.Event(event))
@@ -153,11 +154,15 @@ func (f *fakeBuildStoreOrch) FindActiveBuilds(ctx context.Context, _ string) ([]
 }
 
 func (f *fakeBuildStoreOrch) SetAppsSpec(ctx context.Context, tx db.DBTX, id string, apps []db.BuildAppSpec) error {
+	if f.appsSpec == nil {
+		f.appsSpec = make(map[string][]db.BuildAppSpec)
+	}
+	f.appsSpec[id] = apps
 	return nil
 }
 
 func (f *fakeBuildStoreOrch) GetBuildApps(ctx context.Context, buildID string) ([]db.BuildAppSpec, error) {
-	return nil, nil
+	return f.appsSpec[buildID], nil
 }
 
 func (f *fakeBuildStoreOrch) ListByProjectAndEnv(ctx context.Context, tenantID, projectID, env string, limit, offset int) ([]db.Build, int, error) {
@@ -189,7 +194,7 @@ func (f *fakeBuildStoreOrch) CancelActiveBuilds(ctx context.Context, tx db.DBTX,
 func safeFakeTransition(m *statemachine.Machine, current statemachine.State, event statemachine.Event) (newState statemachine.State, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = loopzeroerrors.NewInvalidTransition(string(current), string(event))
+			err = loopruntimeerrors.NewInvalidTransition(string(current), string(event))
 		}
 	}()
 	newState = m.Transition(current, event)
@@ -229,7 +234,7 @@ func (f *fakeReleaseStoreOrch) Create(ctx context.Context, tx db.DBTX, release *
 func (f *fakeReleaseStoreOrch) GetByID(ctx context.Context, id string) (*db.Release, error) {
 	r, ok := f.releases[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrReleaseNotFound
+		return nil, loopruntimeerrors.ErrReleaseNotFound
 	}
 	copy := *r
 	return &copy, nil
@@ -241,7 +246,7 @@ func (f *fakeReleaseStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id 
 	}
 	r, ok := f.releases[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrReleaseNotFound
+		return nil, loopruntimeerrors.ErrReleaseNotFound
 	}
 	newState, err := safeFakeTransition(releaseMachine, statemachine.State(r.Status), statemachine.Event(event))
 	if err != nil {
@@ -255,7 +260,7 @@ func (f *fakeReleaseStoreOrch) UpdateStatus(ctx context.Context, tx db.DBTX, id 
 func (f *fakeReleaseStoreOrch) SetGitCommit(ctx context.Context, tx db.DBTX, id string, commitSHA string) error {
 	r, ok := f.releases[id]
 	if !ok {
-		return loopzeroerrors.ErrReleaseNotFound
+		return loopruntimeerrors.ErrReleaseNotFound
 	}
 	r.GitCommit = commitSHA
 	return nil
@@ -703,7 +708,7 @@ func TestBuildOrchestrator_SubmitBuild_ConcurrentBuild(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for concurrent build, got nil")
 	}
-	if !errors.Is(err, loopzeroerrors.ErrDeployInProgress) {
+	if !errors.Is(err, loopruntimeerrors.ErrDeployInProgress) {
 		t.Errorf("expected ErrDeployInProgress, got %v", err)
 	}
 }
@@ -711,7 +716,7 @@ func TestBuildOrchestrator_SubmitBuild_ConcurrentBuild(t *testing.T) {
 func TestBuildOrchestrator_SubmitBuild_LockTimeout(t *testing.T) {
 	// Arrange
 	fakes := newOrchestratorFakes()
-	fakes.locker.lockErr = loopzeroerrors.ErrLockTimeout
+	fakes.locker.lockErr = loopruntimeerrors.ErrLockTimeout
 	orch := fakes.buildOrchestrator()
 	req := defaultSubmitReq()
 
@@ -722,7 +727,7 @@ func TestBuildOrchestrator_SubmitBuild_LockTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for lock timeout, got nil")
 	}
-	if !errors.Is(err, loopzeroerrors.ErrLockTimeout) {
+	if !errors.Is(err, loopruntimeerrors.ErrLockTimeout) {
 		t.Errorf("expected ErrLockTimeout, got %v", err)
 	}
 }
@@ -1084,14 +1089,14 @@ func TestBuildOrchestrator_OnBuildCompleted_SucceededWithEmptyApps(t *testing.T)
 		t.Fatal("expected error for succeeded callback with empty apps, got nil")
 	}
 
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Fatalf("expected LoopZeroError, got %T: %v", err, err)
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
+		t.Fatalf("expected LoopRuntimeError, got %T: %v", err, err)
 	}
 	// The service owns the code; its HTTP status is the route layer's mapping
 	// (httpio), asserted by the error-code registry tests.
-	if loopzeroErr.Code != "INVALID_CALLBACK" {
-		t.Errorf("expected code INVALID_CALLBACK, got %q", loopzeroErr.Code)
+	if loopRuntimeErr.Code != "INVALID_CALLBACK" {
+		t.Errorf("expected code INVALID_CALLBACK, got %q", loopRuntimeErr.Code)
 	}
 }
 
@@ -1407,7 +1412,7 @@ func TestBuildOrchestrator_CancelBuild_AlreadyTerminal(t *testing.T) {
 			if err == nil {
 				t.Fatal("expected error for terminal build, got nil")
 			}
-			if !errors.Is(err, loopzeroerrors.ErrBuildAlreadyCompleted) {
+			if !errors.Is(err, loopruntimeerrors.ErrBuildAlreadyCompleted) {
 				t.Errorf("expected ErrBuildAlreadyCompleted, got %v", err)
 			}
 		})
@@ -1426,7 +1431,7 @@ func TestBuildOrchestrator_CancelBuild_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for non-existent build, got nil")
 	}
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+	if !errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 		t.Errorf("expected ErrBuildNotFound, got %v", err)
 	}
 }

@@ -1,11 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
 import (
 	"fmt"
 )
+
+// podBuildIDAnnotation stamps the pod template with the build it was rendered
+// for.
+//
+// A workload controller starts new pods only when the pod template changes. A
+// redeploy of the same commit delivers the same image digest, so without the
+// stamp it changed nothing: no pod restarted, and a secret set since the last
+// deploy (read through envFrom at process start) never reached the app.
+//
+// The build id, and not the release id: a release's manifests are rendered
+// again when a custom domain or the scale changes, with the same build, and
+// those renders must not restart the app.
+const podBuildIDAnnotation = "runtime.getloopscale.com/build-id"
+
+// podTemplateMeta is the metadata of an app's pod template.
+func podTemplateMeta(ri renderScope, labels map[string]string) k8sPodMeta {
+	meta := k8sPodMeta{Labels: labels}
+	if ri.BuildID != "" {
+		meta.Annotations = map[string]string{podBuildIDAnnotation: ri.BuildID}
+	}
+	return meta
+}
 
 // buildDeployment creates a Deployment resource for an app.
 func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployment {
@@ -15,9 +37,9 @@ func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployme
 	// Selector must use the project-scoped `app` label so two projects with
 	// an app of the same name never share pods (Achado #17).
 	selectorLabels := map[string]string{
-		"app":                 resName,
-		"loopzero.io/tenant":  ri.TenantID,
-		"loopzero.io/project": ri.ProjectID,
+		"app":                              resName,
+		"runtime.getloopscale.com/tenant":  ri.TenantID,
+		"runtime.getloopscale.com/project": ri.ProjectID,
 	}
 
 	// The container, pod spec and replica decision are the ones the Rollout
@@ -32,8 +54,8 @@ func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployme
 			Namespace: ns,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"loopzero.io/build-id":   ri.BuildID,
-				"loopzero.io/release-id": ri.ReleaseID,
+				"runtime.getloopscale.com/build-id":   ri.BuildID,
+				"runtime.getloopscale.com/release-id": ri.ReleaseID,
 			},
 		},
 		Spec: k8sDeploymentSpec{
@@ -49,7 +71,7 @@ func buildDeployment(ri renderScope, app AppManifestInput, port int) k8sDeployme
 			},
 			Selector: k8sLabelSelector{MatchLabels: selectorLabels},
 			Template: k8sPodTemplateSpec{
-				Metadata: k8sPodMeta{Labels: labels},
+				Metadata: podTemplateMeta(ri, labels),
 				Spec:     podSpec,
 			},
 		},
@@ -85,6 +107,10 @@ func buildHPA(ri renderScope, app AppManifestInput) k8sHPA {
 		scaleAPIVersion = "argoproj.io/v1alpha1"
 		scaleKind = "Rollout"
 	}
+	metrics := []k8sMetricSpec{utilizationMetric("cpu", targetCPU)}
+	if as.TargetMemory > 0 {
+		metrics = append(metrics, utilizationMetric("memory", as.TargetMemory))
+	}
 	return k8sHPA{
 		APIVersion: "autoscaling/v2",
 		Kind:       "HorizontalPodAutoscaler",
@@ -101,18 +127,19 @@ func buildHPA(ri renderScope, app AppManifestInput) k8sHPA {
 			},
 			MinReplicas: minR,
 			MaxReplicas: maxR,
-			Metrics: []k8sMetricSpec{
-				{
-					Type: "Resource",
-					Resource: k8sMetricTarget{
-						Name: "cpu",
-						Target: k8sMetricTargetSpec{
-							Type:               "Utilization",
-							AverageUtilization: targetCPU,
-						},
-					},
-				},
-			},
+			Metrics:     metrics,
+		},
+	}
+}
+
+// utilizationMetric is an HPA resource metric that targets an average
+// utilization, in percent of the pods' request for that resource.
+func utilizationMetric(resource string, percent int) k8sMetricSpec {
+	return k8sMetricSpec{
+		Type: "Resource",
+		Resource: k8sMetricTarget{
+			Name:   resource,
+			Target: k8sMetricTargetSpec{Type: "Utilization", AverageUtilization: percent},
 		},
 	}
 }
@@ -157,6 +184,11 @@ func buildScaledObject(ri renderScope, app AppManifestInput) kedaScaledObject {
 		annotations["scaledobject.keda.sh/transfer-hpa-ownership"] = "true"
 	}
 
+	triggers := []kedaTrigger{utilizationTrigger("cpu", targetCPU)}
+	if as.TargetMemory > 0 {
+		triggers = append(triggers, utilizationTrigger("memory", as.TargetMemory))
+	}
+
 	return kedaScaledObject{
 		APIVersion: "keda.sh/v1alpha1",
 		Kind:       "ScaledObject",
@@ -172,16 +204,17 @@ func buildScaledObject(ri renderScope, app AppManifestInput) kedaScaledObject {
 			MaxReplicaCount: maxR,
 			CooldownPeriod:  cooldown,
 			PollingInterval: 30,
-			Triggers: []kedaTrigger{
-				{
-					Type: "cpu",
-					Metadata: map[string]string{
-						"type":  "Utilization",
-						"value": fmt.Sprintf("%d", targetCPU),
-					},
-				},
-			},
+			Triggers:        triggers,
 		},
+	}
+}
+
+// utilizationTrigger is a KEDA resource trigger on an average utilization, in
+// percent of the pods' request for that resource.
+func utilizationTrigger(resource string, percent int) kedaTrigger {
+	return kedaTrigger{
+		Type:     resource,
+		Metadata: map[string]string{"type": "Utilization", "value": fmt.Sprintf("%d", percent)},
 	}
 }
 
@@ -246,9 +279,9 @@ func buildPDB(ri renderScope, app AppManifestInput) k8sPDB {
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":                 resName,
-		"loopzero.io/tenant":  ri.TenantID,
-		"loopzero.io/project": ri.ProjectID,
+		"app":                              resName,
+		"runtime.getloopscale.com/tenant":  ri.TenantID,
+		"runtime.getloopscale.com/project": ri.ProjectID,
 	}
 
 	return k8sPDB{

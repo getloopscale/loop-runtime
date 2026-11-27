@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -13,7 +13,7 @@ func TestBlocklistModeComesFromTheCallerNotTheProcessEnvironment(t *testing.T) {
 	content := validServicesJSONWithEnv(map[string]string{"PATH": "/usr/bin"})
 
 	t.Run("enforce refuses although the process env says warn", func(t *testing.T) {
-		t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "warn")
+		t.Setenv("LOOP_RUNTIME_ENV_BLOCKLIST_MODE", "warn")
 
 		_, err := ValidateServicesJSONNative(content, EnvBlocklistEnforce)
 
@@ -23,7 +23,7 @@ func TestBlocklistModeComesFromTheCallerNotTheProcessEnvironment(t *testing.T) {
 	})
 
 	t.Run("warn accepts although the process env says enforce", func(t *testing.T) {
-		t.Setenv("LOOPZERO_ENV_BLOCKLIST_MODE", "enforce")
+		t.Setenv("LOOP_RUNTIME_ENV_BLOCKLIST_MODE", "enforce")
 
 		_, err := ValidateServicesJSONNative(content, EnvBlocklistWarn)
 

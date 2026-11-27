@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // recordingGitea answers the repository API from status codes and records the
@@ -29,9 +29,9 @@ func (g *recordingGitea) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer g.mu.Unlock()
 	g.calls = append(g.calls, r.Method+" "+r.URL.Path)
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/loopzero/loopzero-source-tn-acme-web":
+	case r.Method == http.MethodGet && r.URL.Path == "/api/v1/repos/loop-runtime/loop-runtime-source-tn-acme-web":
 		w.WriteHeader(g.getStatus)
-	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/orgs/loopzero/repos":
+	case r.Method == http.MethodPost && r.URL.Path == "/api/v1/orgs/loop-runtime/repos":
 		_ = json.NewDecoder(r.Body).Decode(&g.created)
 		w.WriteHeader(http.StatusCreated)
 	default:
@@ -46,7 +46,7 @@ func newRecordingStore(t *testing.T, getStatus int) (*GiteaSourceStore, *recordi
 	g := &recordingGitea{getStatus: getStatus}
 	srv := httptest.NewServer(g)
 	t.Cleanup(srv.Close)
-	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{BaseURL: srv.URL, Token: "tok", OrgName: "loopzero"})
+	store, err := NewGiteaSourceStore(GiteaSourceStoreConfig{BaseURL: srv.URL, Token: "tok", OrgName: "loop-runtime"})
 	if err != nil {
 		t.Fatalf("NewGiteaSourceStore: %v", err)
 	}

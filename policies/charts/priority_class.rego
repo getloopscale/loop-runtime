@@ -5,11 +5,11 @@
 package main
 
 platform_critical_components := {
-  "loopzero-api",
-  "loopzero-tenant-operator",
-  "loopzero-app-operator",
-  "loopzero-preview-operator",
-  "loopzero-platform-operator",
+  "loop-runtime-api",
+  "loop-runtime-tenant-operator",
+  "loop-runtime-app-operator",
+  "loop-runtime-preview-operator",
+  "loop-runtime-platform-operator",
 }
 
 deny[msg] {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -45,6 +45,7 @@ const (
 	DPEventRetry            = DomainPhaseEvent(DomainRetry)
 	DPEventRemove           = DomainPhaseEvent(DomainRemove)
 	DPEventProvisionTimeout = DomainPhaseEvent(DomainProvisionTimeout)
+	DPEventAppRemoved       = DomainPhaseEvent(DomainAppRemoved)
 )
 
 // IsDomainPhaseTerminal returns true if the phase is terminal.

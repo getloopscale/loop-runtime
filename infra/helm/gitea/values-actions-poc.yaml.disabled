@@ -5,7 +5,7 @@
 # adds this file to helmfile values list in `infra/helmfile/core.helmfile.yaml.gotmpl`
 # under the gitea release.
 #
-# Why Scenario A: reuses LoopZero's existing Gitea install (zero new infra cost),
+# Why Scenario A: reuses LoopRuntime's existing Gitea install (zero new infra cost),
 # GitHub Actions YAML compatibility (zero learning curve for the operator), K8s-native
 # runner scale-to-zero via KEDA already deployed in build cluster.
 #

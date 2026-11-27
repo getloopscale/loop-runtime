@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package promotehttp
 
@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Fake PromoteService ---
@@ -156,7 +156,7 @@ func TestPromote_SameEnvironment(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
-		err: loopzeroerrors.ErrSameEnvironment,
+		err: loopruntimeerrors.ErrSameEnvironment,
 	}
 	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
@@ -178,7 +178,7 @@ func TestPromote_NoActiveRelease(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
-		err: loopzeroerrors.ErrNoActiveRelease,
+		err: loopruntimeerrors.ErrNoActiveRelease,
 	}
 	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
@@ -215,7 +215,7 @@ func TestPromote_LockTimeout(t *testing.T) {
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
 	svc := &fakePromoteService{
-		err: loopzeroerrors.ErrLockTimeout,
+		err: loopruntimeerrors.ErrLockTimeout,
 	}
 	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
@@ -251,7 +251,7 @@ func TestPromote_SameEnvironment_SurfacesCode(t *testing.T) {
 	projects := &fakePromoteProjectStore{
 		project: &ports.ProjectResult{ID: "p1", Name: "my-api"},
 	}
-	svc := &fakePromoteService{err: loopzeroerrors.ErrSameEnvironment}
+	svc := &fakePromoteService{err: loopruntimeerrors.ErrSameEnvironment}
 	h := NewPromoteHandler(projects, svc, "dev.getloopscale.com")
 
 	body := `{"from":"staging","to":"staging"}`
@@ -357,7 +357,7 @@ func (f *fakePromoteEnsurer) EnsureEnvironment(_ context.Context, tenantID, proj
 	return f.err
 }
 
-// TestPromote_EnsuresTargetEnvironment_BeforeService (closes Red Team loopzero-cloud#158)
+// TestPromote_EnsuresTargetEnvironment_BeforeService (closes Red Team loop-console#158)
 // asserts the promote handler calls EnvironmentEnsurer.EnsureEnvironment for the
 // (tenant, project, toEnv) tuple BEFORE invoking the promote service. Pre-fix
 // state: promote never called EnsureEnvironment → Tenant CR spec.environments[]
@@ -412,7 +412,7 @@ func TestPromote_EnsureEnvironment_Failure_ShortCircuits(t *testing.T) {
 	svc := &fakePromoteService{
 		result: &PromoteOutput{PromotionID: "should-not-reach"},
 	}
-	ensurer := &fakePromoteEnsurer{err: loopzeroerrors.NewLoopZeroError("ENV_PROVISION_TIMEOUT", "operator did not reconcile in time")}
+	ensurer := &fakePromoteEnsurer{err: loopruntimeerrors.NewLoopRuntimeError("ENV_PROVISION_TIMEOUT", "operator did not reconcile in time")}
 	h := NewPromoteHandler(projects, svc, "prod-dev.getloopscale.app").WithEnvironmentEnsurer(ensurer)
 
 	body := `{"from":"preview","to":"production"}`

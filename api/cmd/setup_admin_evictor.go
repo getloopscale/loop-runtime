@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
 import (
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
-	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
 )
 
 // buildAdminEvictor constructs the admin evictor with DB + (when possible)
@@ -30,7 +30,7 @@ import (
 // shouldn't prevent the API from starting. A startup log line makes the
 // degraded mode explicit.
 //
-// crossTenant is the cross-tenant pool (loopzero_worker): eviction matches and
+// crossTenant is the cross-tenant pool (loop_runtime_worker): eviction matches and
 // deletes tenants the caller does not belong to, which fail-closed RLS hides
 // from the request pool. The FK-ordered cascade needs a pgx pool to run in one
 // transaction, which the background adapter is.
@@ -38,7 +38,7 @@ func buildAdminEvictor(cfg config.Config, crossTenant db.DBTX) placementhttp.Ten
 	// T1.4 (plan 2026-05-29-sqlc-migration v1.3): sqlc-backed admin
 	// tenant store. ListTenantIDsByPattern + 8-step FK-ordered
 	// eviction cascade preserved verbatim; all queries are
-	// tenantpredicate:exempt per the admin path (LOOPZERO_ADMIN_API gate).
+	// tenantpredicate:exempt per the admin path (LOOP_RUNTIME_ADMIN_API gate).
 	store := store.NewTenantStoreSqlc(crossTenant)
 	dbDeleter := &placementadapter.TenantDBDeleterAdapter{Store: store}
 

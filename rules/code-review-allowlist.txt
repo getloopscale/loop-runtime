@@ -18,4 +18,4 @@
 # Two entries were removed on 2026-09-16, having expired on 2026-09-09: the
 # exemption ends on its date, which is what a sunset is. The work they deferred —
 # 34 EnvRef call sites, 25 LOW maturity findings — is tracked at
-# https://github.com/getloopscale/loopzero/issues/368 rather than by a date that slides.
+# https://github.com/getloopscale/loop-runtime/issues/368 rather than by a date that slides.

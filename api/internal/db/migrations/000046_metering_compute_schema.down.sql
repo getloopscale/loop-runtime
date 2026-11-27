@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Down for 000046 — drop the metering tables and narrow the CHECK back.
 -- NOTE: narrowing the CHECK fails if any cost_counters row already holds a

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -46,7 +46,8 @@ func TestNoPlatformHelmfileDeclaresAHarborRelease(t *testing.T) {
 		for _, helmfile := range platformHelmfiles {
 			t.Run(env+"/"+helmfile, func(t *testing.T) {
 				t.Parallel()
-				out := helmfileRun(t, []string{"LOOPZERO_DB_PASSWORD=unused", "LOOPZERO_CELL_CONTEXT=k3d-loopzero-cell-0"},
+				out := helmfileRun(t, []string{"LOOP_RUNTIME_DB_PASSWORD=unused", "LOOP_RUNTIME_CELL_CONTEXT=k3d-loop-runtime-cell-0",
+					"LOOP_RUNTIME_CORE_API_ALB_DNS_NAME=unused", "LOOP_RUNTIME_CORE_API_INTERNAL_URL=https://unused"},
 					"-f", "infra/helmfile/"+helmfile, "-e", env, "list", "--output=json")
 				var releases []listedRelease
 				if err := json.Unmarshal([]byte(out), &releases); err != nil {

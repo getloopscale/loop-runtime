@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package timelinehttp — deploy timeline SSE handler (T4.2 of Phase D plan).
 //
@@ -35,8 +35,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/timeline"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline"
 )
 
 // deployTimelineEventTypePrefix is the canonical filter — the underlying

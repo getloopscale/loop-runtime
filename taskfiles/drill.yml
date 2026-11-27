@@ -53,11 +53,11 @@ tasks:
         # Backend URL pattern mirrors prod bootstrap.
         # DO Spaces requires region=us-east-1 (sigil) + endpoint=<region>.digitaloceanspaces.com
         # + s3ForcePathStyle=true. Idempotent (pulumi login on already-logged-in is no-op).
-        DRILL_BACKEND="${DRILL_BACKEND_URL:-s3://loopzero-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
+        DRILL_BACKEND="${DRILL_BACKEND_URL:-s3://loop-runtime-drill-pulumi-state?endpoint=sfo3.digitaloceanspaces.com&region=us-east-1&s3ForcePathStyle=true}"
         echo "Logging in to Pulumi backend: $DRILL_BACKEND"
         npx pulumi login "$DRILL_BACKEND"
         npx pulumi stack select drill --create
-        npx pulumi config set loopzero-drill:expiresInHours "$EXPIRES_IN"
+        npx pulumi config set loop-runtime-drill:expiresInHours "$EXPIRES_IN"
         npx pulumi up --stack drill --yes --skip-preview
         echo ""
         echo "Drill stack provisioned (4 clusters). Expires in ${EXPIRES_IN}h."
@@ -192,14 +192,14 @@ tasks:
         cd - > /dev/null
 
         echo ""
-        echo "=== Phase 4a: Bootstrap LoopZero platform (L2-unlock T2.1 + T2.1.bis) ==="
+        echo "=== Phase 4a: Bootstrap LoopRuntime platform (L2-unlock T2.1 + T2.1.bis) ==="
         # Single wrapper replaces 6+ manual helmfile sync steps.
         # STRICT_BOOTSTRAP=true: fail-fast on any helmfile partial sync.
         # Sets PG_SSLMODE=require automatically (T2.1.bis EC-02 for managed PG).
         BOOTSTRAP_EXIT=0
-        # Plan v1.2 T5.1: LOOPZERO_TEST_ENV=drill is canonical (DRILL_KUBECONFIG_DIR
+        # Plan v1.2 T5.1: LOOP_RUNTIME_TEST_ENV=drill is canonical (DRILL_KUBECONFIG_DIR
         # retained as path source; removal of dual-var pending T5.2 deprecation window).
-        LOOPZERO_TEST_ENV=drill DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
+        LOOP_RUNTIME_TEST_ENV=drill DRILL_KUBECONFIG_DIR=/tmp/drill-kc STRICT_BOOTSTRAP=true \
           bash infra/scripts/drill/drill-helmfile-bootstrap.sh || BOOTSTRAP_EXIT=$?
         if [ "$BOOTSTRAP_EXIT" -ne 0 ]; then
           echo "ERROR: drill-helmfile-bootstrap.sh failed (exit $BOOTSTRAP_EXIT)"
@@ -239,10 +239,10 @@ tasks:
         echo "=== Phase 6: Run L2 scale (50 concurrent) ==="
         # Pass criteria: success_rate >= 90% + p95 <= 10min
         L2_EXIT=0
-        LOOPZERO_E2E=1 LOOPZERO_REAL_DEPLOY=1 LOOPZERO_LOAD_LEVEL=l2 \
-        LOOPZERO_L2_CONCURRENCY='{{.L2_CONCURRENCY | default "50"}}' \
-        LOOPZERO_DRILL_API_URL="$API_URL" \
-        LOOPZERO_TOKEN="$JWT" \
+        LOOP_RUNTIME_E2E=1 LOOP_RUNTIME_REAL_DEPLOY=1 LOOP_RUNTIME_LOAD_LEVEL=l2 \
+        LOOP_RUNTIME_L2_CONCURRENCY='{{.L2_CONCURRENCY | default "50"}}' \
+        LOOP_RUNTIME_DRILL_API_URL="$API_URL" \
+        LOOP_RUNTIME_TOKEN="$JWT" \
           go test -timeout 120m -v \
             -run TestL2_1_FiftyConcurrentDeploys \
             ./infra/tests/performance/load/... || L2_EXIT=$?

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app_test
 
@@ -12,19 +12,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/operatortest"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
-func newLoopZeroApplicationCR(name, tenantRef, project, env, serviceName string) *loopzerov1.LoopZeroApplication {
-	return &loopzerov1.LoopZeroApplication{
+func newLoopRuntimeApplicationCR(name, tenantRef, project, env, serviceName string) *loopruntimev1.LoopRuntimeApplication {
+	return &loopruntimev1.LoopRuntimeApplication{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
-		Spec: loopzerov1.LoopZeroApplicationSpec{
+		Spec: loopruntimev1.LoopRuntimeApplicationSpec{
 			TenantRef:   tenantRef,
 			Project:     project,
 			Environment: env,
@@ -38,7 +38,7 @@ func newLoopZeroApplicationCR(name, tenantRef, project, env, serviceName string)
 
 var _ = Describe("ApplicationController", Ordered, func() {
 
-	Context("when a new LoopZeroApplication CR is created without hostname", func() {
+	Context("when a new LoopRuntimeApplication CR is created without hostname", func() {
 		const (
 			appName     = "app-test-myapi"
 			tenantRef   = "tn-acme"
@@ -50,27 +50,27 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app := newLoopRuntimeApplicationCR(appName, tenantRef, project, env, serviceName)
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 		})
 
 		It("should set the routed hostname via naming.AppHostname", func() {
 			// naming.AppHostname("tn-acme", "myapi", "myapi-svc", "production", "dev.getloopscale.com"),
 			// the Host rule the IngressRoute renderer emits for this app.
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Spec.Hostname).To(Equal(routedHostname))
 			})
 		})
 
 		It("should set status.url", func() {
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Status.URL).To(Equal("https://" + routedHostname))
 			})
 		})
 
 		It("should create an ExposedRoute CR owned by the Application", func() {
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName + "-route", Namespace: "default",
 				}, &route)).To(Succeed())
@@ -82,14 +82,14 @@ var _ = Describe("ApplicationController", Ordered, func() {
 				// Verify ownerReference
 				g.Expect(route.OwnerReferences).To(HaveLen(1))
 				g.Expect(route.OwnerReferences[0].Name).To(Equal(appName))
-				g.Expect(route.OwnerReferences[0].Kind).To(Equal("LoopZeroApplication"))
+				g.Expect(route.OwnerReferences[0].Kind).To(Equal("LoopRuntimeApplication"))
 			}, timeout, interval).Should(Succeed())
 		})
 
 		It("should set phase to Progressing initially", func() {
 			// Without actual endpoints, phase stays Progressing
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
-				g.Expect(app.Status.Phase).To(Equal(loopzerov1.ApplicationPhaseProgressing))
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
+				g.Expect(app.Status.Phase).To(Equal(loopruntimev1.ApplicationPhaseProgressing))
 			})
 		})
 
@@ -98,7 +98,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should set observedGeneration", func() {
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Status.ObservedGeneration).To(Equal(app.Generation))
 			})
 		})
@@ -106,7 +106,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		AfterAll(func() {
 			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
-			route := &loopzerov1.ExposedRoute{}
+			route := &loopruntimev1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
 				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 					route.Finalizers = nil
@@ -116,7 +116,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 	})
 
-	Context("when a LoopZeroApplication CR has hostname already set", func() {
+	Context("when a LoopRuntimeApplication CR has hostname already set", func() {
 		const (
 			appName     = "app-explicit-host"
 			tenantRef   = "tn-beta"
@@ -127,19 +127,19 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app := newLoopRuntimeApplicationCR(appName, tenantRef, project, env, serviceName)
 			app.Spec.Hostname = hostname
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 		})
 
 		It("should preserve the existing hostname", func() {
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Spec.Hostname).To(Equal(hostname))
 			})
 		})
 
 		It("should set URL from the explicit hostname", func() {
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Status.URL).To(Equal("https://custom.example.com"))
 			})
 		})
@@ -147,7 +147,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		AfterAll(func() {
 			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
-			route := &loopzerov1.ExposedRoute{}
+			route := &loopruntimev1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
 				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 					route.Finalizers = nil
@@ -170,7 +170,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app := newLoopRuntimeApplicationCR(appName, tenantRef, project, env, serviceName)
 			app.Spec.AppName = ""
 			app.Spec.Hostname = legacyHostname
 			app.Labels = map[string]string{naming.LabelApp: serviceName}
@@ -178,7 +178,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		})
 
 		It("should replace the old default with the routed hostname, reading the app from its label", func() {
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Spec.Hostname).To(Equal(routedHostname))
 				g.Expect(app.Status.URL).To(Equal("https://" + routedHostname))
 			})
@@ -186,7 +186,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 
 		AfterAll(func() {
 			deleteAppWithFinalizer(appName)
-			route := &loopzerov1.ExposedRoute{}
+			route := &loopruntimev1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
 				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 					route.Finalizers = nil
@@ -206,18 +206,18 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app := newLoopRuntimeApplicationCR(appName, tenantRef, project, env, serviceName)
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
 			// Wait for initial reconcile
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
 				g.Expect(app.Status.ObservedGeneration).To(Equal(app.Generation))
 			})
 		})
 
 		It("should add the app-cleanup finalizer on creation", func() {
-			withApp(appName, func(g Gomega, app *loopzerov1.LoopZeroApplication) {
-				g.Expect(app.Finalizers).To(ContainElement("loopzero.io/app-cleanup"))
+			withApp(appName, func(g Gomega, app *loopruntimev1.LoopRuntimeApplication) {
+				g.Expect(app.Finalizers).To(ContainElement("runtime.getloopscale.com/app-cleanup"))
 			})
 		})
 
@@ -236,29 +236,29 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		It("should wait for ExposedRoutes to be gone, then remove finalizer", func() {
-			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app := newLoopRuntimeApplicationCR(appName, tenantRef, project, env, serviceName)
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
 			// Wait for Active + ExposedRoute created
 			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
+				var app loopruntimev1.LoopRuntimeApplication
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName, Namespace: "default",
 				}, &app)).To(Succeed())
 				g.Expect(app.Status.ObservedGeneration).To(Equal(app.Generation))
-				g.Expect(app.Finalizers).To(ContainElement("loopzero.io/app-cleanup"))
+				g.Expect(app.Finalizers).To(ContainElement("runtime.getloopscale.com/app-cleanup"))
 			}, timeout, interval).Should(Succeed())
 
 			// Verify ExposedRoute exists
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName + "-route", Namespace: "default",
 				}, &route)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
 			// Delete the application
-			var toDelete loopzerov1.LoopZeroApplication
+			var toDelete loopruntimev1.LoopRuntimeApplication
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: appName, Namespace: "default",
 			}, &toDelete)).To(Succeed())
@@ -270,7 +270,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// However, envtest GC may not fully process cascade, so we assist by
 			// explicitly deleting the route and then letting the controller remove its finalizer.
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName + "-route", Namespace: "default",
 				}, &route)
@@ -287,26 +287,26 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// The ExposureController will remove the route-cleanup finalizer on deletion.
 			// Wait for the ExposedRoute to be fully gone.
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName + "-route", Namespace: "default",
 				}, &route)
 				if err == nil {
 					// Still exists — check finalizer is gone (controller should remove it)
-					g.Expect(route.Finalizers).ToNot(ContainElement("loopzero.io/route-cleanup"),
+					g.Expect(route.Finalizers).ToNot(ContainElement("runtime.getloopscale.com/route-cleanup"),
 						"ExposureController should remove the finalizer on deletion")
 				}
 			}, timeout, interval).Should(Succeed())
 
 			// Application should eventually be fully deleted
 			Eventually(func(g Gomega) {
-				var deleted loopzerov1.LoopZeroApplication
+				var deleted loopruntimev1.LoopRuntimeApplication
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName, Namespace: "default",
 				}, &deleted)
 				if err == nil {
 					// Still exists — check finalizer is gone
-					g.Expect(deleted.Finalizers).ToNot(ContainElement("loopzero.io/app-cleanup"))
+					g.Expect(deleted.Finalizers).ToNot(ContainElement("runtime.getloopscale.com/app-cleanup"))
 				}
 				// Either NotFound or finalizer removed is success
 			}, 30*time.Second, interval).Should(Succeed())
@@ -323,12 +323,12 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			app := newLoopZeroApplicationCR(appName, tenantRef, project, env, serviceName)
+			app := newLoopRuntimeApplicationCR(appName, tenantRef, project, env, serviceName)
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
 			// Wait for initial reconcile
 			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
+				var app loopruntimev1.LoopRuntimeApplication
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName, Namespace: "default",
 				}, &app)).To(Succeed())
@@ -339,20 +339,20 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		It("should have exactly one ExposedRoute after re-reconcile", func() {
 			// Trigger re-reconcile via annotation update
 			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
+				var app loopruntimev1.LoopRuntimeApplication
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName, Namespace: "default",
 				}, &app)).To(Succeed())
 				if app.Annotations == nil {
 					app.Annotations = make(map[string]string)
 				}
-				app.Annotations["test.loopzero.io/retrigger"] = "true"
+				app.Annotations["test.runtime.getloopscale.com/retrigger"] = "true"
 				g.Expect(k8sClient.Update(ctx, &app)).To(Succeed())
 			}, timeout, interval).Should(Succeed())
 
 			// Wait for re-reconcile
 			Eventually(func(g Gomega) {
-				var app loopzerov1.LoopZeroApplication
+				var app loopruntimev1.LoopRuntimeApplication
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appName, Namespace: "default",
 				}, &app)).To(Succeed())
@@ -360,7 +360,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			}, timeout, interval).Should(Succeed())
 
 			// Count ExposedRoutes in namespace
-			var routes loopzerov1.ExposedRouteList
+			var routes loopruntimev1.ExposedRouteList
 			Expect(k8sClient.List(ctx, &routes)).To(Succeed())
 			count := 0
 			for _, r := range routes.Items {
@@ -374,7 +374,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		AfterAll(func() {
 			deleteAppWithFinalizer(appName)
 			// Also clean up the ExposedRoute (which now has a finalizer too)
-			route := &loopzerov1.ExposedRoute{}
+			route := &loopruntimev1.ExposedRoute{}
 			if err := k8sClient.Get(ctx, types.NamespacedName{Name: appName + "-route", Namespace: "default"}, route); err == nil {
 				_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 					route.Finalizers = nil
@@ -393,7 +393,7 @@ var _ = Describe("ApplicationController", Ordered, func() {
 	// two parents owned by different tenants produce children with
 	// distinct, NON-cross-contaminated labels. Pre-fix: ExposedRoute had
 	// no tenant label at all, so Loki/Prometheus queries scoped by
-	// `loopzero.io/tenant` silently returned empty.
+	// `runtime.getloopscale.com/tenant` silently returned empty.
 	Context("tenant scope propagation to child ExposedRoute (audit §6.E.4b)", func() {
 		const (
 			appA = "xt-app-a"
@@ -406,31 +406,31 @@ var _ = Describe("ApplicationController", Ordered, func() {
 		)
 
 		BeforeAll(func() {
-			Expect(k8sClient.Create(ctx, newLoopZeroApplicationCR(appA, tnA, proj, envP, svcN))).To(Succeed())
-			Expect(k8sClient.Create(ctx, newLoopZeroApplicationCR(appB, tnB, proj, envP, svcN))).To(Succeed())
+			Expect(k8sClient.Create(ctx, newLoopRuntimeApplicationCR(appA, tnA, proj, envP, svcN))).To(Succeed())
+			Expect(k8sClient.Create(ctx, newLoopRuntimeApplicationCR(appB, tnB, proj, envP, svcN))).To(Succeed())
 		})
 
 		It("should label ExposedRoute child with parent's tenant/project/env (tenant A)", func() {
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appA + "-route", Namespace: "default",
 				}, &route)).To(Succeed())
 				g.Expect(route.Labels).NotTo(BeNil(), "child must carry labels")
-				g.Expect(route.Labels["loopzero.io/tenant"]).To(Equal(tnA),
+				g.Expect(route.Labels["runtime.getloopscale.com/tenant"]).To(Equal(tnA),
 					"child ExposedRoute must carry parent tenant label")
-				g.Expect(route.Labels["loopzero.io/project"]).To(Equal(proj))
-				g.Expect(route.Labels["loopzero.io/environment"]).To(Equal(envP))
+				g.Expect(route.Labels["runtime.getloopscale.com/project"]).To(Equal(proj))
+				g.Expect(route.Labels["runtime.getloopscale.com/environment"]).To(Equal(envP))
 			}, timeout, interval).Should(Succeed())
 		})
 
 		It("should label tenant B's child with tenant B (no cross-contamination)", func() {
 			Eventually(func(g Gomega) {
-				var route loopzerov1.ExposedRoute
+				var route loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: appB + "-route", Namespace: "default",
 				}, &route)).To(Succeed())
-				g.Expect(route.Labels["loopzero.io/tenant"]).To(Equal(tnB),
+				g.Expect(route.Labels["runtime.getloopscale.com/tenant"]).To(Equal(tnB),
 					"child ExposedRoute for tenant B must NOT carry tenant A's label")
 			}, timeout, interval).Should(Succeed())
 		})
@@ -441,14 +441,14 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// the inverse of the per-app positive tests — it catches a
 			// reconcile bug where the controller might apply labels based
 			// on a global variable, env var, or process-wide tenant state.
-			var routes loopzerov1.ExposedRouteList
+			var routes loopruntimev1.ExposedRouteList
 			Expect(k8sClient.List(ctx, &routes)).To(Succeed())
 			for _, r := range routes.Items {
 				switch r.Spec.ApplicationRef {
 				case appA:
-					Expect(r.Labels["loopzero.io/tenant"]).To(Equal(tnA))
+					Expect(r.Labels["runtime.getloopscale.com/tenant"]).To(Equal(tnA))
 				case appB:
-					Expect(r.Labels["loopzero.io/tenant"]).To(Equal(tnB))
+					Expect(r.Labels["runtime.getloopscale.com/tenant"]).To(Equal(tnB))
 				}
 			}
 		})
@@ -458,17 +458,17 @@ var _ = Describe("ApplicationController", Ordered, func() {
 			// label off the child. The controller's CreateOrUpdate path
 			// must converge the label back to the parent's tenantRef on
 			// the next reconcile (triggered by any spec touch on parent).
-			var route loopzerov1.ExposedRoute
+			var route loopruntimev1.ExposedRoute
 			routeKey := types.NamespacedName{Name: appA + "-route", Namespace: "default"}
 			Expect(k8sClient.Get(ctx, routeKey, &route)).To(Succeed())
 
 			// Strip the tenant label and update.
 			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &route, func() {
-				delete(route.Labels, "loopzero.io/tenant")
+				delete(route.Labels, "runtime.getloopscale.com/tenant")
 			})).To(Succeed())
 
 			// Trigger reconcile by touching the parent (bump replicas).
-			var parent loopzerov1.LoopZeroApplication
+			var parent loopruntimev1.LoopRuntimeApplication
 			parentKey := types.NamespacedName{Name: appA, Namespace: "default"}
 			Expect(k8sClient.Get(ctx, parentKey, &parent)).To(Succeed())
 			Expect(operatortest.UpdateWithRetry(ctx, k8sClient, &parent, func() {
@@ -477,23 +477,23 @@ var _ = Describe("ApplicationController", Ordered, func() {
 
 			// Eventually, the controller restores the label.
 			Eventually(func(g Gomega) {
-				var got loopzerov1.ExposedRoute
+				var got loopruntimev1.ExposedRoute
 				g.Expect(k8sClient.Get(ctx, routeKey, &got)).To(Succeed())
-				g.Expect(got.Labels["loopzero.io/tenant"]).To(Equal(tnA),
+				g.Expect(got.Labels["runtime.getloopscale.com/tenant"]).To(Equal(tnA),
 					"controller must converge tenant label back to parent's tenantRef")
 			}, timeout, interval).Should(Succeed())
 		})
 
 		AfterAll(func() {
 			for _, name := range []string{appA, appB} {
-				appObj := &loopzerov1.LoopZeroApplication{}
+				appObj := &loopruntimev1.LoopRuntimeApplication{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: name, Namespace: "default"}, appObj); err == nil {
 					_ = operatortest.UpdateWithRetry(ctx, k8sClient, appObj, func() {
 						appObj.Finalizers = nil
 					})
 					_ = k8sClient.Delete(ctx, appObj)
 				}
-				route := &loopzerov1.ExposedRoute{}
+				route := &loopruntimev1.ExposedRoute{}
 				if err := k8sClient.Get(ctx, types.NamespacedName{Name: name + "-route", Namespace: "default"}, route); err == nil {
 					_ = operatortest.UpdateWithRetry(ctx, k8sClient, route, func() {
 						route.Finalizers = nil

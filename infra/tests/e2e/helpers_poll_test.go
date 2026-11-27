@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // M23 T3.1 (F20): PollUntil generic helper — canonical value-return closure
 // shape per blueprint D1 (matches operators↔tests boundary analysis:

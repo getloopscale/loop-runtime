@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placementadapter
 
@@ -13,14 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // tenantGVR is the GroupVersionResource for the Tenant CR. Hardcoded here
 // (instead of importing operators/api/v1) so the API has no operator-package
 // dependency.
 var tenantGVR = schema.GroupVersionResource{
-	Group:    "loopzero.io",
+	Group:    "runtime.getloopscale.com",
 	Version:  "v1",
 	Resource: "tenants",
 }
@@ -35,10 +35,10 @@ type TenantCRCellPatcher struct {
 var _ placement.TenantCRPatcher = (*TenantCRCellPatcher)(nil)
 
 // NewTenantCRCellPatcher patches Tenant CRs in namespace (default
-// "loopzero-system", where the tenant operator keeps them).
+// "loop-runtime-system", where the tenant operator keeps them).
 func NewTenantCRCellPatcher(client dynamic.Interface, namespace string) *TenantCRCellPatcher {
 	if namespace == "" {
-		namespace = "loopzero-system"
+		namespace = "loop-runtime-system"
 	}
 	return &TenantCRCellPatcher{client: client, namespace: namespace}
 }

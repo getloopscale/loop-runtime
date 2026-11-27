@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -10,25 +10,27 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/preview/previewadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/preview/previewadapter"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/preview"
+	"github.com/getloopscale/loop-runtime/api/internal/preview"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/github"
-	ghwebhook "github.com/getloopscale/loopzero/api/internal/github/webhook"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationsadapter"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositoriesadapter"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	ghwebhook "github.com/getloopscale/loop-runtime/api/internal/github/webhook"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositoriesadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // GitHubDeps holds GitHub App integration components.
@@ -57,6 +59,7 @@ func setupGitHub(
 	orch *builds.BuildOrchestrator,
 	k8sDeps *K8sDeps,
 	cfg config.Config,
+	buildQuota github.BuildQuota,
 	shutdownCtx context.Context,
 	logger *slog.Logger,
 ) *GitHubDeps {
@@ -95,17 +98,27 @@ func setupGitHub(
 	// installation-token mint.
 	var integrationsHandler *integrationshttp.IntegrationsGitHubHandler
 	if ghAppClient != nil {
-		statusNotifier := github.NewStatusNotifier(ghAppClient, &repositoriesadapter.RepoLookupAdapter{Store: repoStore}, &buildsadapter.BuildLookupAdapter{Store: stores.BuildStore}, cfg.BaseDomain, logger)
+		statusNotifier := github.NewStatusNotifier(ghAppClient, &repositoriesadapter.RepoLookupAdapter{Store: repoStore}, &buildsadapter.BuildLookupAdapter{Store: stores.BuildStore}, commitStatusDomain(cfg), logger)
 		if statusNotifier != nil {
 			release.RegisterReleaseActivatedCallback(statusNotifier.OnBuildSucceeded)
 			release.RegisterBuildFailedCallback(statusNotifier.OnBuildFailed)
+			release.RegisterDeployFailedCallback(func(ctx context.Context, failure release.DeployFailure) {
+				statusNotifier.OnDeployFailed(ctx, failure.TenantID, failure.ProjectName, failure.BuildID, failure.Reason, failure.Superseded)
+			})
 			logger.Info("github: commit status callbacks registered (global)")
 		}
+		// An installation is bound to a tenant by the claim endpoint, after
+		// GitHub confirms through the App's user authorization that the user
+		// can access it. Listing repositories and connecting one require that
+		// binding.
 		integrationsHandler = integrationshttp.NewIntegrationsGitHubHandler(
 			&integrationsadapter.InstallationRepoListerAdapter{Client: ghAppClient},
 			&integrationsadapter.InstallationLookupAdapter{Store: repoStore},
+		).WithInstallationClaims(
+			newUserInstallationSource(ghAppClient.AppID(), cfg, logger),
+			&integrationsadapter.InstallationClaimAdapter{Store: repoStore},
 		)
-		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations/{id}/repositories")
+		logger.Info("github: integrations handler registered", "endpoint", "/api/v1/integrations/github/installations")
 	}
 
 	// Auto-deployer — handles push → download source → upload S3 → submit build.
@@ -124,12 +137,7 @@ func setupGitHub(
 	}
 	var autoDeployer *github.AutoDeployer
 	if ghAppClient != nil && buildSub != nil {
-		autoDeployer = github.NewAutoDeployer(github.AutoDeployConfig{
-			AppClient:      ghAppClient,
-			ObjectStore:    stores.ObjUploader,
-			BuildSubmitter: buildSub,
-			Logger:         logger,
-		})
+		autoDeployer = github.NewAutoDeployer(autoDeployConfig(cfg, ghAppClient, stores.ObjUploader, buildSub, buildQuota, logger))
 		// Wire connect-then-deploy onto the RepositoryHandler so POST
 		// /api/v1/projects/{name}/connect dispatches an immediate HEAD
 		// deploy after a successful link.
@@ -217,6 +225,27 @@ func setupGitHub(
 	}
 }
 
+// newUserInstallationSource builds the GitHub side of the installation claim
+// from the App's OAuth client credentials (GITHUB_APP_CLIENT_ID and
+// GITHUB_APP_CLIENT_SECRET, which arrive in the same Secret as the App's id
+// and private key). It returns nil when either is missing: the claim endpoint
+// then answers 503, and no installation can be bound until they are set.
+func newUserInstallationSource(appID int64, cfg config.Config, logger *slog.Logger) integrationshttp.UserInstallationSource {
+	client, err := github.NewUserAccessClient(github.UserAccessConfig{
+		AppID:        appID,
+		ClientID:     os.Getenv("GITHUB_APP_CLIENT_ID"),
+		ClientSecret: os.Getenv("GITHUB_APP_CLIENT_SECRET"),
+		WebBaseURL:   cfg.GitHubWebBaseURL,
+		APIBaseURL:   cfg.GitHubAPIBaseURL,
+	})
+	if err != nil {
+		logger.Warn("github: GITHUB_APP_CLIENT_ID or GITHUB_APP_CLIENT_SECRET not set; installations cannot be claimed and no repository can be connected",
+			"error", err)
+		return nil
+	}
+	return &integrationsadapter.UserInstallationSourceAdapter{Client: client}
+}
+
 // newRepositoryStore builds the store of GitHub installations and repository
 // links on the cross-tenant pool. Both are global objects: the webhook arrives
 // with no tenant and resolves the owner from them, and the API's authorization
@@ -227,4 +256,52 @@ func setupGitHub(
 // (queries/repositories.sql), and the handlers enforce ownership.
 func newRepositoryStore(crossTenant db.DBTX) *store.PostgresRepositoryStore {
 	return &store.PostgresRepositoryStore{DB: crossTenant}
+}
+
+// autoDeployConfig is the push deploy's configuration. It uploads source bundles to
+// cfg.SourceBucket, the bucket a CLI upload uses, instead of the auto-deployer's default.
+func autoDeployConfig(cfg config.Config, app *github.AppClient, objects github.ObjectUploader, builds github.BuildSubmitter, quota github.BuildQuota, logger *slog.Logger) github.AutoDeployConfig {
+	return github.AutoDeployConfig{
+		AppClient:      app,
+		ObjectStore:    objects,
+		BuildSubmitter: builds,
+		BuildQuota:     quota,
+		SourceBucket:   cfg.SourceBucket,
+		Logger:         logger,
+	}
+}
+
+// pushBuildQuota gates a push on the plan's builds per month with the limiter
+// and the usage count the deploy route's gate reads.
+type pushBuildQuota struct {
+	limiter    *enforcement.PlanLimiter
+	builds     enforcement.UsageCounter
+	upgradeURL string
+}
+
+// newPushBuildQuota returns nil without a limiter: a boot with no database has
+// no plan to enforce, the rule the route's middleware follows.
+func newPushBuildQuota(limiter *enforcement.PlanLimiter, builds enforcement.UsageCounter, upgradeURL string) github.BuildQuota {
+	if limiter == nil || builds == nil {
+		return nil
+	}
+	return pushBuildQuota{limiter: limiter, builds: builds, upgradeURL: upgradeURL}
+}
+
+func (q pushBuildQuota) CheckBuildQuota(ctx context.Context, tenantID string) (github.BuildQuotaResult, error) {
+	result, err := q.limiter.CheckUsage(ctx, tenantID, "builds_per_month", q.builds)
+	if err != nil {
+		return github.BuildQuotaResult{}, err
+	}
+	if result.Allowed {
+		return github.BuildQuotaResult{Allowed: true}, nil
+	}
+	return github.BuildQuotaResult{Message: policy.PlanLimitMessage(result), UpgradeURL: q.upgradeURL}, nil
+}
+
+// commitStatusDomain is the domain the commit status's app link is composed on:
+// the public domain users reach the app on, the base domain only where no public
+// one is configured.
+func commitStatusDomain(cfg config.Config) string {
+	return release.UserFacingDomain(cfg.PublicDomain, cfg.BaseDomain)
 }

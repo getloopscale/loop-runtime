@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -48,12 +48,12 @@ import (
 // releasesUniqueDBURL mirrors secretL19DBURL. Kept inline (NOT in a
 // shared helper) so the test file is self-contained — explicit per
 // plan T5.1 acceptance criteria.
-// releasesUniqueDBURL is the cross-tenant worker role when LOOPZERO_WORKER_DATABASE_URL is
+// releasesUniqueDBURL is the cross-tenant worker role when LOOP_RUNTIME_WORKER_DATABASE_URL is
 // set: these fixtures write rows of arbitrary tenants with no tenant scope, which under
 // fail-closed RLS only the *_worker_cross_tenant policies admit — the owner lost its
 // maintenance policies in 000064 (#387).
 func releasesUniqueDBURL() string {
-	if u := os.Getenv("LOOPZERO_WORKER_DATABASE_URL"); u != "" {
+	if u := os.Getenv("LOOP_RUNTIME_WORKER_DATABASE_URL"); u != "" {
 		return u
 	}
 	return secretL19DBURL()
@@ -280,9 +280,9 @@ func TestReleases_PreFlightCheck_DetectsExistingViolations(t *testing.T) {
 	// Dropping the index is DDL (the owner's), and the seed rows need a role RLS
 	// admits unscoped; only a superuser is both, so the test runs on the audit
 	// superuser the integration job already provides.
-	superURL := os.Getenv("LOOPZERO_RLS_AUDIT_SUPERUSER_URL")
+	superURL := os.Getenv("LOOP_RUNTIME_RLS_AUDIT_SUPERUSER_URL")
 	if superURL == "" {
-		t.Skip("needs LOOPZERO_RLS_AUDIT_SUPERUSER_URL to drop the index and seed rows under RLS — https://github.com/getloopscale/loopzero/issues/387")
+		t.Skip("needs LOOP_RUNTIME_RLS_AUDIT_SUPERUSER_URL to drop the index and seed rows under RLS — https://github.com/getloopscale/loop-runtime/issues/387")
 	}
 	pool := releasesPoolAt(t, superURL)
 	requireReleasesUniqueIndex(t, pool)

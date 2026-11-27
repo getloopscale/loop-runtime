@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Down for 000048 — drop split fns first (call period_end), then period fns.
 DROP FUNCTION IF EXISTS metering_split_head(timestamptz, interval);

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -10,9 +10,9 @@ import (
 	"testing"
 )
 
-// loopzero-api refuses to boot on a request pool that can bypass RLS
+// loop-runtime-api refuses to boot on a request pool that can bypass RLS
 // (db.AssertRequestPoolIsolated), so its DATABASE_URL must be the non-owner
-// `loopzero_api` role and its background pool `loopzero_worker`. Until #396 the
+// `loop_runtime_api` role and its background pool `loop_runtime_worker`. Until #396 the
 // credentials Secret carried one URL, the table owner's, and every fresh install
 // produced an API that exited at boot. These tests run generate-secrets.sh for
 // real — only kubectl is faked — and read what it writes into the Secret.
@@ -21,7 +21,7 @@ const dbRolesProfile = "generate-secrets-db-roles"
 
 // secretRecordEnv names the file the fake kubectl appends each created Secret's
 // arguments to, one `name<TAB>arg` line per --from-literal.
-const secretRecordEnv = "LOOPZERO_FAKE_SECRET_RECORD"
+const secretRecordEnv = "LOOP_RUNTIME_FAKE_SECRET_RECORD"
 
 func init() {
 	registerFakes(dbRolesProfile, map[string]fakeTool{
@@ -53,7 +53,7 @@ func init() {
 }
 
 // dbCredentials runs the script and returns the literals it put into
-// loopzero-system/loopzero-db-credentials.
+// loop-runtime-system/loop-runtime-db-credentials.
 func dbCredentials(t *testing.T, env ...string) map[string]string {
 	t.Helper()
 	record := t.TempDir() + "/secrets.tsv"
@@ -69,14 +69,14 @@ func dbCredentials(t *testing.T, env ...string) map[string]string {
 	got := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
 		name, literal, _ := strings.Cut(line, "\t")
-		if name != "loopzero-db-credentials" {
+		if name != "loop-runtime-db-credentials" {
 			continue
 		}
 		key, value, _ := strings.Cut(literal, "=")
 		got[key] = value
 	}
 	if len(got) == 0 {
-		t.Fatalf("loopzero-db-credentials was never created:\n%s", run)
+		t.Fatalf("loop-runtime-db-credentials was never created:\n%s", run)
 	}
 	return got
 }
@@ -85,7 +85,7 @@ func roleOf(t *testing.T, creds map[string]string, key string) string {
 	t.Helper()
 	raw, ok := creds[key]
 	if !ok {
-		t.Fatalf("loopzero-db-credentials has no %q key; keys: %v", key, keysOf(creds))
+		t.Fatalf("loop-runtime-db-credentials has no %q key; keys: %v", key, keysOf(creds))
 	}
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -104,38 +104,38 @@ func keysOf(m map[string]string) []string {
 
 func TestTheRequestPoolURLConnectsAsTheNonOwnerRole(t *testing.T) {
 	creds := dbCredentials(t)
-	if got := roleOf(t, creds, "api-uri"); got != "loopzero_api" {
-		t.Errorf("api-uri connects as %q, want loopzero_api — loopzero-api refuses to serve requests as any role that can bypass RLS", got)
+	if got := roleOf(t, creds, "api-uri"); got != "loop_runtime_api" {
+		t.Errorf("api-uri connects as %q, want loop_runtime_api — loop-runtime-api refuses to serve requests as any role that can bypass RLS", got)
 	}
 }
 
 func TestTheBackgroundPoolURLConnectsAsTheWorkerRole(t *testing.T) {
 	creds := dbCredentials(t)
-	if got := roleOf(t, creds, "worker-uri"); got != "loopzero_worker" {
-		t.Errorf("worker-uri connects as %q, want loopzero_worker", got)
+	if got := roleOf(t, creds, "worker-uri"); got != "loop_runtime_worker" {
+		t.Errorf("worker-uri connects as %q, want loop_runtime_worker", got)
 	}
 }
 
-// The control plane connects as `loopzero_cloud`, the non-owner role migration 000063
-// created for it: loopzero-cloud refuses to serve as a role holding an unnamed
+// The control plane connects as `loop_console`, the non-owner role migration 000063
+// created for it: loop-console refuses to serve as a role holding an unnamed
 // cross-tenant privilege — superuser, BYPASSRLS, or table owner (#438).
 func TestTheControlPlaneURLConnectsAsTheCloudRole(t *testing.T) {
 	creds := dbCredentials(t)
-	if got := roleOf(t, creds, "cloud-uri"); got != "loopzero_cloud" {
-		t.Errorf("cloud-uri connects as %q, want loopzero_cloud — loopzero-cloud refuses to serve as the owner", got)
+	if got := roleOf(t, creds, "cloud-uri"); got != "loop_console" {
+		t.Errorf("cloud-uri connects as %q, want loop_console — loop-console refuses to serve as the owner", got)
 	}
 }
 
 // The owner URL stays: migrations run as the owner.
 func TestTheOwnerURLIsKeptForMigrations(t *testing.T) {
 	creds := dbCredentials(t)
-	if got := roleOf(t, creds, "uri"); got != "loopzero" {
-		t.Errorf("uri connects as %q, want the owner loopzero", got)
+	if got := roleOf(t, creds, "uri"); got != "loop-runtime" {
+		t.Errorf("uri connects as %q, want the owner loop_runtime", got)
 	}
 }
 
 func TestTheRolePasswordsCanBeOverridden(t *testing.T) {
-	creds := dbCredentials(t, "LOOPZERO_DB_API_PASSWORD=api-override", "LOOPZERO_DB_WORKER_PASSWORD=worker-override", "LOOPZERO_DB_CLOUD_PASSWORD=cloud-override")
+	creds := dbCredentials(t, "LOOP_RUNTIME_DB_API_PASSWORD=api-override", "LOOP_RUNTIME_DB_WORKER_PASSWORD=worker-override", "LOOP_RUNTIME_DB_CLOUD_PASSWORD=cloud-override")
 	if creds["api-password"] != "api-override" || creds["worker-password"] != "worker-override" {
 		t.Errorf("overrides ignored: api-password=%q worker-password=%q", creds["api-password"], creds["worker-password"])
 	}

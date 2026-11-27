@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -33,16 +33,16 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
 )
 
 // CellTenantCounts returns the number of tenants per cell_id.
-// Used by CellMetricsCollector to emit loopzero_cell_tenant_count gauge.
+// Used by CellMetricsCollector to emit loop_runtime_cell_tenant_count gauge.
 func (s *PostgresCellStore) CellTenantCounts(ctx context.Context) (map[string]int, error) {
 	bridge := s.bridge()
 	q := generated.New()

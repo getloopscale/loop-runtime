@@ -1,24 +1,24 @@
 # Wildcard certificate + TLSStore for Traefik.
 # Applied AFTER Traefik install (requires traefik namespace + TLSStore CRD).
 ---
-# Wildcard certificate for *.loopzero.local — covers all tenant app hostnames.
+# Wildcard certificate for *.loop-runtime.local — covers all tenant app hostnames.
 # In production, this would be replaced by per-tenant or per-environment certificates
 # issued by an ACME ClusterIssuer.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: loopzero-wildcard
+  name: loop-runtime-wildcard
   namespace: traefik
 spec:
-  secretName: loopzero-wildcard-tls
+  secretName: loop-runtime-wildcard-tls
   duration: 8760h  # 1 year
   renewBefore: 720h  # 30 days
-  commonName: "*.loopzero.local"
+  commonName: "*.loop-runtime.local"
   dnsNames:
-    - "*.loopzero.local"
-    - "*.*.loopzero.local"
+    - "*.loop-runtime.local"
+    - "*.*.loop-runtime.local"
   issuerRef:
-    name: loopzero-ca-issuer
+    name: loop-runtime-ca-issuer
     kind: ClusterIssuer
     group: cert-manager.io
 ---
@@ -31,4 +31,4 @@ metadata:
   namespace: traefik
 spec:
   defaultCertificate:
-    secretName: loopzero-wildcard-tls
+    secretName: loop-runtime-wildcard-tls

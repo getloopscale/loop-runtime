@@ -812,6 +812,42 @@ func (q *Queries) InsertCustomDomainWithCFZone(ctx context.Context, db DBTX, arg
 	return err
 }
 
+const listActiveCustomDomainHosts = `-- name: ListActiveCustomDomainHosts :many
+SELECT domain, tenant_id
+FROM custom_domains
+WHERE status = 'active'
+ORDER BY domain ASC
+`
+
+type ListActiveCustomDomainHostsRow struct {
+	Domain   string `json:"domain"`
+	TenantID string `json:"tenant_id"`
+}
+
+// tenantpredicate:exempt
+// Every host the edge may route, with the tenant whose cell serves it. Read by
+// the edge route index, which spans tenants. No LIMIT: a host left out of the
+// index is a host the edge refuses.
+func (q *Queries) ListActiveCustomDomainHosts(ctx context.Context, db DBTX) ([]ListActiveCustomDomainHostsRow, error) {
+	rows, err := db.Query(ctx, listActiveCustomDomainHosts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListActiveCustomDomainHostsRow
+	for rows.Next() {
+		var i ListActiveCustomDomainHostsRow
+		if err := rows.Scan(&i.Domain, &i.TenantID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listActiveCustomDomainsByApp = `-- name: ListActiveCustomDomainsByApp :many
 SELECT id, tenant_id, project_name, app_name, environment, domain, status,
        verification_token, verified_at, tls_status, tls_expires_at,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metering
 
@@ -15,8 +15,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // tenantCRNamespace is the canonical namespace holding every Tenant CR. Mirrors
@@ -39,7 +39,7 @@ type CRTenantLister struct {
 }
 
 // ListActiveTenants returns the IDs of Tenant CRs whose observed status.phase is
-// Active, scoped to the canonical loopzero-system namespace (C2) and filtered on the
+// Active, scoped to the canonical loop-runtime-system namespace (C2) and filtered on the
 // TenantPhaseActive CONSTANT (T1.3 — never a hardcoded string). Provisioning /
 // Suspended / PendingDeletion / Deleting are skipped: a non-Active tenant reserves
 // no billable compute the loop should meter (ADR-5), and metering a draining

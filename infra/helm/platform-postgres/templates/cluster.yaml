@@ -1,0 +1,235 @@
+{{- /* SPDX-License-Identifier: Apache-2.0 */ -}}
+{{- $serverName := .Values.backup.serverName | default .Release.Name }}
+{{- if and .Values.backup.bucket (not .Values.backup.roleArn) }}
+{{- fail "platform-postgres: backup.roleArn is required with backup.bucket: the instances reach the bucket as that role" }}
+{{- end }}
+{{- if and .Values.recovery.serverName (not .Values.backup.bucket) }}
+{{- fail "platform-postgres: recovery.serverName needs backup.bucket, the bucket the backups are read from" }}
+{{- end }}
+{{- if and .Values.recovery.serverName (eq .Values.recovery.serverName $serverName) }}
+{{- fail (printf "platform-postgres: backup.serverName must differ from recovery.serverName (%q): the recovered cluster would write WAL over the archive it is recovered from" $serverName) }}
+{{- end }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/part-of: loop-runtime-data-plane
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  instances: {{ .Values.instances }}
+  imageName: {{ required "platform-postgres: image is required" .Values.image | quote }}
+  # A budget over one instance allows no disruption at all, so no node holding it could be
+  # drained. With standbys the operator switches over first and the budget protects them.
+  enablePDB: {{ gt (int .Values.instances) 1 }}
+  # A change of CPU or memory resizes the running pod, and restarts it only when the
+  # node cannot fit the new size. Needs Kubernetes 1.33.
+  resourcesUpdateStrategy: inPlace
+  {{- if gt (int .Values.instances) 1 }}
+  # Promote a standby before the primary restarts, so an update costs a switchover and
+  # not the primary's downtime.
+  primaryUpdateMethod: switchover
+  {{- end }}
+  affinity:
+    enablePodAntiAffinity: true
+    topologyKey: {{ .Values.spread.topologyKey | quote }}
+    podAntiAffinityType: {{ .Values.spread.type }}
+  bootstrap:
+    {{- if .Values.recovery.serverName }}
+    # Built from the backups of recovery.serverName in the bucket, replaying its WAL to
+    # the end of the archive or to recovery.targetTime.
+    recovery:
+      source: recovery
+      {{- with .Values.recovery.targetTime }}
+      recoveryTarget:
+        targetTime: {{ . | quote }}
+      {{- end }}
+    {{- else }}
+    initdb:
+      # Detects a page the storage corrupted. PostgreSQL before 18 leaves it off, so it
+      # is stated whatever the image. It can only be chosen when the cluster is created.
+      dataChecksums: true
+    {{- end }}
+  {{- if .Values.recovery.serverName }}
+  externalClusters:
+    - name: recovery
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: {{ .Release.Name }}
+          serverName: {{ .Values.recovery.serverName | quote }}
+  {{- end }}
+  {{- if .Values.backup.bucket }}
+  # WAL is archived, and base backups taken, by the Barman Cloud plugin into the bucket
+  # of the ObjectStore below, under the server name. The instances hold no key: their
+  # service account names the role they assume.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: {{ .Release.Name }}
+        serverName: {{ $serverName | quote }}
+  serviceAccountTemplate:
+    metadata:
+      annotations:
+        eks.amazonaws.com/role-arn: {{ .Values.backup.roleArn | quote }}
+  {{- end }}
+  storage:
+    size: {{ .Values.storage.size }}
+    {{- with .Values.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  {{- with .Values.walStorage.size }}
+  # WAL on its own volume: a full data volume cannot stop WAL from being written, and
+  # the two are sized apart. The operator does not support removing it once set.
+  walStorage:
+    size: {{ . }}
+    {{- with $.Values.walStorage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  # Requests equal to limits put the pod in the Guaranteed class: it is the last to be
+  # evicted and its memory is never overcommitted.
+  resources:
+    requests: { cpu: {{ .Values.resources.cpu | quote }}, memory: {{ .Values.resources.memory | quote }} }
+    limits: { cpu: {{ .Values.resources.cpu | quote }}, memory: {{ .Values.resources.memory | quote }} }
+  postgresql:
+    # The operator ends pg_hba with `host all all all scram-sha-256`, which admits a
+    # plaintext connection. The first matching rule wins and these come before it.
+    pg_hba:
+      - hostssl all all all scram-sha-256
+      - hostnossl all all all reject
+    {{- with .Values.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if gt (int .Values.instances) 1 }}
+    # A commit is acknowledged once one standby has it, whichever answers first.
+    synchronous:
+      method: any
+      number: 1
+      dataDurability: {{ .Values.synchronous.dataDurability }}
+      # The spread above is a preference, so two instances can share a failure domain.
+      # The standby that acknowledges a commit is taken from another one.
+      nodeFailureDomainKeys:
+        - {{ .Values.spread.topologyKey | quote }}
+    {{- end }}
+  {{- with .Values.databases }}
+  # Each service connects as its own role. The operator creates the role and keeps its
+  # password equal to the Secret's, so rotating the Secret rotates the role.
+  managed:
+    roles:
+      {{- range . }}
+      - name: {{ required "platform-postgres: databases[].owner is required" .owner | quote }}
+        ensure: present
+        login: true
+        passwordSecret:
+          name: {{ required "platform-postgres: databases[].passwordSecret is required" .passwordSecret | quote }}
+      {{- end }}
+  {{- end }}
+{{- range .Values.databases }}
+---
+# Retain: deleting this object, or the release, leaves the database and its data in place.
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ $.Release.Name }}-{{ .name }}
+  labels:
+    app.kubernetes.io/name: {{ $.Release.Name }}
+    app.kubernetes.io/part-of: loop-runtime-data-plane
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  cluster:
+    name: {{ $.Release.Name }}
+  name: {{ required "platform-postgres: databases[].name is required" .name | quote }}
+  owner: {{ .owner | quote }}
+  ensure: present
+  databaseReclaimPolicy: retain
+{{- end }}
+---
+# Who reaches the cluster's pods: the operator (instance status and SQL), the other
+# instances (replication), the services that keep data here, and the metrics scraper.
+# Egress is left open: the pods reach the API server and the backup store.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/part-of: loop-runtime-data-plane
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ .Release.Name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.network.operatorNamespace }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ .Release.Name }}
+      ports:
+        - { protocol: TCP, port: 8000 }
+        - { protocol: TCP, port: 5432 }
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.network.clientPodLabels | nindent 14 }}
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.network.metricsNamespace }}
+      ports:
+        - { protocol: TCP, port: 9187 }
+{{- if .Values.backup.bucket }}
+---
+# Where the backups live. Credentials come from the role of the instances' service
+# account. Objects are encrypted by the bucket's own default.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/part-of: loop-runtime-data-plane
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  # Base backups older than this, and the WAL only they need, are deleted by the plugin.
+  # It is also how far back a recovery can go.
+  retentionPolicy: {{ .Values.backup.retention | quote }}
+  configuration:
+    destinationPath: {{ printf "s3://%s/" .Values.backup.bucket | quote }}
+    s3Credentials:
+      inheritFromIAMRole: true
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+---
+# A base backup on a schedule, and one as soon as the cluster exists: until the first
+# base backup the archived WAL recovers nothing.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: {{ .Release.Name }}
+    app.kubernetes.io/part-of: loop-runtime-data-plane
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  cluster:
+    name: {{ .Release.Name }}
+  # Six fields, seconds first.
+  schedule: {{ .Values.backup.schedule | quote }}
+  immediate: true
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io
+{{- end }}

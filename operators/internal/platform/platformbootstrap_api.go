@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform
 
@@ -13,15 +13,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // reconcileAPIPhase handles the WaitingForAPI phase.
 // Steps: check API health, resolve bootstrap secret, call bootstrap endpoint for DB seeding.
-func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) reconcileAPIPhase(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap, maxRetries int) (ctrl.Result, error) {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "bootstrap.api.configure")
 	defer span.End()
 	logger := log.FromContext(ctx)
@@ -75,7 +75,7 @@ func (r *PlatformBootstrapReconciler) checkAPIHealth(ctx context.Context, health
 // resolveBootstrapSecret reads the bootstrap auth token from the Secret referenced
 // in spec.api.bootstrapSecretRef. Returns empty string if no secretRef is configured
 // (for backward compatibility with environments where SEC-003 is not enforced).
-func (r *PlatformBootstrapReconciler) resolveBootstrapSecret(ctx context.Context, pb *loopzerov1.PlatformBootstrap) (string, error) {
+func (r *PlatformBootstrapReconciler) resolveBootstrapSecret(ctx context.Context, pb *loopruntimev1.PlatformBootstrap) (string, error) {
 	if pb.Spec.API.BootstrapSecretRef == nil {
 		return "", nil
 	}

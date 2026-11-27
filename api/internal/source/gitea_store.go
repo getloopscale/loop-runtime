@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -22,8 +22,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/getloopscale/loopzero/api/internal/gitclient"
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/api/internal/gitclient"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // Plan v1.2 T1.2 (cutover-deep-review-hardening): DNS-1123 validation for
@@ -47,9 +47,9 @@ var ErrInvalidTenantOrProject = errors.New("invalid tenant or project ID")
 
 // GiteaSourceStoreConfig holds configuration for connecting to Gitea.
 type GiteaSourceStoreConfig struct {
-	BaseURL string // e.g., "http://gitea-http.loopzero-system.svc:3000"
+	BaseURL string // e.g., "http://gitea-http.loop-runtime-system.svc:3000"
 	Token   string // Gitea access token for push authentication
-	OrgName string // e.g., "loopzero"
+	OrgName string // e.g., "loop-runtime"
 }
 
 // GiteaSourceStore implements SourceStore by pushing git bundles to Gitea
@@ -91,16 +91,16 @@ func sourceRepoName(tenantID, projectID string) (string, error) {
 		if !projectIDRE.MatchString(projectID) {
 			return "", fmt.Errorf("%w: projectID must match DNS-1123 lowercase alphanumeric+hyphens, 1-63 chars (got %q)", ErrInvalidTenantOrProject, projectID)
 		}
-		return fmt.Sprintf("loopzero-source-%s-%s", tenantID, projectID), nil
+		return fmt.Sprintf("loop-runtime-source-%s-%s", tenantID, projectID), nil
 	}
-	return fmt.Sprintf("loopzero-source-%s", tenantID), nil
+	return fmt.Sprintf("loop-runtime-source-%s", tenantID), nil
 }
 
 // PushBundle receives a source bundle from the CLI (git bundle or tar.gz),
 // detects the format, and pushes to the Gitea source repo.
 // Returns PushResult with SourceID and optionally a GitBundlePath for S3.
 //
-// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loopzero-cloud#31):
+// Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.2 (closes loop-console#31):
 // PushBundle now returns typed *PushBundleError for each failure mode so
 // SourceHandler.Upload can map to a specific actionable Message instead of
 // the misleading legacy "Ensure your git history is clean" string. Downstream
@@ -287,14 +287,14 @@ func classifyPushText(lower string) pushErrClass {
 
 // pushGitBundle handles git bundle format (original flow).
 func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectID string, data []byte) (string, error) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_git",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.source.push_git",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", tenantID),
-			attribute.String("loopzero.project", projectID),
+			attribute.String("loop-runtime.tenant", tenantID),
+			attribute.String("loop-runtime.project", projectID),
 		))
 	defer span.End()
 
-	tmpDir, err := os.MkdirTemp("", "loopzero-source-*")
+	tmpDir, err := os.MkdirTemp("", "loop-runtime-source-*")
 	if err != nil {
 		return "", fmt.Errorf("gitea source: create temp dir: %w", err)
 	}
@@ -345,8 +345,8 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 		return "", fmt.Errorf("gitea source: set remote: %w", err)
 	}
 
-	_ = s.git.Run(ctx, repoDir, "config", "user.email", "loopzero-api@loopzero.io")
-	_ = s.git.Run(ctx, repoDir, "config", "user.name", "LoopZero API")
+	_ = s.git.Run(ctx, repoDir, "config", "user.email", "loop-runtime-api@runtime.getloopscale.com")
+	_ = s.git.Run(ctx, repoDir, "config", "user.name", "LoopRuntime API")
 
 	if err := s.git.RunWithAuth(ctx, repoDir, "push", "--force", "origin", "HEAD:refs/heads/main"); err != nil {
 		return "", fmt.Errorf("gitea source: git push: %w", err)
@@ -359,16 +359,16 @@ func (s *GiteaSourceStore) pushGitBundle(ctx context.Context, tenantID, projectI
 // Extracts the archive, computes a content hash, creates a git repo,
 // commits all files, pushes to Gitea, and creates a git bundle for S3.
 func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectID string, data []byte) (PushResult, error) {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.source.push_tar",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.source.push_tar",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", tenantID),
-			attribute.String("loopzero.project", projectID),
+			attribute.String("loop-runtime.tenant", tenantID),
+			attribute.String("loop-runtime.project", projectID),
 		))
 	defer span.End()
 
 	// tmpDir is NOT deferred for cleanup — the git bundle file lives inside it.
 	// The caller is responsible for cleaning up via PushResult.GitBundlePath's parent dir.
-	tmpDir, err := os.MkdirTemp("", "loopzero-tar-source-*")
+	tmpDir, err := os.MkdirTemp("", "loop-runtime-tar-source-*")
 	if err != nil {
 		return PushResult{}, fmt.Errorf("gitea source: create temp dir: %w", err)
 	}
@@ -416,8 +416,8 @@ func (s *GiteaSourceStore) pushTarBundle(ctx context.Context, tenantID, projectI
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: git init: %w", err)
 	}
-	_ = s.git.Run(ctx, repoDir, "config", "user.email", "loopzero-api@loopzero.io")
-	_ = s.git.Run(ctx, repoDir, "config", "user.name", "LoopZero API")
+	_ = s.git.Run(ctx, repoDir, "config", "user.email", "loop-runtime-api@runtime.getloopscale.com")
+	_ = s.git.Run(ctx, repoDir, "config", "user.name", "LoopRuntime API")
 	if err := s.git.Run(ctx, repoDir, "add", "-A"); err != nil {
 		_ = os.RemoveAll(tmpDir)
 		return PushResult{}, fmt.Errorf("gitea source: git add: %w", err)

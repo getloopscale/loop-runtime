@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretsync
 
@@ -13,11 +13,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // TestCreateSecret_OnError_DoesNotLogValue is the T2.7 DoD test
@@ -58,10 +57,9 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 			return true, nil, errors.New("mgmt cluster Create failed")
 		})
 
-		scheme := runtime.NewScheme()
-		dynFake := dynamicfake.NewSimpleDynamicClient(scheme)
+		dynFake := newRuntimeFake()
 
-		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
+		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loop-runtime-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretName}, secretValue)
 		if err == nil {
 			t.Fatal("expected error")
@@ -86,13 +84,12 @@ func TestCreateSecret_OnError_DoesNotLogValue(t *testing.T) {
 		// mgmt succeeds (default fake); runtime dynamic fails on create.
 		mgmtFake := fake.NewClientset()
 
-		scheme := runtime.NewScheme()
-		dynFake := dynamicfake.NewSimpleDynamicClient(scheme)
+		dynFake := newRuntimeFake()
 		dynFake.PrependReactor("create", "externalsecrets", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 			return true, nil, errors.New("runtime ExternalSecret create failed")
 		})
 
-		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loopzero-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
+		mgr := &SecretK8sManager{mgmtClient: mgmtFake, runtimeDynamic: dynFake, mgmtNamespace: "loop-runtime-system", tenantCells: fixedCell("cell-0"), runtimeCellID: "cell-0"}
 		err := mgr.CreateSecret(context.Background(), ports.SecretRef{TenantID: tenantID, Project: projectID, Environment: env, App: app, Name: secretName}, secretValue)
 		if err == nil {
 			t.Fatal("expected error")

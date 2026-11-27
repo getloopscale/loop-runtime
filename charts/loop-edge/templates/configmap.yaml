@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "loop-edge.labels" . | nindent 4 }}
+data:
+  Caddyfile: |
+    {{- include "loop-edge.caddyfile" . | nindent 4 }}

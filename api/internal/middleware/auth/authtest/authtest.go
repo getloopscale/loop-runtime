@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package authtest builds request contexts carrying an authenticated user,
 // for handler tests in other packages. Test-only by convention, like
@@ -9,7 +9,7 @@ package authtest
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 // Context returns a context holding the UserContext the auth middleware

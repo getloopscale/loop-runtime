@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 5 T5.5 — admin endpoint to pin
 // a tenant to a specific cell. Closes plan task T5.5 (CLI `--cell` flag
@@ -11,11 +11,11 @@
 //     (X-Service-Auth header, NOT user-bearer-token). Self-service
 //     bypass would let any tenant migrate its own workload across
 //     cells, breaking placement layer's capacity gate semantics.
-//   • The plan's "loopzero deploy --cell <id>" wording was loose; the
-//     SHIPPING shape is "loopzero admin tenants pin --cell <id> --tenant
+//   • The plan's "loopscale deploy --cell <id>" wording was loose; the
+//     SHIPPING shape is "loop-runtime admin tenants pin --cell <id> --tenant
 //     <id>". Wire-shape change captured here for the CLI to consume.
 //
-// Gated behind LOOPZERO_ADMIN_API=true (same flag as admin_evict). Requires
+// Gated behind LOOP_RUNTIME_ADMIN_API=true (same flag as admin_evict). Requires
 // X-Service-Auth header. Fails 403 without either.
 
 package placementhttp
@@ -28,10 +28,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/correlation"
-	audit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
+	"github.com/getloopscale/loop-runtime/api/internal/correlation"
+	audit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
 )
 
 // AdminPinCellInput is the body for POST /api/v1/admin/tenants/pin.
@@ -80,14 +80,14 @@ var validCellIDPattern = regexp.MustCompile(`^cell-[a-z0-9-]+$`)
 // vap-pinpath-exemption Phase 4 (security review MEET-2026-07-12-001 Condition 2):
 // a successful cell MOVE writes a TENANT_CELL_PINNED audit_log entry so the
 // placement change is forensically traceable now that the admission policy no
-// longer gates the loopzero-api SA on this path. audit may be nil (nil-safe — CI /
+// longer gates the loop-runtime-api SA on this path. audit may be nil (nil-safe — CI /
 // pinner-only wiring). The actor is the fixed string "admin:service-auth": this
-// route authenticates via a shared secret (LOOPZERO_ADMIN_SERVICE_AUTH_SECRET), which
+// route authenticates via a shared secret (LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET), which
 // carries no per-user subject — the raw secret is NEVER written to the audit body.
 func AdminPinCellHandler(pinner CellPinner, audit audit.AuditWriter, apiEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Feature flag gate (matches admin_evict semantics).
-		if !apiEnabled { // LOOPZERO_ADMIN_API, read once at boot
+		if !apiEnabled { // LOOP_RUNTIME_ADMIN_API, read once at boot
 			http.NotFound(w, r)
 			return
 		}

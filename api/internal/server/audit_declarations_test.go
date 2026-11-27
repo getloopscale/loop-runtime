@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -15,8 +15,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	mwaudit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // auditIdentity is what the audit row records for a mutation: a stable
@@ -28,34 +28,35 @@ type auditIdentity struct{ action, resourceType string }
 // is registered, so it can never be inferred wrongly from URL segments (the
 // segment heuristic recorded POST /projects/{name}/scale as project.created).
 var wantAuditIdentity = map[string]auditIdentity{
-	"POST /api/v1/source/upload":                        {"source.uploaded", "source"},
-	"POST /api/v1/projects":                             {"project.created", "project"},
-	"DELETE /api/v1/projects/{name}":                    {"project.deleted", "project"},
-	"DELETE /api/v1/projects/{name}/environments/{env}": {"environment.deleted", "environment"},
-	"POST /api/v1/secrets":                              {"secret.set", "secret"},
-	"POST /api/v1/secrets/bulk":                         {"secret.set", "secret"},
-	"DELETE /api/v1/secrets/{name}":                     {"secret.deleted", "secret"},
-	"POST /api/v1/builds":                               {"build.submitted", "build"},
-	"POST /api/v1/builds/{id}/cancel":                   {"build.cancelled", "build"},
-	"POST /api/v1/projects/{name}/scale":                {"project.scaled", "project"},
-	"POST /api/v1/projects/{name}/rollback":             {"rollback.executed", "release"},
-	"POST /api/v1/projects/{name}/promote":              {"release.promoted", "release"},
-	"POST /api/v1/teams/members":                        {"member.added", "member"},
-	"DELETE /api/v1/teams/members/{username}":           {"member.removed", "member"},
-	"PATCH /api/v1/teams/members/{username}":            {"member.role_changed", "member"},
-	"DELETE /api/v1/tenants/{id}":                       {"tenant.deleted", "tenant"},
-	"POST /api/v1/tenants/{id}/restore":                 {"tenant.restored", "tenant"},
-	"POST /api/v1/billing/portal":                       {"billing.portal_opened", "billing"},
-	"POST /api/v1/environments":                         {"environment.created", "environment"},
-	"DELETE /api/v1/environments/{name}":                {"environment.deleted", "environment"},
-	"POST /api/v1/domains":                              {"domain.added", "domain"},
-	"POST /api/v1/domains/{domain}/verify":              {"domain.verified", "domain"},
-	"DELETE /api/v1/domains/{domain}":                   {"domain.removed", "domain"},
-	"POST /api/v1/projects/{name}/connect":              {"repository.connected", "repository"},
-	"DELETE /api/v1/projects/{name}/connect":            {"repository.disconnected", "repository"},
-	"POST /api/v1/projects/{project}/previews":          {"preview.created", "preview"},
-	"DELETE /api/v1/projects/{project}/previews/{id}":   {"preview.deleted", "preview"},
-	"POST /api/v1/auth/team/switch":                     {"team.switched", "team"},
+	"POST /api/v1/source/upload":                           {"source.uploaded", "source"},
+	"POST /api/v1/projects":                                {"project.created", "project"},
+	"DELETE /api/v1/projects/{name}":                       {"project.deleted", "project"},
+	"DELETE /api/v1/projects/{name}/environments/{env}":    {"environment.deleted", "environment"},
+	"POST /api/v1/secrets":                                 {"secret.set", "secret"},
+	"POST /api/v1/secrets/bulk":                            {"secret.set", "secret"},
+	"DELETE /api/v1/secrets/{name}":                        {"secret.deleted", "secret"},
+	"POST /api/v1/builds":                                  {"build.submitted", "build"},
+	"POST /api/v1/builds/{id}/cancel":                      {"build.cancelled", "build"},
+	"POST /api/v1/projects/{name}/scale":                   {"project.scaled", "project"},
+	"POST /api/v1/projects/{name}/rollback":                {"rollback.executed", "release"},
+	"POST /api/v1/projects/{name}/promote":                 {"release.promoted", "release"},
+	"POST /api/v1/teams/members":                           {"member.added", "member"},
+	"DELETE /api/v1/teams/members/{username}":              {"member.removed", "member"},
+	"PATCH /api/v1/teams/members/{username}":               {"member.role_changed", "member"},
+	"DELETE /api/v1/tenants/{id}":                          {"tenant.deleted", "tenant"},
+	"POST /api/v1/tenants/{id}/restore":                    {"tenant.restored", "tenant"},
+	"POST /api/v1/billing/portal":                          {"billing.portal_opened", "billing"},
+	"POST /api/v1/environments":                            {"environment.created", "environment"},
+	"DELETE /api/v1/environments/{name}":                   {"environment.deleted", "environment"},
+	"POST /api/v1/domains":                                 {"domain.added", "domain"},
+	"POST /api/v1/domains/{domain}/verify":                 {"domain.verified", "domain"},
+	"DELETE /api/v1/domains/{domain}":                      {"domain.removed", "domain"},
+	"POST /api/v1/projects/{name}/connect":                 {"repository.connected", "repository"},
+	"DELETE /api/v1/projects/{name}/connect":               {"repository.disconnected", "repository"},
+	"POST /api/v1/integrations/github/installations/claim": {"github_installation.claimed", "github_installation"},
+	"POST /api/v1/projects/{project}/previews":             {"preview.created", "preview"},
+	"DELETE /api/v1/projects/{project}/previews/{id}":      {"preview.deleted", "preview"},
+	"POST /api/v1/auth/team/switch":                        {"team.switched", "team"},
 }
 
 // Each mutating route records exactly its declared identity, through the

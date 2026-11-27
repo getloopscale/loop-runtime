@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -13,16 +13,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/processing"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/processing"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // ReleaseConvergenceLoopConfig configures the release convergence loop.
@@ -89,6 +89,16 @@ type ReleaseConvergenceLoop struct {
 	// MEET-2026-03-31-023 T1-5: track sync retrigger attempts per release.
 	// Prevents infinite retry loops (max 3 retriggers per release).
 	syncRetriggers sync.Map // releaseID → int
+
+	// latest reads the newest release of an environment (set via
+	// WithLatestReleases). Nil skips the check for an overtaken release.
+	latest LatestReleases
+}
+
+// LatestReleases is the read the loop uses to tell whether a newer deploy of
+// the same environment replaced a pending release.
+type LatestReleases interface {
+	ListByEnv(ctx context.Context, tenantID, projectID, env string, limit int) ([]db.Release, error)
 }
 
 // NewReleaseConvergenceLoop creates the convergence loop.
@@ -138,6 +148,14 @@ func NewReleaseConvergenceLoop(
 // unaffected; the composition root sets it in production. Nil = outbox skipped.
 func (r *ReleaseConvergenceLoop) WithDeployEventStore(s store.DeployEventStore) *ReleaseConvergenceLoop {
 	r.deployEventStore = s
+	return r
+}
+
+// WithLatestReleases wires the read of an environment's newest release. With
+// it a pending release that a newer deploy replaced is cancelled; without it
+// such a release retriggers syncs and times out.
+func (r *ReleaseConvergenceLoop) WithLatestReleases(l LatestReleases) *ReleaseConvergenceLoop {
+	r.latest = l
 	return r
 }
 
@@ -256,6 +274,10 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 			"environment", release.Environment, "error", nameErr)
 		return
 	}
+	if newer := r.overtakenBy(ctx, release); newer != nil {
+		r.cancelOvertaken(ctx, release, newer)
+		return
+	}
 	// State before clock: a release checked late — the loop was down, a leader failed
 	// over, its cell was not scanned (#447) — that is already healthy at its revision
 	// deployed, and failing it would report "did not become healthy" about a service
@@ -288,6 +310,60 @@ func (r *ReleaseConvergenceLoop) verifyRelease(ctx context.Context, release *db.
 	r.activateRelease(ctx, release)
 }
 
+// overtakenBy returns the newer release that replaced a pending one, nil when
+// there is none. A release's manifests live at one path of the GitOps
+// repository per environment, so a newer release that pushed its own leaves
+// the older one waiting for a revision that is gone.
+func (r *ReleaseConvergenceLoop) overtakenBy(ctx context.Context, release *db.Release) *db.Release {
+	if r.latest == nil {
+		return nil
+	}
+	newest, err := r.latest.ListByEnv(callbackContext(ctx, release.TenantID), release.TenantID, release.ProjectID, release.Environment, 1)
+	if err != nil {
+		r.logger.Warn("release convergence: could not read the newest release of the environment",
+			"release_id", release.ID, "error", err)
+		return nil
+	}
+	if len(newest) == 0 || newest[0].ID == release.ID || !newest[0].CreatedAt.After(release.CreatedAt) {
+		return nil
+	}
+	// Until its manifests are pushed, the newer release has replaced nothing.
+	switch statemachine.State(newest[0].Status) {
+	case statemachine.ReleaseReady, statemachine.ReleaseGitMirrorFailed:
+		return nil
+	}
+	return &newest[0]
+}
+
+// cancelOvertaken ends a pending release that a newer deploy replaced. It does
+// not touch the Argo CD Application: the operation in flight there belongs to
+// the newer release.
+func (r *ReleaseConvergenceLoop) cancelOvertaken(ctx context.Context, release, newer *db.Release) {
+	err := r.locker.WithLock(ctx, release.TenantID, release.ProjectID, release.Environment, func(tx db.DBTX) error {
+		_, err := r.releaseStore.UpdateStatus(ctx, tx, release.ID, string(statemachine.RPEventCancelled))
+		return err
+	})
+	if err != nil {
+		r.logger.Error("release convergence: cancel of an overtaken release failed",
+			"release_id", release.ID, "newer_release_id", newer.ID, "error", err)
+		return
+	}
+	reason := fmt.Sprintf("Superseded by a newer deploy of this environment (%s)", newer.BuildID)
+	r.logger.Info("release convergence: release cancelled, a newer deploy replaced it",
+		"release_id", release.ID, "build_id", release.BuildID, "newer_release_id", newer.ID, "newer_build_id", newer.BuildID)
+	// deploy.sync_failed is the terminal event the CLI and the console already
+	// end a deploy on; the reason says this one did not fail on its own.
+	data := events.SafeJSONMarshal(map[string]interface{}{"status": "failed", "reason": reason, "superseded_by": newer.BuildID})
+	if _, err := r.eventStore.Append(ctx, release.BuildID, "deploy.sync_failed", data); err != nil {
+		r.logger.Error("failed to emit deploy.sync_failed event", "release_id", release.ID, "error", err)
+	}
+	r.syncRetriggers.Delete(release.ID)
+	notifyDeployFailed(ctx, DeployFailure{
+		TenantID: release.TenantID, ProjectName: release.ProjectID, BuildID: release.BuildID,
+		Reason: reason, Superseded: true,
+	})
+}
+
 // handleSyncTimeout fails a release whose sync did not converge in time, after
 // terminating the stuck ArgoCD operation so the next deploy is not blocked by
 // it (MEET-2026-03-29-019).
@@ -305,21 +381,11 @@ func (r *ReleaseConvergenceLoop) handleSyncTimeout(ctx context.Context, release 
 // health filter never match, so a healthy release stayed SYNC_FAILED. An
 // unparseable spec list is logged and yields no filter (global health).
 func (r *ReleaseConvergenceLoop) deployedAppNames(release *db.Release) []string {
-	if release.Apps == nil {
-		return nil
-	}
-	var apps []db.BuildAppSpec
-	if err := json.Unmarshal(release.Apps, &apps); err != nil {
+	names, err := workloadNames(release)
+	if err != nil {
 		r.logger.Error("release convergence: failed to parse app specs (skipping health filter)",
 			"release_id", release.ID, "error", err)
 		return nil
-	}
-	var names []string
-	for _, app := range apps {
-		if app.Rendering == "static" {
-			continue
-		}
-		names = append(names, fmt.Sprintf("%s-%s", release.ProjectID, app.Name))
 	}
 	return names
 }
@@ -442,6 +508,9 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 
 	r.logger.Warn("release convergence: release failed",
 		"release_id", release.ID, "reason", reason)
+	notifyDeployFailed(ctx, DeployFailure{
+		TenantID: release.TenantID, ProjectName: release.ProjectID, BuildID: release.BuildID, Reason: reason,
+	})
 
 	// Emit SSE event
 	failedData := events.SafeJSONMarshal(map[string]interface{}{
@@ -454,7 +523,7 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 
 	// T0.3 of deep-review-remediation-plan (closes find_flow_001 CRITICAL).
 	// Per CLAUDE.md, Argo Rollouts is the default workload primitive when
-	// LOOPZERO_PROGRESSIVE_DELIVERY=true (the default). For Rollout-backed
+	// LOOP_RUNTIME_PROGRESSIVE_DELIVERY=true (the default). For Rollout-backed
 	// releases, the canonical terminal SSE event is rollout.aborted (not
 	// deploy.sync_failed). The CLI deploy command handles both as terminal
 	// (cli/src/commands/deploy.ts:603), so emitting both is safe — but the
@@ -482,7 +551,7 @@ func (r *ReleaseConvergenceLoop) failRelease(ctx context.Context, release *db.Re
 // isRolloutBackedRelease — true if the release was rendered with progressive
 // delivery (Argo Rollouts), as opposed to a static-only release. Heuristic:
 // any app in the release whose Rendering is not "static" is assumed Rollout-backed
-// when LOOPZERO_PROGRESSIVE_DELIVERY is enabled (default per CLAUDE.md).
+// when LOOP_RUNTIME_PROGRESSIVE_DELIVERY is enabled (default per CLAUDE.md).
 //
 // Per ADR T0.3: emitting an extra rollout.aborted on edge cases (e.g.,
 // progressive delivery disabled but app non-static) is benign — CLI treats
@@ -629,7 +698,7 @@ func (r *ReleaseConvergenceLoop) healthCheckActiveReleases(ctx context.Context) 
 			continue
 		}
 
-		// loopzero-cloud#242 (Fix A): only evaluate post-activation health when the
+		// loop-console#242 (Fix A): only evaluate post-activation health when the
 		// ArgoCD status is DETERMINATE (synced). During the controller's
 		// reconcile-rewrite window the app status is transiently empty/Unknown →
 		// GetAppStatus returns synced=false, healthy=false (no workload resources

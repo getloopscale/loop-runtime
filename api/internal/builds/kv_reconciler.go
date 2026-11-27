@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // KVRoutingSource provides the expected set of KV routing keys from the database.
-// Each key is a subdomain (e.g., "tn-loopzero-project-web-production").
+// Each key is a subdomain (e.g., "tn-loop-runtime-project-web-production").
 type KVRoutingSource interface {
 	// ExpectedStaticKeys returns the set of KV keys that should exist based on
 	// active static builds in the database.

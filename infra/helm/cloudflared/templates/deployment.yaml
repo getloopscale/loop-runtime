@@ -5,7 +5,7 @@ metadata:
   labels:
     app: cloudflared
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: cloudflared
+    runtime.getloopscale.com/component: cloudflared
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:

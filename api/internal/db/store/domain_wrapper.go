@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -39,16 +39,16 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // =========================================================================
@@ -294,9 +294,11 @@ func verifiedClaimTarget() statemachine.State {
 func (s *PostgresDomainStore) claimByStatus(ctx context.Context, fromStatus, toStatus string) ([]ports.CustomDomain, error) {
 	bridge := s.bridge()
 	q := generated.New()
+	// sqlc numbers the fields by placeholder: Status is $1, the status the rows
+	// hold, and Status_2 is $2, the status they move to.
 	rows, err := q.ClaimCustomDomainsByStatus(ctx, bridge, generated.ClaimCustomDomainsByStatusParams{
-		Status:   toStatus,
-		Status_2: fromStatus,
+		Status:   fromStatus,
+		Status_2: toStatus,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("domain store: claim %s→%s: %w", fromStatus, toStatus, err)
@@ -335,6 +337,20 @@ func (s *PostgresDomainStore) FindActiveForCNAMECheck(ctx context.Context, stale
 		results = append(results, *customDomainFromFindCNAME(r))
 	}
 	return results, nil
+}
+
+// FindServing returns the domains that are routed today: active, and degraded
+// during the CNAME grace period.
+func (s *PostgresDomainStore) FindServing(ctx context.Context) ([]ports.CustomDomain, error) {
+	active, err := s.findByStatus(ctx, "active")
+	if err != nil {
+		return nil, err
+	}
+	degraded, err := s.findByStatus(ctx, "degraded")
+	if err != nil {
+		return nil, err
+	}
+	return append(active, degraded...), nil
 }
 
 func (s *PostgresDomainStore) FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error) {
@@ -415,6 +431,20 @@ func (s *PostgresDomainStore) ListActiveByApp(ctx context.Context, tenantID, pro
 		results = append(results, *customDomainFromActiveByApp(r))
 	}
 	return results, nil
+}
+
+// ListActiveHosts returns every active custom domain with its tenant. It spans
+// tenants, so the store must be on a cross-tenant pool.
+func (s *PostgresDomainStore) ListActiveHosts(ctx context.Context) ([]ports.DomainHost, error) {
+	rows, err := generated.New().ListActiveCustomDomainHosts(ctx, s.bridge())
+	if err != nil {
+		return nil, fmt.Errorf("domain store: list active hosts: %w", err)
+	}
+	hosts := make([]ports.DomainHost, 0, len(rows))
+	for _, r := range rows {
+		hosts = append(hosts, ports.DomainHost{Domain: r.Domain, TenantID: r.TenantID})
+	}
+	return hosts, nil
 }
 
 func (s *PostgresDomainStore) findByStatus(ctx context.Context, status string) ([]ports.CustomDomain, error) {

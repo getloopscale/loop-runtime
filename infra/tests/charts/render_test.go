@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -8,7 +8,7 @@ import (
 
 	"github.com/gruntwork-io/terratest/modules/helm"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 )
 
 // defaultRelease is the name `helm template <chart>` uses when none is given.
@@ -18,7 +18,7 @@ const defaultRelease = "release-name"
 
 // Every chart this package renders goes through chartrender. Shelling out to
 // `helm template` directly skipped three things the facade owns: the
-// ErrAmbiguousChart guard for loopzero-api / loopzero-cloud, the one-shot `helm dep
+// ErrAmbiguousChart guard for loop-runtime-api / loop-console, the one-shot `helm dep
 // update` (without it a chart with a `dependencies:` block does not render in a
 // fresh clone — 19 tests here failed that way), and one missing-helm policy.
 

@@ -1,11 +1,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: loopzero-smoke-test
+  name: loop-runtime-smoke-test
   labels:
-    app: loopzero-smoke-test
+    app: loop-runtime-smoke-test
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: smoke-test
+    runtime.getloopscale.com/component: smoke-test
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: hook-succeeded
@@ -16,10 +16,10 @@ spec:
   template:
     metadata:
       labels:
-        app: loopzero-smoke-test
+        app: loop-runtime-smoke-test
     spec:
       restartPolicy: Never
-      serviceAccountName: loopzero-smoke-test
+      serviceAccountName: loop-runtime-smoke-test
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -57,7 +57,7 @@ spec:
                 ready=$(kubectl get $dep -n {{ . }} -o jsonpath='{.status.readyReplicas}')
                 ready=${ready:-0}
                 # B51: Skip workloads intentionally scaled to 0 (e.g.,
-                # loopzero-controller in standalone profile — see B32 tech debt).
+                # loop-runtime-controller in standalone profile — see B32 tech debt).
                 if [ "$desired" = "0" ]; then
                   echo "  SKIP  $dep (replicas=0)"
                   continue
@@ -139,9 +139,9 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: loopzero-smoke-test
+  name: loop-runtime-smoke-test
   labels:
-    app: loopzero-smoke-test
+    app: loop-runtime-smoke-test
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: hook-succeeded
@@ -150,9 +150,9 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: loopzero-smoke-test
+  name: loop-runtime-smoke-test
   labels:
-    app: loopzero-smoke-test
+    app: loop-runtime-smoke-test
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: hook-succeeded
@@ -168,9 +168,9 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: loopzero-smoke-test
+  name: loop-runtime-smoke-test
   labels:
-    app: loopzero-smoke-test
+    app: loop-runtime-smoke-test
   annotations:
     helm.sh/hook: post-install,post-upgrade
     helm.sh/hook-delete-policy: hook-succeeded
@@ -178,8 +178,8 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: loopzero-smoke-test
+  name: loop-runtime-smoke-test
 subjects:
   - kind: ServiceAccount
-    name: loopzero-smoke-test
+    name: loop-runtime-smoke-test
     namespace: {{ .Release.Namespace }}

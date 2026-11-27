@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sourcehttp
 
@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
 )
 
 // Basis paths of the publish half of Upload: what reaches object storage,

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // L3 — 100 tenants sustained load.
 //
@@ -24,7 +24,7 @@ import {
   healthCheck,
   verifyAppLive,
   appURL,
-} from './lib/loopzero-api.js';
+} from './lib/loop-runtime-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
@@ -68,7 +68,7 @@ export default function (data) {
 
   const tenantID = `k6-l3-tn-${tenantIdx}`;
   const userID = `k6-l3-user-${tenantIdx}`;
-  const email = `k6-l3-${tenantIdx}@loopzero.test`;
+  const email = `k6-l3-${tenantIdx}@loop-runtime.test`;
   const projectName = `k6-l3-app-${tenantIdx}`;
 
   let commitSHA, buildID;
@@ -115,10 +115,10 @@ export function teardown() {
 
 export function handleSummary(data) {
   const m = data.metrics;
-  const succeeded = (m.loopzero_build_succeeded || {}).values || {};
-  const verified = (m.loopzero_app_verified || {}).values || {};
-  const deploy = (m.loopzero_deploy_duration_ms || {}).values || {};
-  const verify = (m.loopzero_app_verify_duration_ms || {}).values || {};
+  const succeeded = (m.loop_runtime_build_succeeded || {}).values || {};
+  const verified = (m.loop_runtime_app_verified || {}).values || {};
+  const deploy = (m.loop_runtime_deploy_duration_ms || {}).values || {};
+  const verify = (m.loop_runtime_app_verify_duration_ms || {}).values || {};
   const text = `
 ═════════════════════════════════════════════════════════
   L3 — 100 tenants sustained

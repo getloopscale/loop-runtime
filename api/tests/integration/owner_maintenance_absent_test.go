@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // The owner holds no standing cross-tenant bypass.
 //
@@ -29,8 +29,8 @@
 //
 // Removed by migration 000064. This test is what keeps them removed.
 //
-//	LOOPZERO_API_DATABASE_URL=postgres://loopzero_api:...@localhost:5432/loopzero \
-//	LOOPZERO_RLS_AUDIT_REQUIRE=1 go test ./tests/integration/ -run OwnerMaintenance -v
+//	LOOP_RUNTIME_API_DATABASE_URL=postgres://loop_runtime_api:...@localhost:5432/loop_runtime \
+//	LOOP_RUNTIME_RLS_AUDIT_REQUIRE=1 go test ./tests/integration/ -run OwnerMaintenance -v
 package integration
 
 import (
@@ -50,9 +50,9 @@ import (
 func openAnyRole(t *testing.T) (context.Context, *sql.DB) {
 	t.Helper()
 	for _, env := range []string{
-		"LOOPZERO_API_DATABASE_URL",
-		"LOOPZERO_RLS_AUDIT_SUPERUSER_URL",
-		"LOOPZERO_WORKER_DATABASE_URL",
+		"LOOP_RUNTIME_API_DATABASE_URL",
+		"LOOP_RUNTIME_RLS_AUDIT_SUPERUSER_URL",
+		"LOOP_RUNTIME_WORKER_DATABASE_URL",
 		"DATABASE_URL",
 	} {
 		dsn := os.Getenv(env)
@@ -73,15 +73,15 @@ func openAnyRole(t *testing.T) (context.Context, *sql.DB) {
 		return ctx, db
 	}
 	if auditRequired() {
-		t.Fatal("no reachable database DSN, and LOOPZERO_RLS_AUDIT_REQUIRE=1 forbids skipping " +
+		t.Fatal("no reachable database DSN, and LOOP_RUNTIME_RLS_AUDIT_REQUIRE=1 forbids skipping " +
 			"— a green run here would assert nothing about the owner bypass")
 	}
 	// Skipping here is the right decision on a machine without a database, and the WRONG
 	// decision in CI: an isolation control that reports green without being exercised is the
-	// very failure this test exists to detect. CI sets LOOPZERO_RLS_AUDIT_REQUIRE=1, so there it
+	// very failure this test exists to detect. CI sets LOOP_RUNTIME_RLS_AUDIT_REQUIRE=1, so there it
 	// becomes a failure. The tension is tracked in:
-	// https://github.com/getloopscale/loopzero/issues/289
-	t.Skip("no reachable database DSN (set LOOPZERO_RLS_AUDIT_REQUIRE=1 to make this a failure)")
+	// https://github.com/getloopscale/loop-runtime/issues/289
+	t.Skip("no reachable database DSN (set LOOP_RUNTIME_RLS_AUDIT_REQUIRE=1 to make this a failure)")
 	return nil, nil
 }
 

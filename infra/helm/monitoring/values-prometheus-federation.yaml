@@ -1,0 +1,75 @@
+# The federation Prometheus of a remote cluster (build, a cell), for the AWS environments
+# (profile.awsLoadBalancerController).
+#
+# The core Prometheus is the one the dashboards and the alerts read. It cannot scrape a
+# remote cluster's kubelets, cAdvisor or node-exporter itself: those are discovered and
+# reached through that cluster's API server and node network. So each remote cluster runs
+# this Prometheus, which scrapes its own cluster with the chart's standard jobs
+# (kube-state-metrics, node-exporter, the kubelets, cAdvisor, annotated Services and
+# pods), keeps a few hours, and serves /federate. Core federates it through the internal
+# ALB the AWS Load Balancer Controller makes for the Ingress below, one scrape job per
+# cluster labelled with the cluster (../monitoring/values-prometheus.yaml).
+#
+# `task staging:platform` reads the ALB's DNSName from this Ingress' status once the
+# cells are synced (infra/staging/monitoring-addresses.sh) and syncs the core Prometheus
+# with it (LOOP_RUNTIME_METRICS_ALB_DNS_NAMES).
+alertmanager:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+# Whether the chart's kube-state-metrics is installed is the release's to say: the cells
+# already run one (cell.helmfile), the build cluster does not.
+prometheus-node-exporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+serverFiles:
+  alerting_rules.yml: {}
+  recording_rules.yml: {}
+server:
+  # Core keeps the history (15 days, values-prometheus.yaml); this one only has to hold
+  # what core has not federated yet.
+  retention: 6h
+  persistentVolume:
+    enabled: false
+  emptyDir:
+    sizeLimit: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  # Instance targets: the ALB registers the node group's instances on this NodePort.
+  service:
+    type: NodePort
+extraManifests:
+  - |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: prometheus-federation
+      namespace: monitoring
+      annotations:
+        alb.ingress.kubernetes.io/scheme: internal
+        alb.ingress.kubernetes.io/target-type: instance
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+        alb.ingress.kubernetes.io/backend-protocol: HTTP
+        alb.ingress.kubernetes.io/healthcheck-path: /-/ready
+    spec:
+      ingressClassName: alb
+      rules:
+        - http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: prometheus-federation-server
+                    port:
+                      number: 80

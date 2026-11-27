@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -7,9 +7,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/manifests"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/manifests"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // BuildManifestAppsInput holds the parameters for building manifest app inputs.
@@ -28,7 +28,7 @@ type BuildManifestAppsInput struct {
 	// pipeline (cosign step output, with fallback to BuildKit digest).
 	// When present, the manifest renders use `ImageDigestRef` instead of
 	// `ImageTag` — required by the supply-chain VAP
-	// `loopzero-require-image-signature` which rejects mutable tag refs in
+	// `loop-runtime-require-image-signature` which rejects mutable tag refs in
 	// tenant namespaces (CHG-2026-04-29-DOGFOOD iter 8: discovered live
 	// when standalone-multi pods got Forbidden by the VAP).
 	// Nil/empty map → fall back to ImageTag (legacy path).
@@ -50,7 +50,7 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		// (server|worker only). Every app emits K8s manifests.
 
 		// CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement.
-		// Mutable tags are rejected by `loopzero-require-image-signature` in
+		// Mutable tags are rejected by `loop-runtime-require-image-signature` in
 		// tenant namespaces. Without a digest from the build pipeline the
 		// manifest would produce pods Forbidden at admission. Failing loud
 		// here beats a silent admission failure later — the caller is
@@ -87,7 +87,6 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		mi := manifests.AppManifestInput{
 			Name:          app.Name,
 			Type:          app.Type,
-			Rendering:     app.Rendering,
 			Port:          app.Port,
 			ImageRef:      imageRef,
 			Secrets:       app.Secrets,
@@ -96,9 +95,10 @@ func BuildManifestApps(ctx context.Context, input BuildManifestAppsInput) ([]man
 		}
 		if app.Autoscaling != nil {
 			mi.Autoscaling = &manifests.AutoscalingConfig{
-				MinReplicas: app.Autoscaling.MinReplicas,
-				MaxReplicas: app.Autoscaling.MaxReplicas,
-				TargetCPU:   app.Autoscaling.TargetCPU,
+				MinReplicas:  app.Autoscaling.MinReplicas,
+				MaxReplicas:  app.Autoscaling.MaxReplicas,
+				TargetCPU:    app.Autoscaling.TargetCPU,
+				TargetMemory: app.Autoscaling.TargetMemory,
 			}
 		}
 		result = append(result, mi)

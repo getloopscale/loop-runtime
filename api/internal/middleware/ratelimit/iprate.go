@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package ratelimit
 
@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/middleware/clientip"
-	"github.com/getloopscale/loopzero/api/internal/middleware/slidingwindow"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/clientip"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/slidingwindow"
 )
 
 // IPRateLimiter is a sliding-window rate limiter keyed by client IP. Mounted
@@ -47,7 +47,7 @@ import (
 // twice what is configured (SD-04.7). Two things bound that, and neither makes
 // it disappear:
 //   - the Traefik `rate-limit` Middleware is now attached to the public route
-//     (ingressRoute.middlewares in charts/loopzero-api/values-bootstrap.yaml), and the edge is the one
+//     (ingressRoute.middlewares in charts/loop-runtime-api/values-bootstrap.yaml), and the edge is the one
 //     place where a single instance of the limit exists;
 //   - auth and per-tenant limits upstream carry the real guard.
 //

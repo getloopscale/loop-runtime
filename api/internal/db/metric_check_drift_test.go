@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // TestMetricCheckConstraint_MatchesContractsConstants — T1.2 of plan

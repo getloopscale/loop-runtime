@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// readPath reads any file under the loopzero repo by relative path resolved
+// readPath reads any file under the loop-runtime repo by relative path resolved
 // from infra/tests/scripts/.
 func readPath(t *testing.T, rel string) string {
 	t.Helper()
@@ -33,7 +33,7 @@ func readPath(t *testing.T, rel string) string {
 // plan dev-public-cross-cluster-secrets (issue #111).
 //
 // The legacy bootstrap chain mints Shamir shards on disk under
-// ~/.loopzero/cleanroom-unseal.json — fragile (shard custody risk per
+// ~/.loop-runtime/cleanroom-unseal.json — fragile (shard custody risk per
 // blueprint D2). T2.1 adds an opt-in `AUTO_UNSEAL_MODE=transit` toggle
 // that (a) gates the manual init/unseal/shard-write path so it does
 // NOT run when transit auto-unseal is active, (b) waits for the

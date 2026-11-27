@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 export { TopologyConfig, ClusterSpec, ClusterRegistry, ClusterRegistryEntry, InternalClusterRegistryEntry } from "./types";
 export { loadTopology, TopologyValidationError } from "./loader";

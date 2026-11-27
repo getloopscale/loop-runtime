@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package bootstraphttp serves the platform bootstrap endpoint.
 //
@@ -33,13 +33,13 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/bootstrap"
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // Type aliases for backward compatibility -- canonical definitions are in domain/.
@@ -81,7 +81,7 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		expected := "Bearer " + h.secret
 		if subtle.ConstantTimeCompare([]byte(auth), []byte(expected)) != 1 {
-			httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+			httpio.WriteLoopRuntimeError(w, &loopruntimeerrors.LoopRuntimeError{
 				Code:    "UNAUTHORIZED",
 				Message: "Invalid or missing bootstrap secret",
 			})
@@ -91,7 +91,7 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 
 	var req BootstrapRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInvalidRequest)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidRequest)
 		return
 	}
 
@@ -99,21 +99,21 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	// explicitly (admin_user_id, the Kratos identity) or is the legacy GitHub
 	// identity, which needs its GitHub id.
 	if req.AdminGitHubID == "" && req.AdminUserID == "" {
-		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+		httpio.WriteLoopRuntimeError(w, &loopruntimeerrors.LoopRuntimeError{
 			Code:    "MISSING_FIELD",
 			Message: "admin_user_id or admin_github_id is required",
 		})
 		return
 	}
 	if req.AdminLogin == "" {
-		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+		httpio.WriteLoopRuntimeError(w, &loopruntimeerrors.LoopRuntimeError{
 			Code:    "MISSING_FIELD",
 			Message: "admin_login is required",
 		})
 		return
 	}
 	if req.TenantSlug == "" {
-		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+		httpio.WriteLoopRuntimeError(w, &loopruntimeerrors.LoopRuntimeError{
 			Code:    "MISSING_FIELD",
 			Message: "tenant_slug is required",
 		})
@@ -141,7 +141,7 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		return err
 	})
 	if errors.Is(assignErr, ports.ErrTenantSlugTaken) {
-		httpio.WriteLoopZeroError(w, &loopzeroerrors.LoopZeroError{
+		httpio.WriteLoopRuntimeError(w, &loopruntimeerrors.LoopRuntimeError{
 			Code:    "TENANT_SLUG_TAKEN",
 			Message: fmt.Sprintf("tenant_slug %q belongs to another account; choose another slug", req.TenantSlug),
 		})
@@ -149,7 +149,7 @@ func (h *BootstrapHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	if assignErr != nil {
 		slog.Error("bootstrap failed", "error", assignErr)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

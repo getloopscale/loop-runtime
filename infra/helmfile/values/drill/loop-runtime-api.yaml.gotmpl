@@ -1,0 +1,59 @@
+# drill overlay for charts/loop-runtime-api, layered on charts/loop-runtime-api/values-bootstrap.yaml.
+# Plan: 2026-05-16-drill-l2-unlock-phase2 — Bug #16 + #18 LIVE fix.
+#
+# Drill pulls from the prod DOCR namespace (`registry.digitalocean.com/loop-runtime-system`) with
+# the DIGITALOCEAN_TOKEN-based pull secret (loop-runtime-registry-pull) that
+# drill-helmfile-bootstrap.sh creates with `kubectl create secret docker-registry`
+# (the canonical DOCR pattern, mirroring prod).
+#
+# Tag selection rationale:
+# - REDACTED_SECRET_061 (2026-04-28) predates the iter-19 leader fix (2026-05-12): drill
+#   iter 11 caught Bug #18 — the secondary pod crash-looped because the pre-fix code blocked
+#   main() synchronously during leader election (60s startup probe failure).
+# - drill-phase2-9ad223a5 (2026-05-17) includes the fix (goroutine-wrapped leader election;
+#   the standby serves /api/v1/health while waiting). LIVE multi-replica validated in iter 12.
+#
+# Override through LOOP_RUNTIME_API_IMAGE_TAG to test a newer build.
+global:
+  registry: registry.digitalocean.com/loop-runtime-system
+
+image:
+  repository: loop-runtime-api
+  tag: '{{ env "LOOP_RUNTIME_API_IMAGE_TAG" | default "drill-phase2-9ad223a5" }}'
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: loop-runtime-registry-pull
+
+# Bug #40 LIVE fix (2026-05-18 iter 34): the route host must be the drill API host
+# (api.drill.getloopscale.com, from the pulumi-drill Cloudflare zone), or Traefik answers 404
+# on /health.
+ingressRoute:
+  host: api.drill.getloopscale.com
+
+config:
+  # Bugs #65/#73/#79: drill-helmfile-bootstrap.sh used to `kubectl set env` these
+  # onto the Deployment after the sync. Drill pushes to the DOCR namespace it pulls
+  # the platform from, serves tenants under the drill zone, and keeps source
+  # bundles in DO Spaces (the bucket itself is environments/drill.yaml
+  # sourceBucket, shared with the build cluster).
+  baseDomain: {{ .Values.domain | quote }}
+  registryUrl: "registry.digitalocean.com/loop-runtime-system"
+  minioEndpoint: "https://sfo3.digitaloceanspaces.com"
+  # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 LIVE fix (Bug #24 root cause):
+  # without an issuer and a JWKS URL every JWT validation fails 401. The issuer MUST match
+  # what Hydra emits exactly (values-hydra-drill urls.self.issuer); the JWKS is fetched
+  # cross-namespace from inside the pod.
+  jwtIssuer: "http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444/"
+  jwksUrl: "http://ory-hydra-public.loop-runtime-auth.svc.cluster.local:4444/.well-known/jwks.json"
+  # Plan 2026-05-19-drill-skills-rigor-restoration T2.1 — DOKS context names, exported by
+  # drill-helmfile-bootstrap.sh from the downloaded kubeconfig.
+  mgmtKubeContext: {{ requiredEnv "CORE_KUBE_CONTEXT" | quote }}
+  buildKubeContext: {{ requiredEnv "BUILD_KUBE_CONTEXT" | quote }}
+  runtimeKubeContext: {{ requiredEnv "CELL_0_KUBE_CONTEXT" | quote }}
+
+# Bug #65: the DO Spaces key pair, exported by drill-helmfile-bootstrap.sh (Phase
+# 2.5) as LOOP_RUNTIME_SPACES_KEY / LOOP_RUNTIME_SPACES_SECRET before any sync.
+secrets:
+  minioAccessKey: {{ requiredEnv "LOOP_RUNTIME_SPACES_KEY" | quote }}
+  minioSecretKey: {{ requiredEnv "LOOP_RUNTIME_SPACES_SECRET" | quote }}

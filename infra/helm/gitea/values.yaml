@@ -10,18 +10,18 @@ gitea:
     # bootstrap step. existingSecret keeps Gitea + the secret in sync by
     # construction. Fix: finding-2026-05-22-pg-password-divergence (same T1.3 class).
     existingSecret: gitea-admin
-    email: admin@loopzero.local
-  # DB password injected from the canonical loopzero-db-credentials secret. Gitea's
+    email: admin@loop-runtime.local
+  # DB password injected from the canonical loop-runtime-db-credentials secret. Gitea's
   # environment-to-ini step (init container) reads GITEA__database__PASSWD and
   # writes it into app.ini before `gitea migrate` runs in configure-gitea.
   # Earlier config.database.PASSWD was "" expecting a never-wired helmfile
-  # $LOOPZERO_DB_PASSWORD override → configure-gitea crashed with SASL auth failure
+  # $LOOP_RUNTIME_DB_PASSWORD override → configure-gitea crashed with SASL auth failure
   # (same T1.3 regression as postgresql/kratos). See finding-2026-05-22-pg-password-divergence.
   additionalConfigFromEnvs:
     - name: GITEA__database__PASSWD
       valueFrom:
         secretKeyRef:
-          name: loopzero-db-credentials
+          name: loop-runtime-db-credentials
           key: password
   livenessProbe:
     enabled: true
@@ -30,16 +30,16 @@ gitea:
   config:
     database:
       DB_TYPE: postgres
-      HOST: postgresql.loopzero-system.svc.cluster.local:5432
+      HOST: postgresql.loop-runtime-system.svc.cluster.local:5432
       NAME: gitea
-      USER: loopzero
-      PASSWD: ""  # T1.3: empty → Gitea startup fails fast with explicit DB auth error; override via helmfile inline or --set gitea.config.database.PASSWD=$LOOPZERO_DB_PASSWORD
+      USER: loop_runtime
+      PASSWD: ""  # T1.3: empty → Gitea startup fails fast with explicit DB auth error; override via helmfile inline or --set gitea.config.database.PASSWD=$LOOP_RUNTIME_DB_PASSWORD
       SSL_MODE: disable
       MAX_OPEN_CONNS: "8"        # Bug #44 HA: 8 pods × 8 = 64 conns — under DO PG default 50 headroom
       MAX_IDLE_CONNS: "4"
       CONN_MAX_LIFETIME: "3600s"
     server:
-      ROOT_URL: http://gitea-http.loopzero-system.svc.cluster.local:3000
+      ROOT_URL: http://gitea-http.loop-runtime-system.svc.cluster.local:3000
       HTTP_PORT: 3000
     service:
       DISABLE_REGISTRATION: true

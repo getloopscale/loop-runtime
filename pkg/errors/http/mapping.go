@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package http maps LoopZero domain errors (pkg/errors.LoopZeroError) to HTTP
+// Package http maps LoopRuntime domain errors (pkg/errors.LoopRuntimeError) to HTTP
 // transport-level concerns: status codes and RFC 9457 problem+json
 // payloads.
 //
@@ -14,7 +14,7 @@
 // The registry below holds the status of every code pkg/errors defines (a
 // test reads errors.go and fails on an unregistered one). A code owned by
 // another module is registered by its owner with Register, beside the code,
-// so adding one never requires editing this shared package. LoopZeroError itself
+// so adding one never requires editing this shared package. LoopRuntimeError itself
 // carries no HTTP status (ADR-0030, T2.3 Stage C).
 package http
 
@@ -24,7 +24,7 @@ import (
 	"net/http"
 	"sync"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // registry is the code → status table: the pkg/errors codes below plus the
@@ -128,7 +128,7 @@ func defaultStatusByCode() map[string]int {
 // Lookup precedence (Stage C — HTTPStatus field removed):
 //
 //  1. The registered code in statusByCode (authoritative).
-//  2. http.StatusInternalServerError (500) for non-LoopZeroError or
+//  2. http.StatusInternalServerError (500) for non-LoopRuntimeError or
 //     unregistered codes.
 //
 // A code nobody registered answers 500. pkg/errors codes are held
@@ -138,12 +138,12 @@ func Status(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !stderrors.As(err, &loopzeroErr) {
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !stderrors.As(err, &loopRuntimeErr) {
 		return http.StatusInternalServerError
 	}
 	registryMu.RLock()
-	s, ok := statusByCode[loopzeroErr.Code]
+	s, ok := statusByCode[loopRuntimeErr.Code]
 	registryMu.RUnlock()
 	if ok {
 		return s
@@ -152,7 +152,7 @@ func Status(err error) int {
 }
 
 // IsRegistered reports whether the given code has an explicit HTTP
-// status mapping. Useful for CI lint that asserts every LoopZeroError
+// status mapping. Useful for CI lint that asserts every LoopRuntimeError
 // code has a registered transport status.
 func IsRegistered(code string) bool {
 	registryMu.RLock()

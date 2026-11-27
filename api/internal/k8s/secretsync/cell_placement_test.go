@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretsync
 
@@ -8,11 +8,10 @@ import (
 	"errors"
 	"testing"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // fixedCell is a TenantCellLookup that places every tenant on one cell.
@@ -32,9 +31,9 @@ func (failingCellLookup) GetTenantCellID(context.Context, string) (string, error
 // so before touching either cluster.
 func newPlacedManager(lookup TenantCellLookup) (*SecretK8sManager, *fake.Clientset, *dynamicfake.FakeDynamicClient) {
 	mgmt := fake.NewClientset()
-	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	dyn := newRuntimeFake()
 	return &SecretK8sManager{
-		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loopzero-system",
+		mgmtClient: mgmt, runtimeDynamic: dyn, mgmtNamespace: "loop-runtime-system",
 		tenantCells: lookup, runtimeCellID: "cell-0",
 	}, mgmt, dyn
 }

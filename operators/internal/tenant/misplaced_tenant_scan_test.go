@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -14,16 +14,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/metrics"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
-func tenantIn(namespace, name string) *loopzerov1.Tenant {
-	return &loopzerov1.Tenant{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+func tenantIn(namespace, name string) *loopruntimev1.Tenant {
+	return &loopruntimev1.Tenant{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 }
 
-// ADR-0018 C2/C5: a Tenant CR outside loopzero-system is invisible to the scoped
+// ADR-0018 C2/C5: a Tenant CR outside loop-runtime-system is invisible to the scoped
 // cache, so an uncached cluster-wide scan is what surfaces it — through the
 // gauge the MisplacedTenantDetected alert queries.
 func TestMisplacedTenantScan_CountsTenantsOutsideTheCanonicalNamespace(t *testing.T) {
@@ -46,7 +46,7 @@ func TestMisplacedTenantScan_CountsTenantsOutsideTheCanonicalNamespace(t *testin
 		t.Fatalf("misplaced in team-x = %v, want 1", got)
 	}
 	if n := testutil.CollectAndCount(metrics.MisplacedTenantTotal); n != 2 {
-		t.Fatalf("series = %d, want only the two misplaced namespaces (loopzero-system is never reported)", n)
+		t.Fatalf("series = %d, want only the two misplaced namespaces (loop-runtime-system is never reported)", n)
 	}
 }
 

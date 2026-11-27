@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: ecr-registry-auth
+description: |
+  The registry credential the build pushes tenant images with on an AWS environment: an
+  ECR authorization token for the tenant registry, written as argo/buildkit-registry-config
+  ({"config.json"}) by a Job at install and by a CronJob after that. The token lasts 12 hours
+  and carries the grants of the IRSA role the Job runs as.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

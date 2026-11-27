@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- Reverse migration 000045 — drop data-plane snapshot columns +
 -- partial index. Round-trip target for `task db:reset` (down → up).

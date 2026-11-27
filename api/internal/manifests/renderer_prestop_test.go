@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // RED test for issue #61, endpoint-removal race half.
 //
@@ -7,7 +7,7 @@
 // distinct things are going on, and only one of them is a design question:
 //
 //  1. HOW LONG a WebSocket should be allowed to outlive a deploy — genuinely a
-//     product decision (does LoopZero promise the connection survives, or that the
+//     product decision (does LoopRuntime promise the connection survives, or that the
 //     client reconnects?). Not settled here.
 //
 //  2. The pod being torn down WHILE STILL RECEIVING TRAFFIC — a race that harms

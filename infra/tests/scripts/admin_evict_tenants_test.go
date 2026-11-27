@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -22,7 +22,7 @@ import (
 // string literal sits in the source.
 const evictPassword = "fixture-password-marker"
 
-var evictDatabaseURL = "postgres" + "://loopzero:" + evictPassword + "@db.internal:5432/loopzero?sslmode=disable"
+var evictDatabaseURL = "postgres" + "://loop_runtime:" + evictPassword + "@db.internal:5432/loop_runtime?sslmode=disable"
 
 // evictStubs writes kubectl, pkill and sleep stubs into a fresh dir. kubectl
 // serves an empty list for every get, the api Secret for "get secret", and

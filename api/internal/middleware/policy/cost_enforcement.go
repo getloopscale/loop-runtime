@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package policy holds the request gates that do not turn on who is calling.
 //
@@ -22,11 +22,11 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 
 	planpkg "github.com/getloopscale/contracts/plan"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // CostEnforcement is the HTTP middleware that consults a CapChecker

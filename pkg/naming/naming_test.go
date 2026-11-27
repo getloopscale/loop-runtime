@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package naming
 
@@ -131,12 +131,12 @@ func TestValidateKubernetesName_special_chars(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTenantNamespace_format(t *testing.T) {
-	got, err := TenantNamespace("tn-loopzero")
+	got, err := TenantNamespace("tn-loop-runtime")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "loopzero-tn-loopzero" {
-		t.Errorf("TenantNamespace(tn-loopzero) = %q, want %q", got, "loopzero-tn-loopzero")
+	if got != "loop-runtime-tn-loop-runtime" {
+		t.Errorf("TenantNamespace(tn-loop-runtime) = %q, want %q", got, "loop-runtime-tn-loop-runtime")
 	}
 }
 
@@ -148,7 +148,7 @@ func TestTenantNamespace_empty(t *testing.T) {
 }
 
 func TestTenantNamespace_too_long(t *testing.T) {
-	// "loopzero-" = 5 chars, name can be at most 58
+	// "loop-runtime-" = 5 chars, name can be at most 58
 	_, err := TenantNamespace(strings.Repeat("a", 59))
 	if err == nil {
 		t.Error("TenantNamespace(59 chars) should return error")
@@ -189,9 +189,9 @@ func TestNamespace_canonical(t *testing.T) {
 		want      string
 		wantError bool
 	}{
-		{name: "production", tenant: "tn-x", project: "sample", env: "production", want: "loopzero-tn-x-sample-production"},
-		{name: "staging", tenant: "tn-x", project: "api", env: "staging", want: "loopzero-tn-x-api-staging"},
-		{name: "preview", tenant: "tn-x", project: "web", env: "preview-pr-7", want: "loopzero-tn-x-web-preview-pr-7"},
+		{name: "production", tenant: "tn-x", project: "sample", env: "production", want: "loop-runtime-tn-x-sample-production"},
+		{name: "staging", tenant: "tn-x", project: "api", env: "staging", want: "loop-runtime-tn-x-api-staging"},
+		{name: "preview", tenant: "tn-x", project: "web", env: "preview-pr-7", want: "loop-runtime-tn-x-web-preview-pr-7"},
 		{name: "empty tenant", tenant: "", project: "p", env: "e", wantError: true},
 		{name: "empty project", tenant: "t", project: "", env: "e", wantError: true},
 		{name: "empty env", tenant: "t", project: "p", env: "", wantError: true},
@@ -360,11 +360,11 @@ func TestLabel_constants_match_canonical_keys(t *testing.T) {
 		got, want string
 		name      string
 	}{
-		{LabelTenant, "loopzero.io/tenant", "LabelTenant"},
-		{LabelProject, "loopzero.io/project", "LabelProject"},
-		{LabelEnvironment, "loopzero.io/environment", "LabelEnvironment"},
-		{LabelManagedBy, "loopzero.io/managed-by", "LabelManagedBy"},
-		{ManagedByValue, "loopzero", "ManagedByValue"},
+		{LabelTenant, "runtime.getloopscale.com/tenant", "LabelTenant"},
+		{LabelProject, "runtime.getloopscale.com/project", "LabelProject"},
+		{LabelEnvironment, "runtime.getloopscale.com/environment", "LabelEnvironment"},
+		{LabelManagedBy, "runtime.getloopscale.com/managed-by", "LabelManagedBy"},
+		{ManagedByValue, "loop-runtime", "ManagedByValue"},
 	}
 	for _, c := range cases {
 		if c.got != c.want {
@@ -381,7 +381,7 @@ func TestStandardLabels_AsMap_returns_canonical_shape(t *testing.T) {
 		LabelTenant:      "acme",
 		LabelProject:     "backend",
 		LabelEnvironment: "production",
-		LabelManagedBy:   "loopzero",
+		LabelManagedBy:   "loop-runtime",
 	}
 	if len(got) != len(expected) {
 		t.Errorf("AsMap() returned %d keys, want %d", len(got), len(expected))
@@ -484,7 +484,7 @@ func TestDeterminism_all_functions(t *testing.T) {
 		}
 
 		tn, _ := TenantNamespace("tn-acme")
-		if tn != "loopzero-tn-acme" {
+		if tn != "loop-runtime-tn-acme" {
 			t.Fatalf("TenantNamespace not deterministic on iteration %d", i)
 		}
 
@@ -495,7 +495,7 @@ func TestDeterminism_all_functions(t *testing.T) {
 
 		// Preview is not special in the naming layer: it is the triple like any other environment.
 		pn, _ := Namespace("acme", "api", "preview-pr-42")
-		if pn != "loopzero-acme-api-preview-pr-42" {
+		if pn != "loop-runtime-acme-api-preview-pr-42" {
 			t.Fatalf("Namespace (preview) not deterministic on iteration %d", i)
 		}
 
@@ -536,8 +536,8 @@ func TestDeterminism_all_functions(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestImageTag_format(t *testing.T) {
-	got := ImageTag("registry.do.com", "loopzero", "my-app", "api", "abc123")
-	want := "registry.do.com/loopzero/my-app-api:abc123"
+	got := ImageTag("registry.do.com", "loop-runtime", "my-app", "api", "abc123")
+	want := "registry.do.com/loop-runtime/my-app-api:abc123"
 	if got != want {
 		t.Errorf("ImageTag = %q, want %q", got, want)
 	}
@@ -620,7 +620,7 @@ func TestArgoAppName_empty_env(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#41 regression-protector (2026-06-27): IsPreviewEnv
+// Red Team loop-console#41 regression-protector (2026-06-27): IsPreviewEnv
 // must cover the legacy literal "preview" env name AND the broader
 // "preview-*" prefix the CLI emitted before the canonical "preview-pr-N"
 // pattern was introduced. LIVE DB inspection 2026-06-27 confirmed a row

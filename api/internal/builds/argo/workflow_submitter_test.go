@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 	forgemodel "github.com/getloopscale/argo-workflows-go/model"
@@ -23,7 +23,7 @@ import (
 )
 
 // These tests run against real Argo Workflows in the build cluster.
-// Set BUILD_KUBECONFIG to enable (path to kubeconfig with k3d-loopzero-build context).
+// Set BUILD_KUBECONFIG to enable (path to kubeconfig with k3d-loop-runtime-build context).
 // Without it, tests are skipped — not faked.
 
 func skipIfNoBuildCluster(t *testing.T) string {
@@ -41,7 +41,7 @@ func skipIfNoBuildCluster(t *testing.T) string {
 	// Verify the build cluster is actually reachable before running integration tests.
 	kubeContext := os.Getenv("BUILD_KUBE_CONTEXT")
 	if kubeContext == "" {
-		kubeContext = "k3d-loopzero-build"
+		kubeContext = "k3d-loop-runtime-build"
 	}
 	loadingRules := &clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig}
 	overrides := &clientcmd.ConfigOverrides{CurrentContext: kubeContext}
@@ -107,7 +107,7 @@ func newTestSubmitter(t *testing.T, namespaces ...string) *WorkflowSubmitter {
 
 	kubeContext := os.Getenv("BUILD_KUBE_CONTEXT")
 	if kubeContext == "" {
-		kubeContext = "k3d-loopzero-build"
+		kubeContext = "k3d-loop-runtime-build"
 	}
 
 	// Ensure per-tenant build namespaces exist before submitting workflows.
@@ -118,9 +118,9 @@ func newTestSubmitter(t *testing.T, namespaces ...string) *WorkflowSubmitter {
 	submitter, err := NewWorkflowSubmitter(WorkflowSubmitterConfig{
 		Kubeconfig:       kubeconfig,
 		Context:          kubeContext,
-		RegistryURL:      "k3d-loopzero-registry:5000",
+		RegistryURL:      "k3d-loop-runtime-registry:5000",
 		RegistryInsecure: true,
-		BaseDomain:       "loopzero.local",
+		BaseDomain:       "loop-runtime.local",
 	})
 	if err != nil {
 		t.Fatalf("failed to create workflow submitter: %v", err)
@@ -171,9 +171,8 @@ func TestWorkflowSubmitter_CancelWorkflow(t *testing.T) {
 	defer cancel()
 
 	// Submit a workflow.
-	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
-	// frontends are CDN-static via Cloudflare Worker (ADR D5) and do not flow
-	// through Argo. Use a single server app for cancel testing.
+	// The fixed LoopZeroKit stack is server|worker only, every app built as a
+	// container. Use a single server app for cancel testing.
 	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 	}
@@ -208,9 +207,8 @@ func TestWorkflowSubmitter_SubmitWithMultipleApps(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Plan B v3.1 (2026-06-05) — fixed LoopZeroKit stack is server|worker only;
-	// frontend apps removed (CDN-static path, ADR D5). Multi-app fixture now
-	// exercises server + worker only.
+	// The fixed LoopZeroKit stack is server|worker only, so the multi-app
+	// fixture exercises server + worker.
 	apps := []deploycontracts.AppSpec{
 		{Name: "api", Type: "server", Port: 3000},
 		{Name: "worker", Type: "worker", Port: 0},
@@ -338,7 +336,7 @@ func TestExtractStepOutputs_ParsesCosignAndBuildkitOutputs(t *testing.T) {
 	wf := map[string]interface{}{
 		"status": map[string]interface{}{
 			"nodes": map[string]interface{}{
-				"loopzero-build-build-abc-sign-1": map[string]interface{}{
+				"loop-runtime-build-build-abc-sign-1": map[string]interface{}{
 					"type":        "Pod",
 					"displayName": "sign-image-api",
 					"outputs": map[string]interface{}{
@@ -348,7 +346,7 @@ func TestExtractStepOutputs_ParsesCosignAndBuildkitOutputs(t *testing.T) {
 						},
 					},
 				},
-				"loopzero-build-build-abc-build-1": map[string]interface{}{
+				"loop-runtime-build-build-abc-build-1": map[string]interface{}{
 					"type":        "Pod",
 					"displayName": "build-image-api",
 					"outputs": map[string]interface{}{
@@ -357,16 +355,16 @@ func TestExtractStepOutputs_ParsesCosignAndBuildkitOutputs(t *testing.T) {
 						},
 					},
 				},
-				"loopzero-build-build-abc-clone-1": map[string]interface{}{
+				"loop-runtime-build-build-abc-clone-1": map[string]interface{}{
 					"type":        "Pod",
 					"displayName": "clone-repo",
 					// No outputs declared — must be skipped.
 				},
-				"loopzero-build-build-abc": map[string]interface{}{
+				"loop-runtime-build-build-abc": map[string]interface{}{
 					// Workflow root — DAG-type, NOT Pod. Must be skipped
 					// even if it has aggregate outputs.
 					"type":        "DAG",
-					"displayName": "loopzero-build",
+					"displayName": "loop-runtime-build",
 				},
 			},
 		},
@@ -399,7 +397,7 @@ func TestExtractStepOutputs_ParsesCosignAndBuildkitOutputs(t *testing.T) {
 	if _, ok := got["clone-repo"]; ok {
 		t.Error("clone-repo (no outputs) should not appear in result")
 	}
-	if _, ok := got["loopzero-build"]; ok {
+	if _, ok := got["loop-runtime-build"]; ok {
 		t.Error("DAG-type root node should not appear in result (only Pod nodes have real outputs)")
 	}
 }
@@ -478,7 +476,7 @@ func TestWorkflowStatus_OutputsField_CompileGuard(t *testing.T) {
 	}
 }
 
-// TestExtractStuckPodReason — Red Team loopzero-cloud#133 unit coverage.
+// TestExtractStuckPodReason — Red Team loop-console#133 unit coverage.
 // Locks the truth table of the pod-stuck detector so a future refactor
 // cannot silently regress the ImagePullBackOff / ErrImagePull / CreateContainerError
 // signals that gate the reaper's M-03 override.
@@ -505,10 +503,10 @@ func TestExtractStuckPodReason(t *testing.T) {
 			status: &forgemodel.WorkflowStatusDetail{
 				Phase: "Running",
 				Nodes: map[string]forgemodel.NodeStatus{
-					"n1": {Type: "Pod", Message: "ImagePullBackOff: Back-off pulling image \"registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0\""},
+					"n1": {Type: "Pod", Message: "ImagePullBackOff: Back-off pulling image \"registry.digitalocean.com/loop-runtime-system/loop-runtime-cosign-signer:v0.1.0\""},
 				},
 			},
-			want: "ImagePullBackOff: Back-off pulling image \"registry.digitalocean.com/loopzero-system/loopzero-cosign-signer:v0.1.0\"",
+			want: "ImagePullBackOff: Back-off pulling image \"registry.digitalocean.com/loop-runtime-system/loop-runtime-cosign-signer:v0.1.0\"",
 		},
 		{
 			name: "pod node with ErrImagePull returns the message",

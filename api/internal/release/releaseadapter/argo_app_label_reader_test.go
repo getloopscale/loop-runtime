@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package releaseadapter
 
@@ -25,14 +25,14 @@ func TestDynamicArgoAppLabelReader_ReturnsTheApplicationLabels(t *testing.T) {
 	app.SetKind("Application")
 	app.SetNamespace("argocd")
 	app.SetName("tn-1-web-production")
-	app.SetLabels(map[string]string{"loopzero.io/tenant": "tn-1", "loopzero.io/environment": "production"})
+	app.SetLabels(map[string]string{"runtime.getloopscale.com/tenant": "tn-1", "runtime.getloopscale.com/environment": "production"})
 
 	labels, err := newArgoAppLabelReader(app).GetAppLabels(context.Background(), "tn-1-web-production")
 
 	if err != nil {
 		t.Fatalf("GetAppLabels: %v", err)
 	}
-	if labels["loopzero.io/tenant"] != "tn-1" || labels["loopzero.io/environment"] != "production" {
+	if labels["runtime.getloopscale.com/tenant"] != "tn-1" || labels["runtime.getloopscale.com/environment"] != "production" {
 		t.Errorf("labels = %v", labels)
 	}
 }

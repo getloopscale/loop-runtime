@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Soak test — 6 hours at L2 load (50 tenants).
 //
@@ -23,8 +23,8 @@
 // How to interpret results:
 //   - Compare p99 in first vs last hour. If last hour p99 > 2x first
 //     hour p99, there is temporal degradation.
-//   - loopzero_soak_hour_marker increments every ~60 iterations for Grafana
-//     annotation queries ("WHERE loopzero_soak_hour_marker changed").
+//   - loop_runtime_soak_hour_marker increments every ~60 iterations for Grafana
+//     annotation queries ("WHERE loop_runtime_soak_hour_marker changed").
 //   - Zero 5xx is non-negotiable — unlike stress-break-point, soak load
 //     is within the platform's advertised capacity. Any 5xx is a bug.
 //
@@ -43,7 +43,7 @@ import {
   healthCheck,
   verifyAppLive,
   appURL,
-} from './lib/loopzero-api.js';
+} from './lib/loop-runtime-api.js';
 import { thresholdsFor } from './lib/thresholds.js';
 import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 
@@ -51,9 +51,9 @@ import { loadBundleBytes } from '../fixtures/bundle-builder.js';
 // Custom soak metrics
 // -----------------------------------------------------------------------
 
-const soakIterationTotal = new Counter('loopzero_soak_iteration_total');
-const soakHourMarker = new Counter('loopzero_soak_hour_marker');
-const soak5xxTotal = new Counter('loopzero_soak_5xx_total');
+const soakIterationTotal = new Counter('loop_runtime_soak_iteration_total');
+const soakHourMarker = new Counter('loop_runtime_soak_hour_marker');
+const soak5xxTotal = new Counter('loop_runtime_soak_5xx_total');
 
 // -----------------------------------------------------------------------
 // Options
@@ -75,9 +75,9 @@ export const options = {
   },
   thresholds: Object.assign({}, l2Thresholds, {
     // Soak-specific: zero 5xx (we are within budget, unlike stress test)
-    'loopzero_soak_5xx_total':    ['count<1'],
+    'loop_runtime_soak_5xx_total':    ['count<1'],
     // Tighten build success for soak (sustained reliability)
-    'loopzero_build_succeeded':   ['rate>0.995'],
+    'loop_runtime_build_succeeded':   ['rate>0.995'],
     // HTTP p99 drift detection (absolute ceiling — temporal comparison
     // is done in handleSummary since k6 doesn't support per-window thresholds)
     'http_req_duration':      ['p(99)<60000'],   // absolute ceiling: 60s for any API call
@@ -106,7 +106,7 @@ export function setup() {
   for (let i = 0; i < TENANT_COUNT; i++) {
     const tenantID = `k6-soak-tn-${i}`;
     const userID = `k6-soak-user-${i}`;
-    const email = `k6-soak-${i}@loopzero.test`;
+    const email = `k6-soak-${i}@loop-runtime.test`;
     const projectName = `k6-soak-app-${i}`;
     createProject(tenantID, projectName, userID, email);
     // Small pause to avoid hammering during setup
@@ -126,7 +126,7 @@ export default function (data) {
 
   const tenantID = `k6-soak-tn-${tenantIdx}`;
   const userID = `k6-soak-user-${tenantIdx}`;
-  const email = `k6-soak-${tenantIdx}@loopzero.test`;
+  const email = `k6-soak-${tenantIdx}@loop-runtime.test`;
   const projectName = `k6-soak-app-${tenantIdx}`;
 
   // Track total iterations for observability.
@@ -199,12 +199,12 @@ export function teardown() {
 export function handleSummary(data) {
   const m = data.metrics;
   const httpDur = (m.http_req_duration || {}).values || {};
-  const buildSucc = (m.loopzero_build_succeeded || {}).values || {};
-  const soakIter = (m.loopzero_soak_iteration_total || {}).values || {};
-  const soakHour = (m.loopzero_soak_hour_marker || {}).values || {};
-  const s5xx = (m.loopzero_soak_5xx_total || {}).values || {};
-  const deployDur = (m.loopzero_deploy_duration_ms || {}).values || {};
-  const appVer = (m.loopzero_app_verified || {}).values || {};
+  const buildSucc = (m.loop_runtime_build_succeeded || {}).values || {};
+  const soakIter = (m.loop_runtime_soak_iteration_total || {}).values || {};
+  const soakHour = (m.loop_runtime_soak_hour_marker || {}).values || {};
+  const s5xx = (m.loop_runtime_soak_5xx_total || {}).values || {};
+  const deployDur = (m.loop_runtime_deploy_duration_ms || {}).values || {};
+  const appVer = (m.loop_runtime_app_verified || {}).values || {};
 
   const totalIter = soakIter.count || 0;
   const hours = (soakHour.count || 0) + 1; // hour markers + 1 for first hour
@@ -239,7 +239,7 @@ ${'='.repeat(65)}
   Temporal Degradation Detection:
     (Compare HTTP p99 in Grafana first-hour vs last-hour panels.
      If last-hour p99 > 2x first-hour p99, investigate GC/pool/FD.)
-    Hour markers emitted: ${soakHour.count || 0} (query: loopzero_soak_hour_marker)
+    Hour markers emitted: ${soakHour.count || 0} (query: loop_runtime_soak_hour_marker)
 
   ${(s5xx.count || 0) === 0 && buildRate !== 'N/A' && parseFloat(buildRate) >= 99.5 ?
     'SOAK PASSED — no temporal degradation detected' :

@@ -1,0 +1,23 @@
+# staging overlay for ory-hydra: DSN and secrets from the ory-hydra-credentials Secret
+# aws-secrets-manager writes (database `hydra` on RDS, keys from the platform secret).
+#
+# The issuer is the public one, https://auth.staging.getloopscale.com/ (publicAuthUrl in
+# environments/staging.yaml; the base values derive urls.self from it). The public-routes
+# release serves it through Traefik, and the edge terminates TLS in front of it.
+# loop-runtime-api validates tokens against that issuer and fetches the keys in-cluster.
+secret:
+  enabled: false
+  nameOverride: ory-hydra-credentials
+hydra:
+  # Production mode: an HTTPS issuer, and Secure cookies whatever serve.cookies.secure says.
+  dev: false
+  config:
+    serve:
+      cookies:
+        # The parent of the auth, app and cloud hosts, so the CSRF cookie survives the
+        # redirects between Hydra and the login and consent handlers.
+        domain: {{ .Values.cookieDomain | quote }}
+        same_site_mode: "Lax"
+        secure: true
+    urls:
+      error: {{ printf "%s/auth/error" (.Values.uiBaseUrl | trimSuffix "/") | quote }}

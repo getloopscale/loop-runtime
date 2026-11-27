@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -12,14 +12,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	pkgid "github.com/getloopscale/loopzero/pkg/id"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	pkgid "github.com/getloopscale/loop-runtime/pkg/id"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Test doubles for PromotionOrchestrator ---
@@ -300,7 +300,7 @@ func TestPromote_SameEnvironment(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for same environment")
 	}
-	if err != loopzeroerrors.ErrSameEnvironment {
+	if err != loopruntimeerrors.ErrSameEnvironment {
 		t.Errorf("expected ErrSameEnvironment, got %v", err)
 	}
 }
@@ -332,7 +332,7 @@ func TestPromote_NoSourceRelease(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for no source release")
 	}
-	if err != loopzeroerrors.ErrNoActiveRelease {
+	if err != loopruntimeerrors.ErrNoActiveRelease {
 		t.Errorf("expected ErrNoActiveRelease, got %v", err)
 	}
 }
@@ -568,15 +568,15 @@ func TestPromote_ConcurrentRace_RejectsLateTransition(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CONCURRENT_PROMOTE error; got nil")
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Fatalf("expected wrapped *loopzeroerrors.LoopZeroError; got %T (%v)", err, err)
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
+		t.Fatalf("expected wrapped *loopruntimeerrors.LoopRuntimeError; got %T (%v)", err, err)
 	}
-	if loopzeroErr.Code != "INVALID_TRANSITION" {
-		t.Errorf("expected Code=INVALID_TRANSITION, got %s", loopzeroErr.Code)
+	if loopRuntimeErr.Code != "INVALID_TRANSITION" {
+		t.Errorf("expected Code=INVALID_TRANSITION, got %s", loopRuntimeErr.Code)
 	}
-	if !strings.Contains(loopzeroErr.Message, "CONCURRENT_PROMOTE") {
-		t.Errorf("expected Message to mention CONCURRENT_PROMOTE, got %q", loopzeroErr.Message)
+	if !strings.Contains(loopRuntimeErr.Message, "CONCURRENT_PROMOTE") {
+		t.Errorf("expected Message to mention CONCURRENT_PROMOTE, got %q", loopRuntimeErr.Message)
 	}
 }
 
@@ -600,16 +600,16 @@ func TestPromote_ReleaseAlreadyPending_RejectsRetry(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected CONCURRENT_PROMOTE on PENDING row; got nil")
 	}
-	var loopzeroErr *loopzeroerrors.LoopZeroError
-	if !errors.As(err, &loopzeroErr) {
-		t.Fatalf("expected *loopzeroerrors.LoopZeroError; got %T", err)
+	var loopRuntimeErr *loopruntimeerrors.LoopRuntimeError
+	if !errors.As(err, &loopRuntimeErr) {
+		t.Fatalf("expected *loopruntimeerrors.LoopRuntimeError; got %T", err)
 	}
-	if loopzeroErr.Code != "INVALID_TRANSITION" {
-		t.Errorf("expected INVALID_TRANSITION, got %s", loopzeroErr.Code)
+	if loopRuntimeErr.Code != "INVALID_TRANSITION" {
+		t.Errorf("expected INVALID_TRANSITION, got %s", loopRuntimeErr.Code)
 	}
 }
 
-// TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix — Red Team loopzero-cloud#120
+// TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix — Red Team loop-console#120
 // sub-finding 2: pre-fix the orchestrator concatenated "rel-" + id.GenerateReleaseID()
 // at line 155, producing "rel-rel-<16hex>" (failing id.IsValidReleaseID + confusing
 // downstream consumers). Post-fix: id.GenerateReleaseID alone produces the canonical
@@ -631,12 +631,12 @@ func TestPromote_NewReleaseID_IsCanonical_NoDoublePrefix(t *testing.T) {
 	}
 }
 
-// TestPromote_PublicDomain_PreferredOverBase — Red Team loopzero-cloud#120
+// TestPromote_PublicDomain_PreferredOverBase — Red Team loop-console#120
 // sub-finding 3 (regression of #61): pre-fix the URL was built from BaseDomain
-// only ("loopzero.local" internal). Post-fix PublicDomain takes precedence so the
+// only ("loop-runtime.local" internal). Post-fix PublicDomain takes precedence so the
 // response URL is the canonical Live URL.
 //
-// 2026-07-01 (Red Team loopzero-cloud#159): the URL formula is now the FAANG
+// 2026-07-01 (Red Team loop-console#159): the URL formula is now the FAANG
 // canonical `naming.AppURL` — includes tenant + entryApp segments so the URL
 // matches the IngressRoute Host rule. Fixture apps updated to include
 // `type: "server"` so entryApp resolves.
@@ -654,7 +654,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 		GitReader: &fakePromotionGitReader{manifests: map[string][]byte{"abc": []byte("y")}},
 		GitPusher: &fakePromotionGitPusher{}, Sync: &fakePromotionSyncClient{},
 		Locker:       &fakePromotionLocker{},
-		BaseDomain:   "loopzero.local",            // internal cluster domain (#61 leaker)
+		BaseDomain:   "loop-runtime.local",        // internal cluster domain (#61 leaker)
 		PublicDomain: "prod-dev.getloopscale.app", // canonical public — should win
 		Logger:       slog.Default(),
 	})
@@ -665,8 +665,8 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if strings.Contains(result.URL, "loopzero.local") {
-		t.Errorf("Red Team #120 — URL %q must NOT contain 'loopzero.local' when PublicDomain is set", result.URL)
+	if strings.Contains(result.URL, "loop-runtime.local") {
+		t.Errorf("Red Team #120 — URL %q must NOT contain 'loop-runtime.local' when PublicDomain is set", result.URL)
 	}
 	if !strings.Contains(result.URL, "prod-dev.getloopscale.app") {
 		t.Errorf("Red Team #120 — URL %q must contain canonical PublicDomain 'prod-dev.getloopscale.app'", result.URL)
@@ -679,7 +679,7 @@ func TestPromote_PublicDomain_PreferredOverBase(t *testing.T) {
 }
 
 // TestPromote_PublicDomainEmpty_FallsBackToBaseDomain — back-compat: when
-// LOOPZERO_PUBLIC_DOMAIN is unset (local Tilt dev), URL falls back to BaseDomain.
+// LOOP_RUNTIME_PUBLIC_DOMAIN is unset (local Tilt dev), URL falls back to BaseDomain.
 // This preserves the pre-#120 behavior for setups that haven't set PublicDomain.
 //
 // 2026-07-01 (Red Team #159): URL formula now canonical (tenant + entryApp).

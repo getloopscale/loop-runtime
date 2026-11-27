@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Bundle fixture for k6 load tests.
 //
@@ -18,7 +18,7 @@
 //     const http = require("http");
 //     http.createServer((_, r) => { r.writeHead(200); r.end('{"status":"ok"}'); }).listen(8080);
 //     EOF
-//     git init -q && git add -A && git -c user.email=k6@loopzero.test -c user.name=k6 commit -q -m k6 && \
+//     git init -q && git add -A && git -c user.email=k6@loop-runtime.test -c user.name=k6 commit -q -m k6 && \
 //     git bundle create /tmp/k6-loadtest.bundle HEAD && \
 //     base64 -w0 /tmp/k6-loadtest.bundle
 //

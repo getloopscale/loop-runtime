@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Hermetic unit tests for clusterKubectlArgs — exercises the resolver
 // without touching real clusters. Validates T5.2 of plan 2026-05-20
@@ -41,39 +41,39 @@ func withEnv(t *testing.T, vars map[string]string) {
 
 func TestClusterKubectlArgs_DefaultK3D(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":    "",
-		"DRILL_KUBECONFIG_DIR": "",
+		"LOOP_RUNTIME_TEST_ENV": "",
+		"DRILL_KUBECONFIG_DIR":  "",
 	})
 
 	args := clusterKubectlArgs(ClusterMgmt)
 	if len(args) < 3 || args[0] != "kubectl" || args[1] != "--context" {
 		t.Fatalf("default (k3d) should emit kubectl --context <ctx>, got %v", args)
 	}
-	if !strings.Contains(args[2], "k3d") && !strings.Contains(args[2], "loopzero-core") {
+	if !strings.Contains(args[2], "k3d") && !strings.Contains(args[2], "loop-runtime-core") {
 		t.Errorf("default context should target k3d mgmt, got %q", args[2])
 	}
 }
 
-func TestClusterKubectlArgs_LOOPZERO_TEST_ENV_K3D_Explicit(t *testing.T) {
+func TestClusterKubectlArgs_LOOP_RUNTIME_TEST_ENV_K3D_Explicit(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":    "k3d",
-		"DRILL_KUBECONFIG_DIR": "",
+		"LOOP_RUNTIME_TEST_ENV": "k3d",
+		"DRILL_KUBECONFIG_DIR":  "",
 	})
 
 	args := clusterKubectlArgs(ClusterMgmt)
 	if args[1] != "--context" {
-		t.Fatalf("LOOPZERO_TEST_ENV=k3d should emit --context, got %v", args)
+		t.Fatalf("LOOP_RUNTIME_TEST_ENV=k3d should emit --context, got %v", args)
 	}
 }
 
 // T5.2 critical assertion: legacy fallback REMOVED. Setting only
-// DRILL_KUBECONFIG_DIR (without LOOPZERO_TEST_ENV) must NOT route to drill —
+// DRILL_KUBECONFIG_DIR (without LOOP_RUNTIME_TEST_ENV) must NOT route to drill —
 // it falls through to k3d default. This catches regressions if anyone
 // re-adds the fallback.
 func TestClusterKubectlArgs_LegacyFallback_Removed(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":    "",
-		"DRILL_KUBECONFIG_DIR": "/tmp/drill-kc",
+		"LOOP_RUNTIME_TEST_ENV": "",
+		"DRILL_KUBECONFIG_DIR":  "/tmp/drill-kc",
 	})
 
 	args := clusterKubectlArgs(ClusterMgmt)
@@ -91,13 +91,13 @@ func TestClusterKubectlArgs_LegacyFallback_Removed(t *testing.T) {
 
 func TestClusterKubectlArgs_Drill_Explicit(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":    "drill",
-		"DRILL_KUBECONFIG_DIR": "/tmp/drill-kc",
+		"LOOP_RUNTIME_TEST_ENV": "drill",
+		"DRILL_KUBECONFIG_DIR":  "/tmp/drill-kc",
 	})
 
 	args := clusterKubectlArgs(ClusterMgmt)
 	if args[1] != "--kubeconfig" {
-		t.Fatalf("LOOPZERO_TEST_ENV=drill should emit --kubeconfig, got %v", args)
+		t.Fatalf("LOOP_RUNTIME_TEST_ENV=drill should emit --kubeconfig, got %v", args)
 	}
 	if !strings.HasSuffix(args[2], "mgmt.yaml") {
 		t.Errorf("expected /tmp/drill-kc/mgmt.yaml suffix, got %q", args[2])
@@ -106,14 +106,14 @@ func TestClusterKubectlArgs_Drill_Explicit(t *testing.T) {
 
 func TestClusterKubectlArgs_Drill_MissingKubeconfigDir_Panics(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":    "drill",
-		"DRILL_KUBECONFIG_DIR": "",
+		"LOOP_RUNTIME_TEST_ENV": "drill",
+		"DRILL_KUBECONFIG_DIR":  "",
 	})
 
 	defer func() {
 		r := recover()
 		if r == nil {
-			t.Fatal("LOOPZERO_TEST_ENV=drill without DRILL_KUBECONFIG_DIR should panic")
+			t.Fatal("LOOP_RUNTIME_TEST_ENV=drill without DRILL_KUBECONFIG_DIR should panic")
 		}
 		msg, ok := r.(string)
 		if !ok {
@@ -129,13 +129,13 @@ func TestClusterKubectlArgs_Drill_MissingKubeconfigDir_Panics(t *testing.T) {
 
 func TestClusterKubectlArgs_Prod_Stub_Panics(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV": "prod",
+		"LOOP_RUNTIME_TEST_ENV": "prod",
 	})
 
 	defer func() {
 		r := recover()
 		if r == nil {
-			t.Fatal("LOOPZERO_TEST_ENV=prod should panic (stub per ADR D5)")
+			t.Fatal("LOOP_RUNTIME_TEST_ENV=prod should panic (stub per ADR D5)")
 		}
 		msg, ok := r.(string)
 		if !ok {
@@ -151,8 +151,8 @@ func TestClusterKubectlArgs_Prod_Stub_Panics(t *testing.T) {
 
 func TestClusterKubectlArgs_PerClusterRole(t *testing.T) {
 	withEnv(t, map[string]string{
-		"LOOPZERO_TEST_ENV":    "drill",
-		"DRILL_KUBECONFIG_DIR": "/tmp/drill-kc",
+		"LOOP_RUNTIME_TEST_ENV": "drill",
+		"DRILL_KUBECONFIG_DIR":  "/tmp/drill-kc",
 	})
 
 	cases := []struct {

@@ -1,23 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package load implements progressive load tests for the LoopZero platform.
+// Package load implements progressive load tests for the LoopRuntime platform.
 //
 // Usage:
 //
 //	# L0 — Baseline (current 2 tenants, single deploy)
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.drill.getloopscale.com LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOP_RUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL0_Baseline -timeout 10m
 //
 //	# L1 — 10 tenants, concurrent deploys
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.drill.getloopscale.com LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOP_RUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL1_10Tenants -timeout 30m
 //
 //	# L2 — 50 tenants, sustained load
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DRILL_API_URL=https://api.drill.getloopscale.com LOOPZERO_AUTH_TOKEN=<token> \
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DRILL_API_URL=https://api.drill.getloopscale.com LOOP_RUNTIME_AUTH_TOKEN=<token> \
 //	  go test ./infra/tests/load/ -v -run TestL2_50Tenants -timeout 60m
 //
-// This test is SKIPPED unless LOOPZERO_LOAD_TEST=1 is set.
+// This test is SKIPPED unless LOOP_RUNTIME_LOAD_TEST=1 is set.
 package load
 
 import (

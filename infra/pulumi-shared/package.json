@@ -1,8 +1,8 @@
 {
-  "name": "@loopzero/pulumi-shared",
+  "name": "@loop-runtime/pulumi-shared",
   "version": "1.0.0",
   "private": true,
-  "description": "Canonical TypeScript contracts shared across L1 Pulumi projects (loopzero-infra, loopzero-platform). Type-only — no runtime code.",
+  "description": "Canonical TypeScript contracts shared across L1 Pulumi projects (loop-runtime-infra, loop-runtime-platform). Type-only — no runtime code.",
   "main": "stack-outputs.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",

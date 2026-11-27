@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -17,7 +17,7 @@ import (
 //
 // Until 2026-08-14 the request pool held BYPASSRLS, so the policy never applied
 // and the count was complete. Migration 000062 plus the boot guard moved that
-// pool to loopzero_api, and the same query started returning only the tenant whose
+// pool to loop_runtime_api, and the same query started returning only the tenant whose
 // context the transaction carries — turning a per-ACCOUNT cap into a per-TENANT
 // one. A plan capped at N projects would allow N per tenant, without limit.
 //
@@ -29,8 +29,8 @@ import (
 func TestProjectCap_CrossTenantCount(t *testing.T) {
 	ctx := context.Background()
 
-	worker := poolFor(t, dsnOrSkip(t, "LOOPZERO_WORKER_DATABASE_URL"))
-	request := poolFor(t, dsnOrSkip(t, "LOOPZERO_API_DATABASE_URL"))
+	worker := poolFor(t, dsnOrSkip(t, "LOOP_RUNTIME_WORKER_DATABASE_URL"))
+	request := poolFor(t, dsnOrSkip(t, "LOOP_RUNTIME_API_DATABASE_URL"))
 
 	const (
 		acct = "acct-xtenant"

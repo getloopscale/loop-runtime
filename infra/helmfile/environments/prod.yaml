@@ -6,15 +6,15 @@
 domain: getloopscale.com
 dnsZone: getloopscale.com
 
-# Phase 3.4 of plan 2026-06-02-loopzero-api-vault-integration v1.8 (D11 ESO).
+# Phase 3.4 of plan 2026-06-02-loop-runtime-api-vault-integration v1.8 (D11 ESO).
 # Prod placeholder per T8.2 acceptance criteria: enable ONLY after
-# (a) DOKS loopzero-secrets-prod cluster up (separate cluster, Shamir 5/3 + Raft +
+# (a) DOKS loop-runtime-secrets-prod cluster up (separate cluster, Shamir 5/3 + Raft +
 #     HTTPS + Kubernetes auth via cross-cluster CA chain);
 # (b) openbao-init Job ran (engines + auth + policies bootstrapped);
-# (c) ClusterSecretStore loopzero-secrets-secrets applied (Phase 3.1 manifests);
-# (d) seed-loopzero-secrets.sh ran for env=prod with real prod secret values
-#     (operator-provided file gitignored, ~$HOME/.loopzero-secrets-prod.yaml);
-# (e) T9.3 prod-like smoke validated (loopzero-api boot + 1 KvGet success +
+# (c) ClusterSecretStore loop-runtime-secrets-secrets applied (Phase 3.1 manifests);
+# (d) seed-loop-runtime-secrets.sh ran for env=prod with real prod secret values
+#     (operator-provided file gitignored, ~$HOME/.loop-runtime-secrets-prod.yaml);
+# (e) T9.3 prod-like smoke validated (loop-runtime-api boot + 1 KvGet success +
 #     metric vault source non-zero in staging-like env).
 #
 # Flipping to true requires sponsor + security guardian sign-off (T2 meeting
@@ -44,12 +44,12 @@ certIssuer:
   name: letsencrypt-prod
 
 registries:
-  docrPrefix: "registry.digitalocean.com/loopzero-system/"
+  docrPrefix: "registry.digitalocean.com/loop-runtime-system/"
 
 loki:
   maxGlobalStreamsPerUser: 200000
   # Audit M08 #18 / §6.C.4b — promtail cross-cluster push target (env-specific).
-  pushUrl: http://loki.loopzero-platform.internal:3100/loki/api/v1/push
+  pushUrl: http://loki.loop-runtime-platform.internal:3100/loki/api/v1/push
 
 # Policy mode — `enforce` per MEET-2026-05-12 D2 mitigation #4 (T1.2 #4)
 # and T1.12 pre-flight protocol. Engineering side authorized by
@@ -71,14 +71,14 @@ loki:
 #
 # Rollback path (recovery < 2 min): revert this commit + helmfile sync.
 #
-# Post-flip: monitor `loopzero_admission_denied_total` for 24h. Zero unexpected
+# Post-flip: monitor `loop_runtime_admission_denied_total` for 24h. Zero unexpected
 # denials = mitigation #4 closed; Platform-Security D2 veto fully lifted.
 policyMode: enforce  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
 noRuntimeImageMutations: true  # VAP active in prod (was implicit; now explicit)
 noRuntimeImageMutationsAction: Deny  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
 noRuntimeImageMutationsFailurePolicy: Fail  # MEET-ASYNC-AMENDMENT-2026-05-12-002 ratified
 
-# In-cluster Postgres — DISABLED for LoopZero Cloud prod (uses DO Managed HA PG cluster).
+# In-cluster Postgres — DISABLED for LoopRuntime Cloud prod (uses DO Managed HA PG cluster).
 inClusterPostgres: false
 
 # B20: NFS server provisioner underlying storage class. DOKS default.
@@ -100,7 +100,7 @@ dynamicRouter: true
 # from Pulumi L1 (InfraOutputs.veleroBackupsBucketName) and is protected
 # from accidental destroy in prod (T0.1 protect:isProd).
 velero:
-  bucket: loopzero-infra-sfo3-velero-backups
+  bucket: loop-runtime-infra-sfo3-velero-backups
   region: sfo3
   s3Url: https://sfo3.digitaloceanspaces.com
 
@@ -138,8 +138,11 @@ profile:
   managedRedis: false           # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
   kedaHttpAddon: true           # install the KEDA HTTP add-on on the cells
   staticAssets: true            # install the static-assets server on the cells
-  loopzeroCloud: true               # install the control plane (loopzero-cloud), unless clusterRole is standalone
+  loopRuntimeCloud: true               # install the control plane (loop-console), unless clusterRole is standalone
   smokeTest: true               # run the post-install smoke-test release
   localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
-  localRegistry: false          # cells admit images from the local k3d registry (k3d-loopzero-registry:5000)
-  secretFetchBroker: false      # install the ESO secret-fetch broker (loopzero-broker) on the cells; its chart allows a plaintext bearer only in dev-public
+  inClusterObjectStore: true    # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
+  awsSecretsManager: false      # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
+  awsLoadBalancerController: false  # install the AWS Load Balancer Controller and publish the edge through an ALB
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: true       # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public. Needs LOOP_RUNTIME_CORE_API_INTERNAL_URL (cells) and LOOP_RUNTIME_CORE_API_INTERNAL_CERTIFICATE_ARN (core)

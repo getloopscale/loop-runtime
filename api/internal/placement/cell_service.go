@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -10,7 +10,7 @@ import (
 )
 
 // CellStatus represents the status of a single Cell for operator visibility.
-// Used by GET /internal/cells and `loopzero status --cells`.
+// Used by GET /internal/cells and `loopscale status --cells`.
 // ADR-0008 Phase 2 (P2-7).
 type CellStatus struct {
 	CellID        string    `json:"cell_id"`

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 13: Argo Rollouts Progressive Delivery (canary).
 //
@@ -15,7 +15,7 @@
 //          emitted, CLI exit 3.
 //
 // Skip semantics:
-//   - Skipped when LOOPZERO_E2E unset (suite-level gate).
+//   - Skipped when LOOP_RUNTIME_E2E unset (suite-level gate).
 //   - Skipped when Rollout CRD is missing (Argo Rollouts not installed) —
 //     similar to F-07 Velero guard, this checks the actual install signal
 //     rather than just namespace existence.
@@ -36,7 +36,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
 )
 
 // argoRolloutsInstalled reports whether the Rollout CRD is registered on

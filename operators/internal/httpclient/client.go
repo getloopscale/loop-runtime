@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package httpclient provides a shared HTTP client for internal cluster communication.
 //
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
 )
 
 // skipTLSVerify reads the OPERATOR_INSECURE_SKIP_TLS environment variable.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // mockVault implements VaultTransitClient for unit tests.
@@ -112,7 +112,7 @@ func TestEncryptForStore_RefusesCiphertextLookingValueWhenNoVault(t *testing.T) 
 	}
 
 	_, err = s.encryptForStore(context.Background(), "tenant-A", []byte("vault:v1:user-typed-this"))
-	if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+	if !errors.Is(err, loopruntimeerrors.ErrSecretsBackendUnavailable) {
 		t.Fatalf("a store without transit must refuse every write; got %v", err)
 	}
 }
@@ -223,7 +223,7 @@ func TestDecryptFromStore_TransitRowWithoutVaultIsBackendUnavailable(t *testing.
 		t.Fatal(err)
 	}
 	_, err = s.decryptFromStore(context.Background(), "tenant-A", []byte("vault:v1:would-be-vault"))
-	if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+	if !errors.Is(err, loopruntimeerrors.ErrSecretsBackendUnavailable) {
 		t.Fatalf("want ErrSecretsBackendUnavailable, got %v", err)
 	}
 }
@@ -234,7 +234,7 @@ func TestDecryptFromStore_TransitRowWithoutVaultIsBackendUnavailable(t *testing.
 func TestDecryptFromStore_NoKeyAndNoVaultIsBackendUnavailable(t *testing.T) {
 	s := &PostgresSecretStore{}
 	got, err := s.decryptFromStore(context.Background(), "tenant-A", []byte("stored-bytes"))
-	if !errors.Is(err, loopzeroerrors.ErrSecretsBackendUnavailable) {
+	if !errors.Is(err, loopruntimeerrors.ErrSecretsBackendUnavailable) {
 		t.Fatalf("want ErrSecretsBackendUnavailable, got value %q err %v", got, err)
 	}
 }

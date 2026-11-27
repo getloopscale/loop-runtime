@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
 )
 
 // roleMembership authenticates every request as a member of tn-fixed with one
@@ -38,14 +38,15 @@ func routerAs(t *testing.T, role string) http.Handler {
 // one place (auth.RequireRole at registration) instead of an inline check per
 // handler with its own error shape.
 var roleGatedRoutes = map[string]string{
-	"POST /api/v1/projects/{name}/connect":    "admin",
-	"DELETE /api/v1/projects/{name}/connect":  "admin",
-	"POST /api/v1/domains":                    "admin",
-	"DELETE /api/v1/domains/{domain}":         "admin",
-	"GET /api/v1/audit":                       "admin",
-	"POST /api/v1/teams/members":              "admin",
-	"DELETE /api/v1/teams/members/{username}": "admin",
-	"PATCH /api/v1/teams/members/{username}":  "owner",
+	"POST /api/v1/projects/{name}/connect":                 "admin",
+	"DELETE /api/v1/projects/{name}/connect":               "admin",
+	"POST /api/v1/integrations/github/installations/claim": "admin",
+	"POST /api/v1/domains":                                 "admin",
+	"DELETE /api/v1/domains/{domain}":                      "admin",
+	"GET /api/v1/audit":                                    "admin",
+	"POST /api/v1/teams/members":                           "admin",
+	"DELETE /api/v1/teams/members/{username}":              "admin",
+	"PATCH /api/v1/teams/members/{username}":               "owner",
 }
 
 func TestRoleGates_RefuseARoleBelowTheMinimum(t *testing.T) {

@@ -1,0 +1,2 @@
+{{- /* Off unless ingressRoute.enabled — see values.yaml and loop-runtime-common.ingressRoute. */ -}}
+{{ include "loop-runtime-common.ingressRoute" . }}

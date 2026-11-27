@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Plan v1.2 T1.2 (cutover-deep-review-hardening): integration test that
 // POST /api/v1/source/upload returns HTTP 400 with code
@@ -14,13 +14,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
-	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/teams/teamshttp"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -29,11 +29,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/audit/audithttp"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
 )
 
 // stubInvalidProjectSourceStore mimics what GiteaSourceStore returns when

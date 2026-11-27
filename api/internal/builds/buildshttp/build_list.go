@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -8,14 +8,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	"github.com/getloopscale/loopzero/api/internal/pagination"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/pagination"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // BuildListItem is the route-level representation of a build for listing.
@@ -59,6 +59,8 @@ type BuildListHandler struct {
 	// constructed via NewBuildListHandler — the gate is a T2.2 addition
 	// only relevant for the new /build-envs endpoint).
 	projects ports.ProjectStore
+	// releases is optional: nil leaves deploy_status out.
+	releases ReleaseStatusLookup
 }
 
 // NewBuildListHandler creates a new BuildListHandler (legacy constructor —
@@ -93,17 +95,17 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
-	// Red Team loopzero-cloud#92 absorption (2026-06-27): missing-parent-guard.
+	// Red Team loop-console#92 absorption (2026-06-27): missing-parent-guard.
 	// Without this check, GET /projects/<nonexistent>/builds returned 200
 	// with an empty list, so the dashboard's sub-views (Deployments page)
 	// rendered functional UI for a deleted/non-existent project. Same EC-2
@@ -114,11 +116,11 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 	if h.projects != nil {
 		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 		if err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		if project == nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 			return
 		}
 	}
@@ -129,8 +131,23 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	builds, total, err := h.builds.ListByProjectAndEnv(ctx, uc.TenantID, name, env, limit, offset)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
+	}
+
+	// A list without deploy outcomes would read as builds that were never
+	// deployed, so a failed lookup fails the request.
+	releaseStatuses := map[string]string{}
+	if h.releases != nil && len(builds) > 0 {
+		ids := make([]string, len(builds))
+		for i, b := range builds {
+			ids[i] = b.ID
+		}
+		releaseStatuses, err = h.releases.LatestReleaseStatuses(ctx, uc.TenantID, ids)
+		if err != nil {
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
+			return
+		}
 	}
 
 	resp := buildListResponse{
@@ -153,7 +170,8 @@ func (h *BuildListHandler) List(w http.ResponseWriter, r *http.Request) {
 			// snapshot. Adapter parses apps_spec JSONB into b.Apps; here we
 			// just forward the slice through. omitempty drops the key when
 			// the build's apps_spec was empty/missing.
-			Apps: b.Apps,
+			Apps:         b.Apps,
+			DeployStatus: DeployStatusOf(releaseStatuses[b.ID]),
 		}
 		if b.StartedAt != nil {
 			item.StartedAt = b.StartedAt.UTC().Format(time.RFC3339)
@@ -190,13 +208,13 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	name := chi.URLParam(r, "name")
 	if name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrMissingField.Wrap("project name is required"))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrMissingField.Wrap("project name is required"))
 		return
 	}
 
@@ -205,18 +223,18 @@ func (h *BuildListHandler) BuildEnvs(w http.ResponseWriter, r *http.Request) {
 	if h.projects != nil {
 		project, err := h.projects.GetByName(ctx, uc.TenantID, name)
 		if err != nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 			return
 		}
 		if project == nil {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewProjectNotFound(name))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewProjectNotFound(name))
 			return
 		}
 	}
 
 	envs, err := h.builds.ListEnvsForProject(ctx, uc.TenantID, name)
 	if err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 	if envs == nil {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -10,12 +10,12 @@ import "fmt"
 // validator_env.go). Field carries the offending wire field; Message is a
 // product-language explanation safe to surface to the user.
 //
-// The legacy loopzero.yaml parser (ValidateLoopZeroYAML) + its LoopZeroYAML/AppConfig
+// The legacy loopzero.yaml parser (ValidateLoopRuntimeYAML) + its LoopRuntimeYAML/AppConfig
 // structs were removed by simplify-deploy-loopzerokit-only (review F-xval-1):
 // services.json is the single ingestion contract (*ServicesManifest), so the
 // loopzero.yaml types had zero production callers.
 //
-// Sprint 4 (qa-sprint4-cleanup-2026-06-25 T2.2, closes loopzero-cloud#29 multi-field
+// Sprint 4 (qa-sprint4-cleanup-2026-06-25 T2.2, closes loop-console#29 multi-field
 // error aggregation): the Errors slice now carries ALL field-level violations
 // from the jsonschema Causes tree, not just the first one. Legacy Field/Message
 // remain for backward-compat (they equal Errors[0].Field / Errors[0].Message via

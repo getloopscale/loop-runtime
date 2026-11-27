@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store_test
 
 import (
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 )
 
 // project_store_test.go — RESHAPED in T2.1 #4 of plan
@@ -33,7 +33,7 @@ import (
 //   - DeleteProject 0-rows-affected → "project not found" error
 //
 // Per matrix § Phase 2 reshape window: behavioral subset moves to
-// real-PG-gated tests when pgxmock or LOOPZERO_E2E_DATABASE_URL harness
+// real-PG-gated tests when pgxmock or LOOP_RUNTIME_E2E_DATABASE_URL harness
 // is wired.
 //
 // The 2 hermetic tests below (interface assertion +

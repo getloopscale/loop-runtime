@@ -1,0 +1,46 @@
+# loop-runtime-tenant-operator secrets via External Secrets Operator -> gcp-sm
+# Apply: kubectl apply -f eso-gcp-sm.yaml ; then helm install ... --set secrets.existingSecret=loop-runtime-tenant-operator-secrets
+---
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: loop-runtime-tenant-operator-gcp-sm
+spec:
+  provider:
+    gcpsm:
+      projectID: "!!changeme-gcp-project!!"
+      auth:
+        workloadIdentity:
+          clusterLocation: !!changeme-location!!
+          clusterName: !!changeme-cluster!!
+          serviceAccountRef:
+            name: loop-runtime-tenant-operator
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: loop-runtime-tenant-operator-secrets
+  namespace: loop-runtime-system
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: loop-runtime-tenant-operator-gcp-sm
+    kind: ClusterSecretStore
+  target:
+    name: loop-runtime-tenant-operator-secrets
+    creationPolicy: Owner
+  data:
+    - secretKey: DIGITALOCEAN_TOKEN
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "digitalocean_token" }
+    - secretKey: GITEA_TOKEN
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "gitea_token" }
+    - secretKey: MINIO_ACCESS_KEY
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "minio_access_key" }
+    - secretKey: MINIO_SECRET_KEY
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "minio_secret_key" }
+    - secretKey: REGISTRY_DOCKER_CONFIG
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "registry_docker_config" }
+    - secretKey: SPACES_ACCESS_KEY_ID
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "spaces_access_key_id" }
+    - secretKey: SPACES_SECRET_ACCESS_KEY
+      remoteRef: { key: "loop-runtime/tenant-operator", property: "spaces_secret_access_key" }

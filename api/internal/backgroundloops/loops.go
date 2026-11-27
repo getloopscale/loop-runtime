@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package backgroundloops
 
@@ -9,24 +9,25 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/audit"
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/domains"
-	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainsadapter"
-	"github.com/getloopscale/loopzero/api/internal/environments"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
-	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/lock"
-	"github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/release"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/audit"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/domains"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/cfzone"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/gitops"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/orchestrationbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // Loop is one named background loop; Start blocks until ctx is done.
@@ -36,7 +37,7 @@ type Loop struct {
 }
 
 // Deps is everything the loop graph needs. Every store MUST be built on the
-// BACKGROUND pool (loopzero_worker): each loop sweeps across tenants, and over the
+// BACKGROUND pool (loop_runtime_worker): each loop sweeps across tenants, and over the
 // request pool (RLS-scoped to one tenant) every sweep reads and deletes
 // nothing, with no error.
 type Deps struct {
@@ -68,11 +69,11 @@ type Deps struct {
 
 	// ReadinessSource observes the data plane for the readiness poller that
 	// feeds the dashboard's project badge. Optional: nil (the default, and
-	// what LOOPZERO_DATA_PLANE_POLLER_ENABLED=false wires) runs no poller.
+	// what LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED=false wires) runs no poller.
 	ReadinessSource environments.ReplicasReadySource
 
 	// CellID scopes the build/release loops to one cell (the controller's
-	// LOOPZERO_CELL_ID). Empty means every cell, and no per-cell concurrency cap.
+	// LOOP_RUNTIME_CELL_ID). Empty means every cell, and no per-cell concurrency cap.
 	CellID string
 }
 
@@ -157,8 +158,8 @@ func newReleaseReaper(cfg config.Config, d Deps, logger *slog.Logger) *release.R
 }
 
 func newConvergenceLoop(cfg config.Config, d Deps, logger *slog.Logger) *release.ReleaseConvergenceLoop {
-	// PublicDomain (LOOPZERO_PUBLIC_DOMAIN) is preferred over BaseDomain for the
-	// deploy.completed URL so it matches `loopzero status`.
+	// PublicDomain (LOOP_RUNTIME_PUBLIC_DOMAIN) is preferred over BaseDomain for the
+	// deploy.completed URL so it matches `loopscale status`.
 	loop := release.NewReleaseConvergenceLoop(d.ReleaseStore, d.EnvTargetStore, d.Sync, d.Locker,
 		d.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 		release.ReleaseConvergenceLoopConfig{
@@ -169,6 +170,8 @@ func newConvergenceLoop(cfg config.Config, d Deps, logger *slog.Logger) *release
 		})
 	// J-16: deploy.succeeded outbox writer on the activation path.
 	loop.WithDeployEventStore(store.NewDeployEventStoreSqlc())
+	// A pending release that a newer deploy replaced is cancelled, not timed out.
+	loop.WithLatestReleases(d.ReleaseStore)
 	return loop
 }
 
@@ -183,6 +186,16 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 			ProgressiveDelivery: cfg.ProgressiveDelivery,
 			LeanResources:       cfg.LeanResources,
 		})
+	// The provisioner renders the running release again to add or remove a
+	// host, and must write the saved scale, not the build's. On the background
+	// pool: it renders for every tenant.
+	p.WithSavedScaling(scaling.StoredScaling{Configs: store.NewPostgresScalingStore(d.WorkerPool)})
+	// A deploy's manifest is in the GitOps repository before its release is the
+	// active one; the provisioner must not render the previous one over it.
+	p.WithLatestReleases(d.ReleaseStore)
+	if d.Sync != nil {
+		p.WithSync(d.Sync)
+	}
 	if cfg.CFZoneManagement && d.CFZone != nil {
 		p.WithCFZone(&domainsadapter.CFZoneStatusAdapter{Client: d.CFZone})
 	}
@@ -190,15 +203,18 @@ func newDomainProvisioner(cfg config.Config, d Deps, logger *slog.Logger) *domai
 }
 
 func newDomainHealthChecker(cfg config.Config, d Deps, logger *slog.Logger) *domains.DomainHealthChecker {
-	return domains.NewDomainHealthChecker(d.DomainStore, logger, domains.DomainHealthCheckerConfig{
+	checker := domains.NewDomainHealthChecker(d.DomainStore, logger, domains.DomainHealthCheckerConfig{
 		CNAMETarget: CNAMETarget(cfg),
 		GraceDays:   14,
 		StaleDays:   7,
 	})
+	checker.WithDeployedApps(domains.ReleaseDeployedApps{Releases: d.ReleaseStore, Builds: d.BuildStore})
+	checker.WithCertificates(domains.EdgeCertificateProber{})
+	return checker
 }
 
 // NewReadinessSource builds the data-plane observation the readiness poller
-// needs, or returns nil when LOOPZERO_DATA_PLANE_POLLER_ENABLED is off. Both
+// needs, or returns nil when LOOP_RUNTIME_DATA_PLANE_POLLER_ENABLED is off. Both
 // binaries call it and refuse to start on its error, the same way they
 // refuse an invalid configuration.
 func NewReadinessSource(cfg config.Config) (environments.ReplicasReadySource, error) {

@@ -1,0 +1,109 @@
+# The public edge of staging, in place of CloudFront and ACM: TLS for the public hostnames
+# with Let's Encrypt certificates, and every request passed on to the core cluster's ALB.
+#
+# `task staging:edge` writes the environment this file reads (/etc/loop-runtime-edge/edge.env):
+#
+#   EDGE_BIND_ADDRESS   the host's public address; nothing else is listened on
+#   EDGE_HOSTS          the public hostnames, separated by ", "; one certificate each
+#   EDGE_ALB_DNS_NAME   the DNSName of the ALB the traefik-edge Ingress created
+#   EDGE_ORIGIN         the emulator's endpoint, where that ALB is served
+#   EDGE_ORIGIN_CA      the emulator's CA, which signs the endpoint's certificate
+#   EDGE_APPS_DOMAIN    the domain tenant apps are served under
+#   EDGE_PLATFORM_DOMAIN  the platform's zone; no name under it gets a certificate on demand
+#   EDGE_API_HOST       the API's public hostname, where the route lookup is asked
+#   EDGE_ASK_PORT       the loopback port of the site that asks it
+#   EDGE_CELL_ORIGINS   a file with one "<cell> <DNSName of its ALB>" line per cell
+#
+# How a request reaches the right backend. The emulator serves an ALB at its own endpoint
+# for a request whose Host is the ALB's DNSName, so Host is rewritten to that name. The
+# hostname the viewer asked for travels in X-Forwarded-Host, and the emulator's ALB hands
+# it to the target as Host. Traefik therefore receives the viewer's Host, the same as
+# behind CloudFront in production, where the origin request policy forwards the viewer's
+# Host and the ALB passes it through unchanged. The IngressRoutes match on it.
+{
+	default_bind {$EDGE_BIND_ADDRESS}
+	email ops@getloopscale.com
+	# A tenant's custom domain gets its certificate on demand, at the first request for it.
+	# Caddy asks first: the wildcard DNS record resolves every name under the platform's
+	# zone here, and anyone may point a name of their own at this host.
+	on_demand_tls {
+		ask http://127.0.0.1:{$EDGE_ASK_PORT}/ask
+	}
+}
+
+# Answers whether a host is a tenant's active custom domain: 200 with the cell that serves
+# it in X-Loop-Runtime-Cell, or the API's refusal. Caddy asks it before it issues a certificate
+# (?domain=<host>), and the custom domain site asks it for every request.
+#
+# The address names no host. forward_auth passes the viewer's Host on, and a request whose
+# Host no site names gets an empty 200 from Caddy: with a host here, every request to the
+# custom domain site passed as allowed and carried no cell.
+http://:{$EDGE_ASK_PORT} {
+	bind 127.0.0.1
+	# The lookup also knows the platform's own hosts. Those have their sites above and
+	# below; a name under the zone that reaches this one is not public.
+	@platform expression `{query.domain}.endsWith(".{$EDGE_PLATFORM_DOMAIN}")`
+	respond @platform 404
+	rewrite * /internal/edge/route?{query}
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {$EDGE_ALB_DNS_NAME}
+		header_up X-Forwarded-Host {$EDGE_API_HOST}
+		header_up Authorization "Bearer {file.{$CREDENTIALS_DIRECTORY}/route-token}"
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+		}
+	}
+}
+
+{$EDGE_HOSTS} {
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {$EDGE_ALB_DNS_NAME}
+		# Caddy sets this by default; it is written out because the routing depends on it.
+		header_up X-Forwarded-Host {host}
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+		}
+	}
+}
+
+# Tenant apps. One wildcard certificate covers them (infra/staging/edge/apps-certificate.sh); it
+# reaches Caddy as a systemd credential, since lego's files belong to root. The Host stays the
+# viewer's: the emulator gives the request to the app-router distribution, whose wildcard alias
+# claims it, and its function picks the cell and the Host the cell's IngressRoutes match.
+*.{$EDGE_APPS_DOMAIN} {
+	tls {$CREDENTIALS_DIRECTORY}/apps.crt {$CREDENTIALS_DIRECTORY}/apps.key
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {host}
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+			# The viewer's host is not a name the emulator's certificate covers.
+			tls_server_name localhost
+		}
+	}
+}
+
+# Tenants' custom domains: every host no site above names. No alias of the app-router
+# distribution claims such a host, so the request goes to the cell's ALB directly. The
+# emulator serves that ALB for a request whose Host is its DNSName, and the ALB hands the
+# viewer's host to Traefik, as it does for the core cluster above.
+https:// {
+	tls {
+		on_demand
+	}
+	forward_auth 127.0.0.1:{$EDGE_ASK_PORT} {
+		uri /ask?domain={host}
+		copy_headers X-Loop-Runtime-Cell
+	}
+	map {http.request.header.X-Loop-Runtime-Cell} {cell_origin} {
+		import {$EDGE_CELL_ORIGINS}
+		default cell-without-a-load-balancer.invalid
+	}
+	reverse_proxy {$EDGE_ORIGIN} {
+		header_up Host {cell_origin}
+		header_up X-Forwarded-Host {host}
+		header_up -X-Loop-Runtime-Cell
+		transport http {
+			tls_trust_pool file {$EDGE_ORIGIN_CA}
+		}
+	}
+}

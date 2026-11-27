@@ -14,7 +14,7 @@
 -- populated by the syft scan step (Phase 1 of the sprint plan) and are
 -- nullable because legacy releases (pre-Sprint-6) have no SBOM.
 --
--- Forward-only migration (no DOWN file) per LoopZero conventions.
+-- Forward-only migration (no DOWN file) per LoopRuntime conventions.
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS release_app_attestations (

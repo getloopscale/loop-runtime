@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -15,8 +15,8 @@ func TestConstants_SyftScannerImageDefined(t *testing.T) {
 	if imageSyftScanner == "" {
 		t.Fatal("imageSyftScanner constant must be defined")
 	}
-	if !strings.Contains(imageSyftScanner, "loopzero-syft-scanner") {
-		t.Errorf("imageSyftScanner should reference loopzero-syft-scanner, got %q", imageSyftScanner)
+	if !strings.Contains(imageSyftScanner, "loop-runtime-syft-scanner") {
+		t.Errorf("imageSyftScanner should reference loop-runtime-syft-scanner, got %q", imageSyftScanner)
 	}
 	if strings.HasSuffix(imageSyftScanner, ":latest") {
 		t.Errorf("imageSyftScanner must not use :latest tag, got %q", imageSyftScanner)

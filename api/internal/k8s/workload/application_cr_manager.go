@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package workload owns the LoopZeroApplication and PreviewEnvironment custom
+// Package workload owns the LoopRuntimeApplication and PreviewEnvironment custom
 // resources — the CRs that describe what runs, as opposed to who it runs for.
 //
 // One of the three homes the B-058 split gave the responsibilities that used to
@@ -22,16 +22,16 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
-// loopzeroApplicationsGroupResource synthesizes Conflict errors for RetryOnConflict.
-var loopzeroApplicationsGroupResource = schema.GroupResource{Group: "loopzero.io", Resource: "loopzeroapplications"}
+// loopRuntimeApplicationsGroupResource synthesizes Conflict errors for RetryOnConflict.
+var loopRuntimeApplicationsGroupResource = schema.GroupResource{Group: "runtime.getloopscale.com", Resource: "loopruntimeapplications"}
 
-// LoopZeroApplicationInput holds the parameters for creating a LoopZeroApplication CR.
-type LoopZeroApplicationInput struct {
+// LoopRuntimeApplicationInput holds the parameters for creating a LoopRuntimeApplication CR.
+type LoopRuntimeApplicationInput struct {
 	TenantID    string
 	Project     string
 	Environment string
@@ -40,7 +40,7 @@ type LoopZeroApplicationInput struct {
 	ServicePort int32
 
 	// CorrelationID propagates the originating HTTP request's correlation
-	// ID into the CR metadata as the `loopzero.io/correlation-id` annotation
+	// ID into the CR metadata as the `runtime.getloopscale.com/correlation-id` annotation
 	// (audit M08 #10 / §6.C.1). When the operator reconciles this CR, it
 	// reads the annotation and injects the value into the reconcile
 	// context via correlation.WithID, so audit_log rows + logs emitted
@@ -51,7 +51,7 @@ type LoopZeroApplicationInput struct {
 	CorrelationID string
 }
 
-// ApplicationCRManager manages LoopZeroApplication custom resources on the mgmt cluster.
+// ApplicationCRManager manages LoopRuntimeApplication custom resources on the mgmt cluster.
 // It uses the TYPED controller-runtime client (M8): the api is the second Go
 // consumer of the operators/api contract module, so the compiler checks every
 // CR field at build time (was unstructured map pre-M8).
@@ -61,7 +61,7 @@ type ApplicationCRManager struct {
 }
 
 // NewApplicationCRManager creates an ApplicationCRManager reusing an existing typed client.
-// If namespace is empty, defaults to k8s.ControlPlaneNamespace (loopzero-system).
+// If namespace is empty, defaults to k8s.ControlPlaneNamespace (loop-runtime-system).
 func NewApplicationCRManager(c client.Client, namespace string) *ApplicationCRManager {
 	if namespace == "" {
 		namespace = k8s.ControlPlaneNamespace
@@ -69,34 +69,34 @@ func NewApplicationCRManager(c client.Client, namespace string) *ApplicationCRMa
 	return &ApplicationCRManager{Client: c, namespace: namespace}
 }
 
-// EnsureLoopZeroApplication creates or updates a LoopZeroApplication CR for the given app.
+// EnsureLoopRuntimeApplication creates or updates a LoopRuntimeApplication CR for the given app.
 // It is idempotent: calling it multiple times with the same input is safe.
 // The CR name is deterministic: {tenant}-{project}-{app}-{env}.
-func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, input LoopZeroApplicationInput) error {
-	crName := loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment)
+func (m *ApplicationCRManager) EnsureLoopRuntimeApplication(ctx context.Context, input LoopRuntimeApplicationInput) error {
+	crName := loopRuntimeApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		var existing apiv1.LoopZeroApplication
+		var existing apiv1.LoopRuntimeApplication
 		err := m.Client.Get(ctx, client.ObjectKey{Namespace: m.namespace, Name: crName}, &existing)
 		if k8serrors.IsNotFound(err) {
-			desired := buildLoopZeroApplicationCR(m.namespace, input)
+			desired := buildLoopRuntimeApplicationCR(m.namespace, input)
 			createErr := m.Client.Create(ctx, desired)
 			if k8serrors.IsAlreadyExists(createErr) {
 				// Another caller created it between our Get and Create — retry as update.
-				return k8serrors.NewConflict(loopzeroApplicationsGroupResource, crName, createErr)
+				return k8serrors.NewConflict(loopRuntimeApplicationsGroupResource, crName, createErr)
 			}
 			if createErr != nil {
-				return fmt.Errorf("k8s: create LoopZeroApplication CR %q: %w", crName, createErr)
+				return fmt.Errorf("k8s: create LoopRuntimeApplication CR %q: %w", crName, createErr)
 			}
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("k8s: get LoopZeroApplication CR %q: %w", crName, err)
+			return fmt.Errorf("k8s: get LoopRuntimeApplication CR %q: %w", crName, err)
 		}
 
 		// CR exists — apply desired spec onto the fetched object, preserving its
 		// resourceVersion (carried by `existing`) for optimistic concurrency.
-		applyLoopZeroApplicationSpec(&existing, input)
+		applyLoopRuntimeApplicationSpec(&existing, input)
 		// Audit gap M08 #10 / §6.C.1: refresh the correlation-id annotation on
 		// re-deploy so the CR traces back to the LATEST originating request, not
 		// the first one (parity with the pre-M8 rebuild-on-update behavior).
@@ -108,7 +108,7 @@ func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, in
 			if existing.Annotations == nil {
 				existing.Annotations = map[string]string{}
 			}
-			existing.Annotations["loopzero.io/correlation-id"] = input.CorrelationID
+			existing.Annotations["runtime.getloopscale.com/correlation-id"] = input.CorrelationID
 		}
 		if err := m.Client.Update(ctx, &existing); err != nil {
 			return err // RetryOnConflict handles Conflict errors automatically
@@ -120,11 +120,11 @@ func (m *ApplicationCRManager) EnsureLoopZeroApplication(ctx context.Context, in
 // maxK8sNameLen is the maximum length for a Kubernetes metadata.name field.
 const maxK8sNameLen = 253
 
-// loopzeroApplicationCRName computes a deterministic, collision-free name for a LoopZeroApplication CR.
+// loopRuntimeApplicationCRName computes a deterministic, collision-free name for a LoopRuntimeApplication CR.
 // Uses a short hash suffix to avoid ambiguity when component names contain hyphens.
 // The name is truncated to 253 chars (K8s limit) if needed, preserving the hash suffix.
-// Example: "tn-loopzero-my-project-api-production-a1b2c3d4"
-func loopzeroApplicationCRName(tenant, project, app, env string) string {
+// Example: "tn-loop-runtime-my-project-api-production-a1b2c3d4"
+func loopRuntimeApplicationCRName(tenant, project, app, env string) string {
 	// The hash input uses pipe separators to guarantee uniqueness even when
 	// components contain hyphens (e.g., project="my-app" vs project="my", app="app").
 	hashInput := fmt.Sprintf("%s|%s|%s|%s", tenant, project, app, env)
@@ -141,13 +141,13 @@ func loopzeroApplicationCRName(tenant, project, app, env string) string {
 	return prefix + "-" + suffix
 }
 
-// buildLoopZeroApplicationCR constructs a typed LoopZeroApplication CR matching the CRD
+// buildLoopRuntimeApplicationCR constructs a typed LoopRuntimeApplication CR matching the CRD
 // schema defined in operators/api/v1/application_types.go. The compiler now
 // enforces the spec shape (was an unstructured map pre-M8).
-func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput) *apiv1.LoopZeroApplication {
-	app := &apiv1.LoopZeroApplication{
+func buildLoopRuntimeApplicationCR(namespace string, input LoopRuntimeApplicationInput) *apiv1.LoopRuntimeApplication {
+	app := &apiv1.LoopRuntimeApplication{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      loopzeroApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
+			Name:      loopRuntimeApplicationCRName(input.TenantID, input.Project, input.AppName, input.Environment),
 			Namespace: namespace,
 			Labels: map[string]string{
 				naming.LabelTenant:      input.TenantID,
@@ -162,17 +162,17 @@ func buildLoopZeroApplicationCR(namespace string, input LoopZeroApplicationInput
 	// so the trace persists across the API→K8s→controller boundary.
 	if input.CorrelationID != "" {
 		app.Annotations = map[string]string{
-			"loopzero.io/correlation-id": input.CorrelationID,
+			"runtime.getloopscale.com/correlation-id": input.CorrelationID,
 		}
 	}
-	applyLoopZeroApplicationSpec(app, input)
+	applyLoopRuntimeApplicationSpec(app, input)
 	return app
 }
 
-// applyLoopZeroApplicationSpec writes the desired spec onto a LoopZeroApplication object.
+// applyLoopRuntimeApplicationSpec writes the desired spec onto a LoopRuntimeApplication object.
 // Used by both create (fresh object) and update (fetched object, resourceVersion
 // preserved). Labels/annotations are set only at build time (create path).
-func applyLoopZeroApplicationSpec(app *apiv1.LoopZeroApplication, input LoopZeroApplicationInput) {
+func applyLoopRuntimeApplicationSpec(app *apiv1.LoopRuntimeApplication, input LoopRuntimeApplicationInput) {
 	port := input.ServicePort
 	if port == 0 {
 		port = 80

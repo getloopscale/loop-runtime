@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // project_types.go — public struct for the projects domain that
@@ -39,7 +39,7 @@ type PostgresProjectStore struct {
 	DB         db.DBTX
 	capChecker ProjectCapChecker
 	// crossTenant counts the Account's projects across ITS tenants. It is a
-	// connection whose cross-tenant reach is a NAMED policy (loopzero_worker), not
+	// connection whose cross-tenant reach is a NAMED policy (loop_runtime_worker), not
 	// the request pool — which since migration 000062 sees one tenant and would
 	// silently turn a per-account cap into a per-tenant one. Nil leaves the
 	// count on the caller's transaction (tests, un-provisioned databases).

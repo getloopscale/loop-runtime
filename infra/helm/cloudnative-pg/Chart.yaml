@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: cloudnative-pg
+description: >-
+  The CloudNativePG operator, vendored from the manifest its release publishes and pinned
+  by sha256 in infra/tests/charts/cloudnative_pg_operator_test.go. The file is the release
+  asset without its Namespace document, which Helm creates for the release. A release
+  candidate has no upstream Helm chart; once a final release has one, this chart gives way
+  to it.
+type: application
+version: 1.31.0-rc1
+appVersion: 1.31.0-rc1

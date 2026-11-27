@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placementhttp
 
@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 type fakeEvictor struct {
@@ -31,7 +31,7 @@ func (f *fakeEvictor) EnqueueEviction(_ context.Context, _ []string) (string, er
 }
 
 // doEvict drives the route as the router mounts it. settings carries the
-// operator configuration by its environment names (LOOPZERO_ADMIN_API and the
+// operator configuration by its environment names (LOOP_RUNTIME_ADMIN_API and the
 // service secrets), which cmd reads once at boot.
 func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, settings map[string]string, headers map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -45,27 +45,27 @@ func doEvict(t *testing.T, input AdminEvictInput, ev TenantEvictor, settings map
 	// Authenticator.RequireAdminService at the router layer. Tests exercise the
 	// SAME chain (middleware → handler) so the auth-gate behavior is covered
 	// alongside the handler logic.
-	adminRoute(settings, AdminEvictHandler(ev, settings["LOOPZERO_ADMIN_API"] == "true")).ServeHTTP(w, req)
+	adminRoute(settings, AdminEvictHandler(ev, settings["LOOP_RUNTIME_ADMIN_API"] == "true")).ServeHTTP(w, req)
 	return w
 }
 
 func TestAdminEvict_FeatureFlagOff_Returns404(t *testing.T) {
 	// Post-T1.2 the middleware runs first → caller must pass auth before
-	// reaching the LOOPZERO_ADMIN_API gate. So a valid-secret request with the
+	// reaching the LOOP_RUNTIME_ADMIN_API gate. So a valid-secret request with the
 	// flag OFF returns 404 (defense-in-depth: flag-off is opaque even to
 	// authorized callers, NOT just to unauthorized ones).
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusNotFound {
-		t.Fatalf("want 404 without LOOPZERO_ADMIN_API, got %d", w.Code)
+		t.Fatalf("want 404 without LOOP_RUNTIME_ADMIN_API, got %d", w.Code)
 	}
 }
 
 func TestAdminEvict_MissingAuth_Returns403(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s3cr3t"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s3cr3t"},
 		nil,
 	)
 	if w.Code != http.StatusForbidden {
@@ -75,7 +75,7 @@ func TestAdminEvict_MissingAuth_Returns403(t *testing.T) {
 
 func TestAdminEvict_WrongSecret_Returns403(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s3cr3t"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s3cr3t"},
 		map[string]string{"X-Service-Auth": "wrong"},
 	)
 	if w.Code != http.StatusForbidden {
@@ -83,20 +83,20 @@ func TestAdminEvict_WrongSecret_Returns403(t *testing.T) {
 	}
 }
 
-// TestAdminEvict_LegacyProxySecret_Returns403 closes loopzero-cloud#16:
-// a request carrying the LEGACY LOOPZERO_SERVICE_AUTH_SECRET in the X-Service-Auth
+// TestAdminEvict_LegacyProxySecret_Returns403 closes loop-console#16:
+// a request carrying the LEGACY LOOP_RUNTIME_SERVICE_AUTH_SECRET in the X-Service-Auth
 // header (the exact shape the cloud /engine/* proxy adds to every forwarded
 // user-JWT request) must be rejected. Pre-T1.0+T1.2 the inline check accepted
 // this secret → owner-JWT requests reached the k8s cleanup logic → #16.
-// Post-fix: middleware reads only LOOPZERO_ADMIN_SERVICE_AUTH_SECRET → 403.
+// Post-fix: middleware reads only LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET → 403.
 func TestAdminEvict_LegacyProxySecret_Returns403(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, &fakeEvictor{},
 		map[string]string{
-			"LOOPZERO_ADMIN_API":                          "true",
-			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET":          "canonical-admin-secret",
-			"LOOPZERO_SERVICE_AUTH_SECRET":                "legacy-proxy-secret",
-			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS": "",
-			"LOOPZERO_SERVICE_AUTH_SECRET_PREVIOUS":       "",
+			"LOOP_RUNTIME_ADMIN_API":                          "true",
+			"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET":          "canonical-admin-secret",
+			"LOOP_RUNTIME_SERVICE_AUTH_SECRET":                "legacy-proxy-secret",
+			"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS": "",
+			"LOOP_RUNTIME_SERVICE_AUTH_SECRET_PREVIOUS":       "",
 		},
 		map[string]string{"X-Service-Auth": "legacy-proxy-secret"}, // proxy-added secret
 	)
@@ -114,8 +114,8 @@ func TestAdminEvict_CanonicalAdminSecret_Reachable(t *testing.T) {
 	ev := &fakeEvictor{matched: []string{"tn-aaaaaaaaaaaaaaaaaaaa"}}
 	w := doEvict(t, AdminEvictInput{IDs: []string{"tn-aaaaaaaaaaaaaaaaaaaa"}, DryRun: true}, ev,
 		map[string]string{
-			"LOOPZERO_ADMIN_API":                 "true",
-			"LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "canonical-admin-secret",
+			"LOOP_RUNTIME_ADMIN_API":                 "true",
+			"LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "canonical-admin-secret",
 		},
 		map[string]string{"X-Service-Auth": "canonical-admin-secret"},
 	)
@@ -127,7 +127,7 @@ func TestAdminEvict_CanonicalAdminSecret_Reachable(t *testing.T) {
 
 func TestAdminEvict_EmptyFilter_Returns400(t *testing.T) {
 	w := doEvict(t, AdminEvictInput{}, &fakeEvictor{},
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusBadRequest {
@@ -138,7 +138,7 @@ func TestAdminEvict_EmptyFilter_Returns400(t *testing.T) {
 func TestAdminEvict_DangerousPattern_Returns400(t *testing.T) {
 	for _, p := range []string{"%", "tn-%"} {
 		w := doEvict(t, AdminEvictInput{Pattern: p}, &fakeEvictor{},
-			map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+			map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 			map[string]string{"X-Service-Auth": "s"},
 		)
 		if w.Code != http.StatusBadRequest {
@@ -150,7 +150,7 @@ func TestAdminEvict_DangerousPattern_Returns400(t *testing.T) {
 func TestAdminEvict_DryRun_ReturnsMatches(t *testing.T) {
 	ev := &fakeEvictor{matched: []string{"tn-lt-1", "tn-lt-2"}}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%", DryRun: true}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusOK {
@@ -171,7 +171,7 @@ func TestAdminEvict_DryRun_ReturnsMatches(t *testing.T) {
 func TestAdminEvict_Live_Returns202(t *testing.T) {
 	ev := &fakeEvictor{matched: []string{"tn-lt-1"}, enqueueID: "job-1"}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusAccepted {
@@ -192,15 +192,15 @@ func TestAdminEvict_Live_Returns202(t *testing.T) {
 // A tenant-matching failure must not echo the upstream error to the caller
 // (CWE-209, as for enqueue): it can carry database or cluster internals.
 func TestAdminEvict_MatchFailure_SanitizesErrorBody(t *testing.T) {
-	ev := &fakeEvictor{matchErr: errors.New(`pq: relation "tenants" does not exist on host db-primary.loopzero-system`)}
+	ev := &fakeEvictor{matchErr: errors.New(`pq: relation "tenants" does not exist on host db-primary.loop-runtime-system`)}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("want 500, got %d", w.Code)
 	}
-	if strings.Contains(w.Body.String(), "loopzero-system") || strings.Contains(w.Body.String(), "relation") {
+	if strings.Contains(w.Body.String(), "loop-runtime-system") || strings.Contains(w.Body.String(), "relation") {
 		t.Errorf("response leaks the upstream error: %s", w.Body.String())
 	}
 }
@@ -212,10 +212,10 @@ func TestAdminEvict_MatchFailure_SanitizesErrorBody(t *testing.T) {
 func TestAdminEvict_EnqueueFailure_SanitizesErrorBody(t *testing.T) {
 	// Inject a fake error that mirrors the real k8s/ArgoCD leak shape
 	// captured in QA Red Team issue #20.
-	leakyErr := errors.New(`failed to create resource: User "system:serviceaccount:loopzero-system:default" cannot create resource "applications" in API group "argoproj.io"`)
+	leakyErr := errors.New(`failed to create resource: User "system:serviceaccount:loop-runtime-system:default" cannot create resource "applications" in API group "argoproj.io"`)
 	ev := &fakeEvictor{matched: []string{"tn-lt-1"}, enqErr: leakyErr}
 	w := doEvict(t, AdminEvictInput{Pattern: "tn-lt-%"}, ev,
-		map[string]string{"LOOPZERO_ADMIN_API": "true", "LOOPZERO_ADMIN_SERVICE_AUTH_SECRET": "s"},
+		map[string]string{"LOOP_RUNTIME_ADMIN_API": "true", "LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET": "s"},
 		map[string]string{"X-Service-Auth": "s"},
 	)
 	if w.Code != http.StatusInternalServerError {
@@ -227,7 +227,7 @@ func TestAdminEvict_EnqueueFailure_SanitizesErrorBody(t *testing.T) {
 	denylist := []string{
 		"serviceaccount:",
 		"system:serviceaccount",
-		"loopzero-system",
+		"loop-runtime-system",
 		"argoproj.io",
 		"API group",
 		"create resource",
@@ -261,9 +261,9 @@ func TestAdminEvict_BadJSON_Returns400(t *testing.T) {
 // adminRoute wraps h in the admin gate built from settings.
 func adminRoute(settings map[string]string, h http.Handler) http.Handler {
 	authn := auth.NewAuthenticator(auth.Config{
-		ServiceSecret:              settings["LOOPZERO_SERVICE_AUTH_SECRET"],
-		AdminServiceSecret:         settings["LOOPZERO_ADMIN_SERVICE_AUTH_SECRET"],
-		AdminServiceSecretPrevious: settings["LOOPZERO_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS"],
+		ServiceSecret:              settings["LOOP_RUNTIME_SERVICE_AUTH_SECRET"],
+		AdminServiceSecret:         settings["LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET"],
+		AdminServiceSecretPrevious: settings["LOOP_RUNTIME_ADMIN_SERVICE_AUTH_SECRET_PREVIOUS"],
 	})
 	return authn.RequireAdminService(h)
 }

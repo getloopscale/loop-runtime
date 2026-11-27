@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app
 
@@ -8,12 +8,12 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
-// applicationSM is the LoopZeroApplication lifecycle machine. Every phase change
+// applicationSM is the LoopRuntimeApplication lifecycle machine. Every phase change
 // goes through it (Rule 8): the controller derives EVENTS from what it
 // observed and lets the machine decide where they lead.
 var applicationSM = statemachine.NewApplicationTypedMachine()
@@ -36,7 +36,7 @@ type applicationObservation struct {
 	routeFailed    bool // the route reports a hard failure: endpoints are gone
 }
 
-func observe(app *loopzerov1.LoopZeroApplication) applicationObservation {
+func observe(app *loopruntimev1.LoopRuntimeApplication) applicationObservation {
 	failed := false
 	for _, c := range app.Status.Conditions {
 		if c.Type == conditions.TypeRouteReachable && c.Status == metav1.ConditionFalse && c.Reason == conditions.ReasonFailed {
@@ -95,10 +95,10 @@ func nextEvent(phase statemachine.ApplicationPhase, obs applicationObservation) 
 // advancePhase walks the Application machine from the current phase, one
 // declared transition per observed event, until the observation is explained.
 // A phase the machine does not know is an error, never overwritten.
-func advancePhase(app *loopzerov1.LoopZeroApplication) (loopzerov1.ApplicationPhase, error) {
+func advancePhase(app *loopruntimev1.LoopRuntimeApplication) (loopruntimev1.ApplicationPhase, error) {
 	phase := statemachine.ApplicationPhase(app.Status.Phase)
 	if !knownPhases[phase] {
-		return "", fmt.Errorf("application phase %q is not a LoopZeroApplication state", phase)
+		return "", fmt.Errorf("application phase %q is not a LoopRuntimeApplication state", phase)
 	}
 	if applicationSM.IsTerminal(phase) {
 		return app.Status.Phase, nil
@@ -107,7 +107,7 @@ func advancePhase(app *loopzerov1.LoopZeroApplication) (loopzerov1.ApplicationPh
 	for step := 0; step < maxPhaseSteps; step++ {
 		event := nextEvent(phase, obs)
 		if event == "" {
-			return loopzerov1.ApplicationPhase(phase), nil
+			return loopruntimev1.ApplicationPhase(phase), nil
 		}
 		next, err := applicationSM.TryTransition(phase, event)
 		if err != nil {
@@ -118,5 +118,5 @@ func advancePhase(app *loopzerov1.LoopZeroApplication) (loopzerov1.ApplicationPh
 	if nextEvent(phase, obs) != "" {
 		return "", fmt.Errorf("application phase did not settle within %d transitions (at %q)", maxPhaseSteps, phase)
 	}
-	return loopzerov1.ApplicationPhase(phase), nil
+	return loopruntimev1.ApplicationPhase(phase), nil
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildsadapter
 
@@ -8,14 +8,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // BuildOrchestratorAdapter implements routes.BuildOrchestratorService by
@@ -120,7 +120,7 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 		return nil, err
 	}
 	if !statemachine.IsBuildPhaseTerminal(statemachine.BuildPhase(build.Status)) {
-		return nil, loopzeroerrors.NewLoopZeroError(
+		return nil, loopruntimeerrors.NewLoopRuntimeError(
 			"BUILD_NOT_TERMINAL",
 			"Cannot redeploy a build that is still in progress. Wait for it to finish first.")
 	}
@@ -137,7 +137,7 @@ func (a *BuildOrchestratorAdapter) GetRedeploySource(ctx context.Context, tenant
 			Path:    s.Path,    // T0.2: now persisted → redeploy preserves monorepo path
 			Build:   s.Build,   // T0.2: now persisted → redeploy preserves build mode
 			Start:   s.Start,   // T0.2: now persisted → redeploy preserves start command
-			Runtime: s.Runtime, // loopzero#185: redeploy MUST preserve services.json runtime (F-dom-2) —
+			Runtime: s.Runtime, // loop-runtime#185: redeploy MUST preserve services.json runtime (F-dom-2) —
 			//                       adapter was silently dropping it → empty runtime → unsupportedStrategy
 			//                       → "Failed to build manifests with custom domains" → SYNC_FAILED.
 			Rendering: s.Rendering,

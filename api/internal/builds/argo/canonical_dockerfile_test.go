@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // T1.1 (plan simplify-deploy-loopzerokit-only v2.0) — canonical Dockerfile generator.
-// Replaces loopzero-packs (11-language heuristic) with two platform-controlled
+// Replaces loop-runtime-packs (11-language heuristic) with two platform-controlled
 // multi-stage Dockerfiles (node, python) for the fixed LoopZeroKit stack. The
 // generator runs at API time WITHOUT the extracted source, so package-manager
 // selection is deterministic build-time shell logic inside the Dockerfile.

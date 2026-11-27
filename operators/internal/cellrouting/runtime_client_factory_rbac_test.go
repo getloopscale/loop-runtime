@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package cellrouting_test
 
@@ -20,15 +20,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
-	"github.com/getloopscale/loopzero/operators/operatortest"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/operatortest"
 )
 
 // operatorIdentity is the ServiceAccount the operator charts bind their RBAC to.
-const operatorIdentity = "system:serviceaccount:loopzero-system:loopzero-tenant-operator"
+const operatorIdentity = "system:serviceaccount:loop-runtime-system:loop-runtime-tenant-operator"
 
 // TestCellAwareFactory_ResolvesACellWithSecretReadGrantedOnlyInThePlatformNamespace
 // runs the factory the way an operator binary does — through a cached client —
@@ -45,8 +45,8 @@ func TestCellAwareFactory_ResolvesACellWithSecretReadGrantedOnlyInThePlatformNam
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		t.Fatalf("client-go scheme: %v", err)
 	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		t.Fatalf("loopzero scheme: %v", err)
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("loop-runtime scheme: %v", err)
 	}
 
 	testEnv := &envtest.Environment{
@@ -110,14 +110,14 @@ func seedCell(ctx context.Context, t *testing.T, admin client.Client) {
 			ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: ns},
 			Data:       map[string][]byte{"kubeconfig": kubeconfigFor("https://127.0.0.1:6443", "cell-1-token")},
 		},
-		&loopzerov1.ClusterCredential{
+		&loopruntimev1.ClusterCredential{
 			ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: ns},
-			Spec: loopzerov1.ClusterCredentialSpec{
-				ClusterName: "loopzero-cell-1",
+			Spec: loopruntimev1.ClusterCredentialSpec{
+				ClusterName: "loop-runtime-cell-1",
 				APIServer:   "https://127.0.0.1:6443",
 				CellID:      "cell-1",
-				SecretRef:   loopzerov1.SecretReference{Name: "cell-1-kubeconfig", Namespace: ns},
-				Scope:       loopzerov1.CredentialScope{Operators: true},
+				SecretRef:   loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: ns},
+				Scope:       loopruntimev1.CredentialScope{Operators: true},
 			},
 		},
 	} {
@@ -138,7 +138,7 @@ func grantOperatorSecretReadInPlatformNamespace(ctx context.Context, t *testing.
 	for _, obj := range []client.Object{
 		&rbacv1.ClusterRole{
 			ObjectMeta: metav1.ObjectMeta{Name: "operator-cluster-credentials"},
-			Rules:      []rbacv1.PolicyRule{{APIGroups: []string{"loopzero.io"}, Resources: []string{"clustercredentials"}, Verbs: read}},
+			Rules:      []rbacv1.PolicyRule{{APIGroups: []string{"runtime.getloopscale.com"}, Resources: []string{"clustercredentials"}, Verbs: read}},
 		},
 		&rbacv1.ClusterRoleBinding{
 			ObjectMeta: metav1.ObjectMeta{Name: "operator-cluster-credentials"},

@@ -14,7 +14,7 @@ metadata:
   labels:
     app.kubernetes.io/name: argo-events-bus
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: ci
+    runtime.getloopscale.com/component: ci
 spec:
   jetstream:
     version: latest  # Renovate-pinned via upstream chart

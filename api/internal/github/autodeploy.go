@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -7,17 +7,20 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/archive"
-	"github.com/getloopscale/loopzero/api/internal/gitclient"
+	"github.com/getloopscale/loop-runtime/api/internal/archive"
+	"github.com/getloopscale/loop-runtime/api/internal/gitclient"
 
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -42,9 +45,25 @@ type AutoDeployConfig struct {
 	BuildCanceller BuildCanceller
 	ObjectStore    ObjectUploader
 	BuildSubmitter BuildSubmitter
-	SourceBucket   string // S3 bucket for source bundles (default: "loopzero-builds")
+	SourceBucket   string // S3 bucket for source bundles (default: "loop-runtime-builds")
 	Logger         *slog.Logger
+	// BusyRetryEvery and BusyWait bound how a push waits for an environment
+	// that is deploying: one submit attempt per BusyRetryEvery, for at most
+	// BusyWait. Zero takes the defaults (15 seconds, 20 minutes).
+	BusyRetryEvery time.Duration
+	BusyWait       time.Duration
+	// BranchHead reads the commit at the head of the pushed branch. Nil reads
+	// it from GitHub through AppClient.
+	BranchHead func(ctx context.Context, req PushRequest) (string, error)
+	// BuildQuota gates a push on the plan's builds per month, the limit the
+	// deploy route enforces. Nil builds every push.
+	BuildQuota BuildQuota
 }
+
+const (
+	defaultBusyRetryEvery = 15 * time.Second
+	defaultBusyWait       = 20 * time.Minute
+)
 
 // SourcePusher pushes source bundles (DIP — subset of source.SourceStore).
 type SourcePusher interface {
@@ -69,16 +88,16 @@ type BuildCanceller interface {
 
 // WebhookBuildRequest contains everything needed to submit a build from a webhook push.
 type WebhookBuildRequest struct {
-	TenantID       string
-	ProjectName    string
-	Environment    string
-	CommitSHA      string
-	InstallationID int64
-	RepoFullName   string
-	Branch         string
-	CommitMessage  string
-	SenderLogin    string
-	LoopZeroYaml   *LoopZeroYamlMinimal
+	TenantID        string
+	ProjectName     string
+	Environment     string
+	CommitSHA       string
+	InstallationID  int64
+	RepoFullName    string
+	Branch          string
+	CommitMessage   string
+	SenderLogin     string
+	LoopRuntimeYaml *LoopRuntimeYamlMinimal
 }
 
 // AutoDeployer handles auto-deploy on push events.
@@ -92,7 +111,7 @@ func NewAutoDeployer(cfg AutoDeployConfig) *AutoDeployer {
 }
 
 // PushRequest is one push to deploy: the repository and commit, the GitHub
-// App installation that can read it, the LoopZero project it is linked to, and the
+// App installation that can read it, the LoopRuntime project it is linked to, and the
 // commit metadata recorded on the build.
 type PushRequest struct {
 	RepoFullName   string
@@ -109,16 +128,16 @@ const (
 	// autoDeployEnvironment is the environment a push to the default branch
 	// deploys to.
 	autoDeployEnvironment = "production"
-	defaultSourceBucket   = "loopzero-builds"
+	defaultSourceBucket   = "loop-runtime-builds"
 )
 
 // HandlePush processes a push event and triggers a deploy if the repo is linked.
 // This is called asynchronously from the webhook handler.
 func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.github.autodeploy",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.github.autodeploy",
 		trace.WithAttributes(
-			attribute.String("loopzero.github.repo", req.RepoFullName),
-			attribute.String("loopzero.github.commit_sha", req.CommitSHA),
+			attribute.String("loop-runtime.github.repo", req.RepoFullName),
+			attribute.String("loop-runtime.github.commit_sha", req.CommitSHA),
 		))
 	defer span.End()
 
@@ -130,6 +149,15 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	if err != nil {
 		return err
 	}
+	refused, err := d.refusedByBuildQuota(ctx, log, req, owner, repo)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	if refused {
+		return nil
+	}
 	src, err := d.downloadSource(ctx, req.InstallationID, owner, repo, req.CommitSHA)
 	if err != nil {
 		span.RecordError(err)
@@ -138,20 +166,21 @@ func (d *AutoDeployer) HandlePush(ctx context.Context, req PushRequest) error {
 	}
 	defer src.close()
 
-	loopzeroYaml, err := src.deployDescriptor()
+	loopRuntimeYaml, err := src.deployDescriptor()
 	if err != nil {
 		// Not deployable by the same rule Connect applies: nothing to build.
 		log.Warn("auto-deploy: repository is not deployable, skipping", "error", err)
+		d.markCommitUndeployable(log, req, owner, repo, err)
 		return nil
 	}
-	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopzeroYaml.Project, "apps", len(loopzeroYaml.Apps))
+	log.Info("auto-deploy: deploy descriptor found", "project_in_yaml", loopRuntimeYaml.Project, "apps", len(loopRuntimeYaml.Apps))
 
 	if err := d.stageBundle(ctx, src, req.TenantID, req.CommitSHA, req.CommitMessage, req.SenderLogin); err != nil {
 		return fmt.Errorf("auto-deploy: %w", err)
 	}
 
 	d.cancelSupersededBuilds(ctx, log, req)
-	if err := d.submitBuild(ctx, log, req, loopzeroYaml); err != nil {
+	if err := d.submitBuild(ctx, log, req, loopRuntimeYaml); err != nil {
 		return err
 	}
 	d.markCommitPending(log, req, owner, repo)
@@ -172,27 +201,79 @@ func (d *AutoDeployer) cancelSupersededBuilds(ctx context.Context, log *slog.Log
 	}
 }
 
-func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req PushRequest, loopzeroYaml *LoopZeroYamlMinimal) error {
+func (d *AutoDeployer) submitBuild(ctx context.Context, log *slog.Logger, req PushRequest, loopRuntimeYaml *LoopRuntimeYamlMinimal) error {
 	if d.cfg.BuildSubmitter == nil {
 		log.Info("auto-deploy: build submitter not configured (webhook-only mode)")
 		return nil
 	}
-	if err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, WebhookBuildRequest{
-		TenantID:       req.TenantID,
-		ProjectName:    req.ProjectName,
-		Environment:    autoDeployEnvironment,
-		CommitSHA:      req.CommitSHA,
-		InstallationID: req.InstallationID,
-		RepoFullName:   req.RepoFullName,
-		Branch:         req.Branch,
-		CommitMessage:  req.CommitMessage,
-		SenderLogin:    req.SenderLogin,
-		LoopZeroYaml:   loopzeroYaml,
-	}); err != nil {
-		return fmt.Errorf("auto-deploy: submit build: %w", err)
+	build := WebhookBuildRequest{
+		TenantID:        req.TenantID,
+		ProjectName:     req.ProjectName,
+		Environment:     autoDeployEnvironment,
+		CommitSHA:       req.CommitSHA,
+		InstallationID:  req.InstallationID,
+		RepoFullName:    req.RepoFullName,
+		Branch:          req.Branch,
+		CommitMessage:   req.CommitMessage,
+		SenderLogin:     req.SenderLogin,
+		LoopRuntimeYaml: loopRuntimeYaml,
 	}
-	log.Info("auto-deploy: build submitted successfully")
-	return nil
+	retryEvery, wait := d.cfg.BusyRetryEvery, d.cfg.BusyWait
+	if retryEvery <= 0 {
+		retryEvery = defaultBusyRetryEvery
+	}
+	if wait <= 0 {
+		wait = defaultBusyWait
+	}
+	deadline := time.Now().Add(wait)
+
+	// An environment takes one deploy at a time. A push that lands during one
+	// was refused once and never built (#125); it now waits for the
+	// environment, and gives way when the branch moved on, because the newer
+	// push has a handler of its own and only the newest commit must be built.
+	for {
+		err := d.cfg.BuildSubmitter.SubmitBuildFromWebhook(ctx, build)
+		if err == nil {
+			log.Info("auto-deploy: build submitted successfully")
+			return nil
+		}
+		if !errors.Is(err, loopruntimeerrors.ErrDeployInProgress) {
+			return fmt.Errorf("auto-deploy: submit build: %w", err)
+		}
+		if !time.Now().Before(deadline) {
+			return fmt.Errorf("auto-deploy: the environment was still deploying after %s, so commit %s was not built: %w", wait, req.CommitSHA, err)
+		}
+		log.Info("auto-deploy: the environment is deploying; the push waits", "retry_in", retryEvery.String())
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("auto-deploy: stopped while commit %s waited for the environment: %w", req.CommitSHA, ctx.Err())
+		case <-time.After(retryEvery):
+		}
+		head, headErr := d.branchHead(ctx, req)
+		if headErr != nil {
+			log.Warn("auto-deploy: could not read the branch head while waiting; the push keeps waiting", "error", headErr)
+			continue
+		}
+		if head != req.CommitSHA {
+			log.Info("auto-deploy: a newer commit was pushed while this one waited; skipping it", "head", head)
+			return nil
+		}
+	}
+}
+
+func (d *AutoDeployer) branchHead(ctx context.Context, req PushRequest) (string, error) {
+	if d.cfg.BranchHead != nil {
+		return d.cfg.BranchHead(ctx, req)
+	}
+	owner, repo, err := splitRepoFullName(req.RepoFullName)
+	if err != nil {
+		return "", err
+	}
+	head, err := d.cfg.AppClient.GetHeadCommit(ctx, req.InstallationID, owner, repo, req.Branch)
+	if err != nil {
+		return "", err
+	}
+	return head.SHA, nil
 }
 
 // markCommitPending sets the commit status to pending. It is a fire-and-forget
@@ -209,13 +290,40 @@ func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owne
 		if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
 			State:       "pending",
 			Description: "Deploying to production...",
-			Context:     "loopzero/deploy",
+			Context:     DeployStatusContext,
 		}); err != nil {
 			log.Warn("auto-deploy: set commit status failed", "error", err)
 		} else {
 			log.Info("auto-deploy: commit status set to pending")
 		}
 	}()
+}
+
+// markCommitUndeployable tells the person who pushed that nothing was built,
+// and why. Without it the push leaves no trace on GitHub: no build exists to
+// report on, so no later status would ever arrive.
+func (d *AutoDeployer) markCommitUndeployable(log *slog.Logger, req PushRequest, owner, repo string, cause error) {
+	if d.cfg.AppClient == nil {
+		return
+	}
+	description := DeployDescriptorPath + " was not found at the repository root, so nothing was deployed."
+	var invalid *InvalidDeployDescriptorError
+	if errors.As(cause, &invalid) {
+		description = invalid.Error()
+	}
+	// Detached for the reason markCommitPending gives; it waits, because
+	// HandlePush returns right after and there is nothing else to run.
+	statusCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
+		State:       "failure",
+		Description: fitCommitStatusDescription(description),
+		Context:     DeployStatusContext,
+	}); err != nil {
+		log.Warn("auto-deploy: set commit status failed", "error", err)
+		return
+	}
+	log.Info("auto-deploy: commit marked as failure, the repository is not deployable")
 }
 
 // PrepareSourceBundle downloads the repo tarball at the given commit,
@@ -233,7 +341,7 @@ func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owne
 // LanguageStrategy resolves the right build steps. A repository with no
 // deployable descriptor returns nil and still uploads: the preview then
 // inherits the apps of the latest successful build.
-func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopZeroYamlMinimal, error) {
+func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, commitSHA string, installationID int64, tenantID string) (*LoopRuntimeYamlMinimal, error) {
 	log := d.cfg.Logger.With("repo", repoFullName, "sha", commitSHA, "tenant", tenantID)
 
 	owner, repo, err := splitRepoFullName(repoFullName)
@@ -247,18 +355,18 @@ func (d *AutoDeployer) PrepareSourceBundle(ctx context.Context, repoFullName, co
 	}
 	defer src.close()
 
-	loopzeroYaml, descriptorErr := src.deployDescriptor()
+	loopRuntimeYaml, descriptorErr := src.deployDescriptor()
 	if descriptorErr != nil {
 		log.Warn("prepare-source-bundle: repository is not deployable; the preview falls back to the last build's apps", "error", descriptorErr)
-		loopzeroYaml = nil
+		loopRuntimeYaml = nil
 	} else {
-		log.Info("prepare-source-bundle: deploy descriptor parsed", "apps", len(loopzeroYaml.Apps))
+		log.Info("prepare-source-bundle: deploy descriptor parsed", "apps", len(loopRuntimeYaml.Apps))
 	}
 
-	if err := d.stageBundle(ctx, src, tenantID, commitSHA, "preview build", "loopzero-preview-service"); err != nil {
+	if err := d.stageBundle(ctx, src, tenantID, commitSHA, "preview build", "loop-runtime-preview-service"); err != nil {
 		return nil, fmt.Errorf("prepare-source-bundle: %w", err)
 	}
-	return loopzeroYaml, nil
+	return loopRuntimeYaml, nil
 }
 
 func splitRepoFullName(repoFullName string) (owner, repo string, err error) {
@@ -283,7 +391,7 @@ func (d *AutoDeployer) downloadSource(ctx context.Context, installationID int64,
 	}
 	defer func() { _ = body.Close() }()
 
-	f, err := os.CreateTemp("", "loopzero-github-source-*.tar.gz")
+	f, err := os.CreateTemp("", "loop-runtime-github-source-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("create temp file: %w", err)
 	}
@@ -302,12 +410,12 @@ func (s *sourceTarball) rewound() (io.Reader, error) {
 	return s.file, nil
 }
 
-func (s *sourceTarball) deployDescriptor() (*LoopZeroYamlMinimal, error) {
+func (s *sourceTarball) deployDescriptor() (*LoopRuntimeYamlMinimal, error) {
 	r, err := s.rewound()
 	if err != nil {
 		return nil, err
 	}
-	return extractLoopZeroYaml(r)
+	return extractLoopRuntimeYaml(r)
 }
 
 func (s *sourceTarball) close() {
@@ -315,7 +423,7 @@ func (s *sourceTarball) close() {
 	_ = os.Remove(s.file.Name())
 }
 
-// stageBundle converts the tarball to a git bundle (the loopzero-clone step
+// stageBundle converts the tarball to a git bundle (the loop-runtime-clone step
 // expects bundle format) and uploads it to `<tenantID>/source/<sha>.bundle`.
 // With no object store configured the upload is skipped with a warning.
 func (d *AutoDeployer) stageBundle(ctx context.Context, src *sourceTarball, tenantID, commitSHA, commitMessage, author string) error {
@@ -354,13 +462,13 @@ func (d *AutoDeployer) stageBundle(ctx context.Context, src *sourceTarball, tena
 
 // --- loopzero.yaml extraction ---
 
-type LoopZeroYamlMinimal struct {
+type LoopRuntimeYamlMinimal struct {
 	Project string                            `yaml:"project"`
 	Apps    map[string]map[string]interface{} `yaml:"apps"`
 }
 
 // tarballToGitBundle converts a GitHub tarball (.tar.gz) into a git bundle.
-// The loopzero-clone CWT expects git bundle format, not raw tarballs.
+// The loop-runtime-clone CWT expects git bundle format, not raw tarballs.
 // Process: safe extract tarball (StripComponents=1) → git init → git add → git commit → git bundle create.
 //
 // SEC: Uses archive.SafeExtractTarGz with symlink rejection, path traversal
@@ -372,7 +480,7 @@ type LoopZeroYamlMinimal struct {
 // push and a PR preview, or two tenants deploying one upstream commit) must
 // never share, and delete, one another's bundle.
 func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commitMessage, author string) (string, func(), error) {
-	tmpDir, err := os.MkdirTemp("", "loopzero-github-bundle-*")
+	tmpDir, err := os.MkdirTemp("", "loop-runtime-github-bundle-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("create temp dir: %w", err)
 	}
@@ -414,20 +522,20 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	// canonical-fixture repo's last commit had no author.login surfaced
 	// by GetHeadCommit). The author param is purely informational at
 	// bundle level (the deploy chain ultimately credits the real SHA);
-	// substituting a canonical LoopZero author preserves the audit trail
+	// substituting a canonical LoopRuntime author preserves the audit trail
 	// without blocking the deploy. See repositories.go:461 + the LIVE
 	// log line "connect-then-deploy: HandlePush failed: ... empty ident".
 	authorName := author
 	authorEmail := author + "@users.noreply.github.com"
 	if authorName == "" {
-		authorName = "LoopZero Platform"
+		authorName = "LoopRuntime Platform"
 		authorEmail = "noreply@getloopscale.com"
 	}
 	// Create git repo and bundle using GitRunner (with context for cancellation).
 	git := gitclient.NewGitRunner("", gitclient.WithEnv(
 		"GIT_AUTHOR_NAME="+authorName,
 		"GIT_AUTHOR_EMAIL="+authorEmail,
-		"GIT_COMMITTER_NAME=LoopZero Platform",
+		"GIT_COMMITTER_NAME=LoopRuntime Platform",
 		"GIT_COMMITTER_EMAIL=noreply@getloopscale.com",
 	))
 
@@ -457,16 +565,19 @@ func tarballToGitBundle(ctx context.Context, tarball io.Reader, commitSHA, commi
 	return bundlePath, cleanup, nil
 }
 
-// extractLoopZeroYaml reads the deploy descriptor from a GitHub tarball (.tar.gz)
+// extractLoopRuntimeYaml reads the deploy descriptor from a GitHub tarball (.tar.gz)
 // and applies ParseDeployDescriptor to it. GitHub tarballs have a top-level
 // directory like "owner-repo-sha/".
-func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
+func extractLoopRuntimeYaml(r io.Reader) (*LoopRuntimeYamlMinimal, error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("gzip: %w", err)
 	}
 	defer func() { _ = gz.Close() }()
 
+	// A repository may carry more than one of the names; which one is read must
+	// not depend on the order of the archive.
+	found := make(map[string][]byte, len(DeployDescriptorPaths))
 	tr := tar.NewReader(gz)
 	for {
 		header, err := tr.Next()
@@ -477,16 +588,20 @@ func extractLoopZeroYaml(r io.Reader) (*LoopZeroYamlMinimal, error) {
 			return nil, fmt.Errorf("tar: %w", err)
 		}
 
-		// GitHub tarball: files are under "owner-repo-sha/" prefix
-		name := filepath.Base(header.Name)
-		// Also check one level deep (the loopzero.yaml is at repo root)
+		// GitHub tarball: the repository root is the "owner-repo-sha/" directory.
 		parts := strings.Split(header.Name, "/")
-		if len(parts) == 2 && name == DeployDescriptorPath {
-			data, err := io.ReadAll(tr)
-			if err != nil {
-				return nil, fmt.Errorf("read %s: %w", DeployDescriptorPath, err)
-			}
-			return ParseDeployDescriptor(data)
+		if len(parts) != 2 || !slices.Contains(DeployDescriptorPaths, parts[1]) {
+			continue
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", parts[1], err)
+		}
+		found[parts[1]] = data
+	}
+	for _, path := range DeployDescriptorPaths {
+		if data, ok := found[path]; ok {
+			return ParseDeployDescriptorFile(path, data)
 		}
 	}
 	return nil, fmt.Errorf("%s not found in tarball", DeployDescriptorPath)

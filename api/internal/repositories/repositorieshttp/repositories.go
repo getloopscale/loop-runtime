@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package repositorieshttp serves the project↔repository link: connecting a GitHub
 // installation to a project and answering what a project is connected to.
@@ -15,7 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -23,10 +23,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ProjectRepository represents a project↔repo link (DIP — avoids db import).
@@ -49,10 +49,11 @@ type RepositoryStore interface {
 	UnlinkRepository(ctx context.Context, tenantID, projectName string) error
 	GetByProject(ctx context.Context, tenantID, projectName string) (*ProjectRepository, error)
 	GetByRepo(ctx context.Context, repoFullName string) (*ProjectRepository, error)
-	SaveInstallation(ctx context.Context, id int64, accountLogin, accountType string, tenantID *string) error
-	// InstallationTenant returns the tenant a GitHub installation is bound
-	// to, or "" when it is unclaimed or unknown.
-	InstallationTenant(ctx context.Context, installationID int64) (string, error)
+	// InstallationVerifiedFor reports whether a GitHub installation is bound
+	// to tenantID with the binding confirmed on GitHub. It is false for an
+	// installation that is unknown, unbound, bound without that confirmation
+	// or bound to another tenant.
+	InstallationVerifiedFor(ctx context.Context, installationID int64, tenantID string) (bool, error)
 }
 
 // RepoIntrospector abstracts the GitHub API calls the Connect handler makes
@@ -130,7 +131,7 @@ type connectResponse struct {
 	AutoDeploy bool   `json:"auto_deploy"`
 }
 
-// Connect links a GitHub repository to a LoopZero project (POST /api/v1/projects/{name}/connect).
+// Connect links a GitHub repository to a LoopRuntime project (POST /api/v1/projects/{name}/connect).
 //
 // Plan 2026-06-15-code-review-49-findings-remediation T5.4 (R2-F3 HIGH):
 // CC 18 → ≤ 11 via 2 helper extracts (parseConnectRequest + checkRepoLinkConflict).
@@ -138,7 +139,7 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -149,20 +150,17 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return // parseConnectRequest wrote the response
 	}
 
-	if !h.checkRepoLinkConflict(ctx, w, req.Repo, uc.TenantID, projectName) {
-		return // checkRepoLinkConflict wrote the response
-	}
-
-	// An installation bound to another tenant is not rebound: the upsert
-	// below would COALESCE this caller's tenant over the existing binding.
-	// 403, as the repository picker answers for the same installation.
-	owner, err := h.store.InstallationTenant(ctx, req.InstallationID)
+	// The installation id comes from the request, so it is checked against the
+	// binding GitHub confirmed (POST .../integrations/github/installations/claim).
+	// Connect never writes that binding. 403, as the repository picker answers
+	// for the same installation.
+	verified, err := h.store.InstallationVerifiedFor(ctx, req.InstallationID, uc.TenantID)
 	if err != nil {
 		slog.ErrorContext(ctx, "installation lookup failed", "error", err, "installation_id", req.InstallationID)
 		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
 		return
 	}
-	if owner != "" && owner != uc.TenantID {
+	if !verified {
 		httpio.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"code":    "FORBIDDEN",
 			"message": "You do not have access to this installation.",
@@ -170,12 +168,10 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Bind the installation to this tenant (first connect) or keep it.
-	tenantID := uc.TenantID
-	if err := h.store.SaveInstallation(ctx, req.InstallationID, "", "User", &tenantID); err != nil {
-		slog.ErrorContext(ctx, "save installation failed", "error", err)
-		httpio.WriteJSON(w, http.StatusInternalServerError, map[string]string{"code": "INTERNAL_ERROR", "message": "internal error"})
-		return
+	// Only now, for a caller that may use the installation: a caller that may
+	// not must not learn from a 409 which repositories are connected.
+	if !h.checkRepoLinkConflict(ctx, w, req.Repo, uc.TenantID, projectName) {
+		return // checkRepoLinkConflict wrote the response
 	}
 
 	// Plan J-09 T3.2: default auto_deploy=true when caller omits field (back-compat).
@@ -190,8 +186,8 @@ func (h *RepositoryHandler) Connect(w http.ResponseWriter, r *http.Request) {
 	// (EC-10 + EC-4). Validation is skipped only when no introspector is
 	// wired (test/local without GitHub credentials).
 	if h.introspector != nil {
-		if !h.validateLoopZeroYamlOnRef(ctx, w, req, branch) {
-			return // validateLoopZeroYamlOnRef wrote the response
+		if !h.validateLoopRuntimeYamlOnRef(ctx, w, req, branch) {
+			return // validateLoopRuntimeYamlOnRef wrote the response
 		}
 	}
 
@@ -264,12 +260,12 @@ func (h *RepositoryHandler) checkRepoLinkConflict(
 	return true
 }
 
-// Disconnect unlinks a GitHub repository from a LoopZero project (DELETE /api/v1/projects/{name}/connect).
+// Disconnect unlinks a GitHub repository from a LoopRuntime project (DELETE /api/v1/projects/{name}/connect).
 func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -278,7 +274,7 @@ func (h *RepositoryHandler) Disconnect(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.UnlinkRepository(ctx, uc.TenantID, projectName); err != nil {
 		// AUDIT-21: map "not linked" to 404 instead of silent success.
 		if errors.Is(err, ports.ErrRepositoryNotLinked) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.NewRepositoryNotLinked(projectName))
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewRepositoryNotLinked(projectName))
 			return
 		}
 		slog.ErrorContext(ctx, "unlink repository failed", "error", err)
@@ -299,7 +295,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	uc := auth.GetUserContext(ctx)
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
@@ -337,7 +333,7 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// validateLoopZeroYamlOnRef runs the pre-link introspector chain: branch
+// validateLoopRuntimeYamlOnRef runs the pre-link introspector chain: branch
 // existence + deploy descriptor presence + the descriptor passes
 // github.ParseDeployDescriptor, the rule every push deploy applies. Returns true when validation passed; false (and writes the
 // HTTP response) on any failure. Extracted from Connect for T4.2 of
@@ -348,10 +344,10 @@ func (h *RepositoryHandler) GetConnection(w http.ResponseWriter, r *http.Request
 // can render actionable copy (EC-10 + EC-4):
 //   - INVALID_REPO            (400) — repo not "owner/name" format
 //   - BRANCH_NOT_FOUND        (400) — branch missing on GitHub
-//   - MISSING_LOOPZERO_YAML       (400) — file absent at that ref
-//   - INVALID_LOOPZERO_YAML       (400) — refused by github.ParseDeployDescriptor
+//   - MISSING_DEPLOY_DESCRIPTOR   (400) — file absent at that ref
+//   - INVALID_DEPLOY_DESCRIPTOR   (400) — refused by github.ParseDeployDescriptor
 //   - GITHUB_UNAVAILABLE      (502) — GitHub API transport failure
-func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
+func (h *RepositoryHandler) validateLoopRuntimeYamlOnRef(ctx context.Context, w http.ResponseWriter, req connectRequest, branch string) bool {
 	parts := strings.SplitN(req.Repo, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
@@ -379,13 +375,13 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		return false
 	}
 
-	content, err := h.introspector.GetFileContent(ctx, req.InstallationID, owner, name, branch, github.DeployDescriptorPath)
+	path, content, err := h.fetchDeployDescriptor(ctx, req.InstallationID, owner, name, branch)
 	if err != nil {
 		var fnf *github.FileNotFoundError
 		if errors.As(err, &fnf) {
 			httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-				"code":    "MISSING_LOOPZERO_YAML",
-				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loopzero-yaml",
+				"code":    "MISSING_DEPLOY_DESCRIPTOR",
+				"message": github.DeployDescriptorPath + " not found on branch \"" + branch + "\". Add it at the repository root, declaring the apps to deploy under `apps:`, and commit it. Docs: https://docs.getloopscale.com/config/loop-runtime-yaml",
 			})
 			return false
 		}
@@ -397,12 +393,12 @@ func (h *RepositoryHandler) validateLoopZeroYamlOnRef(ctx context.Context, w htt
 		return false
 	}
 
-	// EC-4 / EC-19: the same rule a push applies (github.ParseDeployDescriptor),
+	// EC-4 / EC-19: the same rule a push applies (github.ParseDeployDescriptorFile),
 	// so a repository Connect links is one every push can build.
-	if _, err := github.ParseDeployDescriptor(content); err != nil {
+	if _, err := github.ParseDeployDescriptorFile(path, content); err != nil {
 		httpio.WriteJSON(w, http.StatusBadRequest, map[string]string{
-			"code":    "INVALID_LOOPZERO_YAML",
-			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loopzero-yaml",
+			"code":    "INVALID_DEPLOY_DESCRIPTOR",
+			"message": err.Error() + " Docs: https://docs.getloopscale.com/config/loop-runtime-yaml",
 		})
 		return false
 	}
@@ -462,4 +458,23 @@ func (h *RepositoryHandler) triggerConnectThenDeploy(ctx context.Context, tenant
 	}()
 	slog.InfoContext(ctx, "connect-then-deploy: triggered",
 		"project", projectName, "sha", head.SHA, "branch", branch)
+}
+
+// fetchDeployDescriptor reads the descriptor under the first of its names the
+// branch has, in the order a push looks them up. It answers FileNotFoundError
+// only when the branch has none of them.
+func (h *RepositoryHandler) fetchDeployDescriptor(ctx context.Context, installationID int64, owner, name, branch string) (string, []byte, error) {
+	var notFound error
+	for _, path := range github.DeployDescriptorPaths {
+		content, err := h.introspector.GetFileContent(ctx, installationID, owner, name, branch, path)
+		if err == nil {
+			return path, content, nil
+		}
+		var fnf *github.FileNotFoundError
+		if !errors.As(err, &fnf) {
+			return "", nil, err
+		}
+		notFound = err
+	}
+	return "", nil, notFound
 }

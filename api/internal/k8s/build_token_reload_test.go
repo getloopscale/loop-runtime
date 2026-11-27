@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// RED test for issue #242 fix 3: loopzero-api caches the build-cluster client at
-// startup, so a rotated `loopzero-cluster-kubeconfigs.build.kubeconfig` needs a POD
+// RED test for issue #242 fix 3: loop-runtime-api caches the build-cluster client at
+// startup, so a rotated `loop-runtime-cluster-kubeconfigs.build.kubeconfig` needs a POD
 // RESTART before deploys work again.
 //
 // The watcher already NOTICES the problem — `ReportWatchError` logs
-// "build cluster auth failed — rotate loopzero-workflow-submitter token" and bumps
+// "build cluster auth failed — rotate loop-runtime-workflow-submitter token" and bumps
 // ArgoWatcherTokenExpiredTotal on 401/403. What it cannot do is act on it: the
 // bearer token was baked into the rest.Config at process start, so rotating the
 // Secret changes the file on disk and nothing else. Every deploy keeps failing

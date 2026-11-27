@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environments
 
@@ -52,7 +52,7 @@ func TestEnvManagerAdapter_HasEnvironment_PropagatesNotFoundMessageAsError(t *te
 	lister, _ := NewEnvManagerAdapter(
 		func(_ context.Context, _, _, _ string) error { return nil },
 		func(_ context.Context, _, _, _ string) (any, error) {
-			return nil, errors.New(`k8s: get tenant CR "tn-1": tenants.loopzero.dev "tn-1" not found`)
+			return nil, errors.New(`k8s: get tenant CR "tn-1": tenants.loop-runtime.dev "tn-1" not found`)
 		},
 	)
 

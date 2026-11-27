@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package logging
 
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
 )
 
 // Audit gap M04 #23 (active-execution-plan §6.F.1): the deprecated

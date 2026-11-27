@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // CellMetricsQuerier abstracts the DB query for cell tenant counts.
@@ -19,7 +19,7 @@ type CellMetricsQuerier interface {
 }
 
 // CellMetricsCollector periodically queries tenant-per-cell counts
-// and emits the loopzero_cell_tenant_count Prometheus gauge.
+// and emits the loop_runtime_cell_tenant_count Prometheus gauge.
 // ADR-0008 Phase 0.
 type CellMetricsCollector struct {
 	querier  CellMetricsQuerier

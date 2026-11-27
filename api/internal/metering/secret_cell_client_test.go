@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metering
 
@@ -19,8 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // minimalKubeconfig is a syntactically valid kubeconfig that RESTConfigFromKubeConfig
@@ -69,12 +69,12 @@ func (f fakeCellResolver) Resolve(_ context.Context, cellID string) (*placement.
 }
 
 func resolverWith(cellID, secretName string) fakeCellResolver {
-	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loopzero-system"}}
+	return fakeCellResolver{cellID: {CellID: cellID, SecretRefName: secretName, SecretRefNamespace: "loop-runtime-system"}}
 }
 
 func kubeconfigSecret(name string, data map[string][]byte) *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "loop-runtime-system"},
 		Data:       data,
 	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // API Endpoints — pure HTTP load test.
 //
@@ -33,24 +33,24 @@ import { group, sleep } from 'k6';
 import { Trend, Counter } from 'k6/metrics';
 import http from 'k6/http';
 
-import { API_URL, SVC_AUTH, healthCheck } from './lib/loopzero-api.js';
+import { API_URL, SVC_AUTH, healthCheck } from './lib/loop-runtime-api.js';
 
 // -----------------------------------------------------------------------
 // Custom Metrics — one Trend per endpoint for independent SLO tracking
 // -----------------------------------------------------------------------
 
-const healthDuration = new Trend('loopzero_api_health_duration', true);
-const projectsListDuration = new Trend('loopzero_api_projects_list_duration', true);
-const buildsGetDuration = new Trend('loopzero_api_builds_get_duration', true);
-const envsListDuration = new Trend('loopzero_api_envs_list_duration', true);
-const projectsCreateDuration = new Trend('loopzero_api_projects_create_duration', true);
+const healthDuration = new Trend('loop_runtime_api_health_duration', true);
+const projectsListDuration = new Trend('loop_runtime_api_projects_list_duration', true);
+const buildsGetDuration = new Trend('loop_runtime_api_builds_get_duration', true);
+const envsListDuration = new Trend('loop_runtime_api_envs_list_duration', true);
+const projectsCreateDuration = new Trend('loop_runtime_api_projects_create_duration', true);
 
 // Error counters per endpoint for diagnostics.
-const healthErrors = new Counter('loopzero_api_health_errors');
-const projectsListErrors = new Counter('loopzero_api_projects_list_errors');
-const buildsGetErrors = new Counter('loopzero_api_builds_get_errors');
-const envsListErrors = new Counter('loopzero_api_envs_list_errors');
-const projectsCreateErrors = new Counter('loopzero_api_projects_create_errors');
+const healthErrors = new Counter('loop_runtime_api_health_errors');
+const projectsListErrors = new Counter('loop_runtime_api_projects_list_errors');
+const buildsGetErrors = new Counter('loop_runtime_api_builds_get_errors');
+const envsListErrors = new Counter('loop_runtime_api_envs_list_errors');
+const projectsCreateErrors = new Counter('loop_runtime_api_projects_create_errors');
 
 // -----------------------------------------------------------------------
 // Options
@@ -69,11 +69,11 @@ export const options = {
   },
   thresholds: {
     // Per-endpoint latency SLOs.
-    'loopzero_api_health_duration': ['p(99)<100'],
-    'loopzero_api_projects_list_duration': ['p(99)<500'],
-    'loopzero_api_builds_get_duration': ['p(99)<200'],
-    'loopzero_api_envs_list_duration': ['p(99)<500'],
-    'loopzero_api_projects_create_duration': ['p(99)<1000'],
+    'loop_runtime_api_health_duration': ['p(99)<100'],
+    'loop_runtime_api_projects_list_duration': ['p(99)<500'],
+    'loop_runtime_api_builds_get_duration': ['p(99)<200'],
+    'loop_runtime_api_envs_list_duration': ['p(99)<500'],
+    'loop_runtime_api_projects_create_duration': ['p(99)<1000'],
     // Overall HTTP failure rate.
     'http_req_failed': ['rate<0.01'],
   },
@@ -87,7 +87,7 @@ export const options = {
 // Pre-seeded test data references.
 const TENANT_ID = 'k6-api-tn-0';
 const USER_ID = 'k6-api-user-0';
-const EMAIL = 'k6-api-0@loopzero.test';
+const EMAIL = 'k6-api-0@loop-runtime.test';
 
 // Pre-seeded build ID — populated in setup() by listing builds.
 let SEED_BUILD_ID = null;
@@ -95,9 +95,9 @@ let SEED_BUILD_ID = null;
 function authHeaders() {
   return {
     'X-Service-Auth': SVC_AUTH,
-    'X-LoopZero-User-ID': USER_ID,
-    'X-LoopZero-Tenant': TENANT_ID,
-    'X-LoopZero-Email': EMAIL,
+    'X-Loop-Runtime-User-ID': USER_ID,
+    'X-Loop-Runtime-Tenant': TENANT_ID,
+    'X-Loop-Runtime-Email': EMAIL,
     'Content-Type': 'application/json',
   };
 }
@@ -270,11 +270,11 @@ function endpointReport(data) {
   const trend = (name) => ((m[name] || {}).values || {});
   const cnt = (name) => ((m[name] || {}).values || {}).count || 0;
 
-  const h = trend('loopzero_api_health_duration');
-  const pl = trend('loopzero_api_projects_list_duration');
-  const bg = trend('loopzero_api_builds_get_duration');
-  const el = trend('loopzero_api_envs_list_duration');
-  const pc = trend('loopzero_api_projects_create_duration');
+  const h = trend('loop_runtime_api_health_duration');
+  const pl = trend('loop_runtime_api_projects_list_duration');
+  const bg = trend('loop_runtime_api_builds_get_duration');
+  const el = trend('loop_runtime_api_envs_list_duration');
+  const pc = trend('loop_runtime_api_projects_create_duration');
 
   const fmtMs = (v) => v ? `${Math.round(v)}ms` : 'N/A';
 
@@ -285,11 +285,11 @@ function endpointReport(data) {
 
   ENDPOINT                  p50       p95       p99       ERRORS
   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-  GET /health               ${fmtMs(h.med).padEnd(10)}${fmtMs(h['p(95)']).padEnd(10)}${fmtMs(h['p(99)']).padEnd(10)}${cnt('loopzero_api_health_errors')}
-  GET /projects             ${fmtMs(pl.med).padEnd(10)}${fmtMs(pl['p(95)']).padEnd(10)}${fmtMs(pl['p(99)']).padEnd(10)}${cnt('loopzero_api_projects_list_errors')}
-  GET /builds/{id}          ${fmtMs(bg.med).padEnd(10)}${fmtMs(bg['p(95)']).padEnd(10)}${fmtMs(bg['p(99)']).padEnd(10)}${cnt('loopzero_api_builds_get_errors')}
-  GET /environments         ${fmtMs(el.med).padEnd(10)}${fmtMs(el['p(95)']).padEnd(10)}${fmtMs(el['p(99)']).padEnd(10)}${cnt('loopzero_api_envs_list_errors')}
-  POST /projects            ${fmtMs(pc.med).padEnd(10)}${fmtMs(pc['p(95)']).padEnd(10)}${fmtMs(pc['p(99)']).padEnd(10)}${cnt('loopzero_api_projects_create_errors')}
+  GET /health               ${fmtMs(h.med).padEnd(10)}${fmtMs(h['p(95)']).padEnd(10)}${fmtMs(h['p(99)']).padEnd(10)}${cnt('loop_runtime_api_health_errors')}
+  GET /projects             ${fmtMs(pl.med).padEnd(10)}${fmtMs(pl['p(95)']).padEnd(10)}${fmtMs(pl['p(99)']).padEnd(10)}${cnt('loop_runtime_api_projects_list_errors')}
+  GET /builds/{id}          ${fmtMs(bg.med).padEnd(10)}${fmtMs(bg['p(95)']).padEnd(10)}${fmtMs(bg['p(99)']).padEnd(10)}${cnt('loop_runtime_api_builds_get_errors')}
+  GET /environments         ${fmtMs(el.med).padEnd(10)}${fmtMs(el['p(95)']).padEnd(10)}${fmtMs(el['p(99)']).padEnd(10)}${cnt('loop_runtime_api_envs_list_errors')}
+  POST /projects            ${fmtMs(pc.med).padEnd(10)}${fmtMs(pc['p(95)']).padEnd(10)}${fmtMs(pc['p(99)']).padEnd(10)}${cnt('loop_runtime_api_projects_create_errors')}
 
   THRESHOLDS:
   \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500

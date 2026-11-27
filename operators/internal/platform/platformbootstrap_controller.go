@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package platform implements the PlatformBootstrap +
 // GitRepositoryBinding + ClusterCredential controllers (operator
-// binary `loopzero-platform-operator` per ADR-0023). Owns the control-
+// binary `loop-runtime-platform-operator` per ADR-0023). Owns the control-
 // plane reconciliation: bootstraps Gitea + ArgoCD on a fresh
 // cluster, registers per-tenant Git repositories, and manages the
 // multi-cell ClusterCredential CRs that DynamicRouter resolves.
@@ -23,14 +23,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/gitea"
-	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/correlation"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/gitea"
+	"github.com/getloopscale/loop-runtime/operators/internal/httpclient"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // platformBootstrapRequeueDelay uses the centralized constant.
@@ -46,7 +46,7 @@ var platformBootstrapSM = statemachine.NewPlatformBootstrapTypedMachine()
 type ArgoCDBootstrapClient interface {
 	// CheckReachable verifies ArgoCD is reachable (GET /api/version).
 	CheckReachable(ctx context.Context) error
-	// GenerateAPIKey creates a non-expiring apiKey for the loopzero-api account.
+	// GenerateAPIKey creates a non-expiring apiKey for the loop-runtime-api account.
 	GenerateAPIKey(ctx context.Context, adminPassword string) (string, error)
 }
 
@@ -56,11 +56,11 @@ type ArgoCDBootstrapClient interface {
 //
 // ADR-0026 D4 / plan T4.1: kubebuilder:rbac markers.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=platformbootstraps/finalizers,verbs=update
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch;update
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,resourceNames=platform-tokens,verbs=delete
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=platformbootstraps,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=platformbootstraps/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=platformbootstraps/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch;update
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,resourceNames=platform-tokens,verbs=delete
 // +kubebuilder:rbac:groups="",namespace=argocd,resources=secrets,verbs=get;list;watch;create;update
 type PlatformBootstrapReconciler struct {
 	client.Client
@@ -91,7 +91,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		reconcileloop.ReconcileOutcome("bootstrap", start, retErr)
 	}()
 
-	var pb loopzerov1.PlatformBootstrap
+	var pb loopruntimev1.PlatformBootstrap
 	if err := r.Get(ctx, req.NamespacedName, &pb); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -101,7 +101,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
 	// correlation-id from CR annotation into reconcile context (no-op when absent).
-	ctx = correlation.WithID(ctx, pb.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, pb.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	if !pb.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, r.reconcileDelete(ctx, &pb)
@@ -134,7 +134,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Empty -> Pending, then Pending -> ConfiguringGitea: one Start event per
 	// reconcile, each persisted before the next.
-	if pb.Status.Phase == "" || pb.Status.Phase == loopzerov1.PlatformBootstrapPhasePending {
+	if pb.Status.Phase == "" || pb.Status.Phase == loopruntimev1.PlatformBootstrapPhasePending {
 		return r.startPhase(ctx, &pb, base)
 	}
 
@@ -146,13 +146,13 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Phase dispatch.
 	switch pb.Status.Phase {
-	case loopzerov1.PlatformBootstrapPhaseConfiguringGitea:
+	case loopruntimev1.PlatformBootstrapPhaseConfiguringGitea:
 		return r.reconcileGiteaPhase(ctx, &pb, base, maxRetries)
 
-	case loopzerov1.PlatformBootstrapPhaseConfiguringArgoCD:
+	case loopruntimev1.PlatformBootstrapPhaseConfiguringArgoCD:
 		return r.reconcileArgoCDPhase(ctx, &pb, base, maxRetries)
 
-	case loopzerov1.PlatformBootstrapPhaseWaitingForAPI:
+	case loopruntimev1.PlatformBootstrapPhaseWaitingForAPI:
 		return r.reconcileAPIPhase(ctx, &pb, base, maxRetries)
 
 	default:
@@ -164,7 +164,7 @@ func (r *PlatformBootstrapReconciler) Reconcile(ctx context.Context, req ctrl.Re
 // only then releases the finalizer. A Secret it did not create is left alone.
 // Any failure other than NotFound keeps the finalizer, so the delete is retried
 // rather than leaving the Gitea admin token and ArgoCD apiKey behind.
-func (r *PlatformBootstrapReconciler) reconcileDelete(ctx context.Context, pb *loopzerov1.PlatformBootstrap) error {
+func (r *PlatformBootstrapReconciler) reconcileDelete(ctx context.Context, pb *loopruntimev1.PlatformBootstrap) error {
 	if !controllerutil.ContainsFinalizer(pb, constants.FinalizerPlatformBootstrap) {
 		return nil
 	}
@@ -199,12 +199,12 @@ func (r *PlatformBootstrapReconciler) deleteManagedTokenSecret(ctx context.Conte
 
 // startPhase applies one Start event (Empty -> Pending, Pending ->
 // ConfiguringGitea), persists it and requeues.
-func (r *PlatformBootstrapReconciler) startPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) startPhase(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), statemachine.PBPEventStart)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("start bootstrap: %w", err)
 	}
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
+	pb.Status.Phase = loopruntimev1.PlatformBootstrapPhase(next)
 	pb.Status.RetryCount = 0
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
@@ -218,12 +218,12 @@ func (r *PlatformBootstrapReconciler) startPhase(ctx context.Context, pb, base *
 // and records message on BootstrapComplete=False (Reason=Failed), which the
 // readiness summary classifies as Stalled. Uses TryTransition because
 // pb.Status.Phase comes from CRD status (external source).
-func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, message string) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap, message string) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), statemachine.PBPEventRetryExhaust)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to failed: %w", err)
 	}
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
+	pb.Status.Phase = loopruntimev1.PlatformBootstrapPhase(next)
 	r.setCondition(pb, conditions.TypeBootstrapComplete, metav1.ConditionFalse, conditions.ReasonFailed, message)
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
@@ -235,12 +235,12 @@ func (r *PlatformBootstrapReconciler) transitionToFailed(ctx context.Context, pb
 
 // transitionToNextPhase transitions the CR to the next phase via the state machine.
 // Uses TryTransition because pb.Status.Phase comes from CRD status (external source).
-func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap, event statemachine.PlatformBootstrapPhaseEvent) (ctrl.Result, error) {
 	next, err := platformBootstrapSM.TryTransition(statemachine.PlatformBootstrapPhase(pb.Status.Phase), event)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("transition to next phase: %w", err)
 	}
-	pb.Status.Phase = loopzerov1.PlatformBootstrapPhase(next)
+	pb.Status.Phase = loopruntimev1.PlatformBootstrapPhase(next)
 	pb.Status.RetryCount = 0
 	now := metav1.Now()
 	pb.Status.LastTransitionTime = &now
@@ -252,7 +252,7 @@ func (r *PlatformBootstrapReconciler) transitionToNextPhase(ctx context.Context,
 
 // requeueWithRetry increments the retry count and requeues. If max retries exceeded,
 // transitions to Failed.
-func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap, maxRetries int, message string) (ctrl.Result, error) {
+func (r *PlatformBootstrapReconciler) requeueWithRetry(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap, maxRetries int, message string) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	pb.Status.RetryCount++
 	logger.Info("phase retry", "phase", pb.Status.Phase, "retryCount", pb.Status.RetryCount, "maxRetries", maxRetries, "reason", message)
@@ -336,7 +336,7 @@ func (r *PlatformBootstrapReconciler) updateSecretData(ctx context.Context, secr
 // SetupPlatformBootstrapController registers the PlatformBootstrapController with the manager.
 func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.PlatformBootstrap{}, reconcileloop.ForOption()).
+		For(&loopruntimev1.PlatformBootstrap{}, reconcileloop.ForOption()).
 		Named("platformbootstrap").
 		Complete(&PlatformBootstrapReconciler{
 			Client:     mgr.GetClient(),
@@ -345,7 +345,7 @@ func SetupPlatformBootstrapController(mgr ctrl.Manager, httpClient *http.Client)
 }
 
 // setConditionAndUpdateStatus is a helper that sets a condition and updates status.
-func (r *PlatformBootstrapReconciler) setCondition(pb *loopzerov1.PlatformBootstrap, condType string, status metav1.ConditionStatus, reason, message string) {
+func (r *PlatformBootstrapReconciler) setCondition(pb *loopruntimev1.PlatformBootstrap, condType string, status metav1.ConditionStatus, reason, message string) {
 	conditions.SetCondition(&pb.Status.Conditions, condType, status, reason, message, pb.Generation)
 }
 
@@ -353,7 +353,7 @@ func (r *PlatformBootstrapReconciler) setCondition(pb *loopzerov1.PlatformBootst
 // kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
-func (r *PlatformBootstrapReconciler) patchStatus(ctx context.Context, pb, base *loopzerov1.PlatformBootstrap) error {
+func (r *PlatformBootstrapReconciler) patchStatus(ctx context.Context, pb, base *loopruntimev1.PlatformBootstrap) error {
 	conditions.SetReadinessSummaryViaPkg(&pb.Status.Conditions, pb.Generation, platformBootstrapDetailTypes)
 	return r.Status().Patch(ctx, pb, client.MergeFrom(base))
 }

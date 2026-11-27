@@ -10,7 +10,7 @@
 -- block parent deletion vs. cascade vs. nullify.
 --
 -- This migration makes the behavior explicit. Choices reflect current
--- LoopZero semantics:
+-- LoopRuntime semantics:
 --
 -- RESTRICT — keeps current behavior (deletion blocked while children exist).
 --            Used where the parent is critical infrastructure that should

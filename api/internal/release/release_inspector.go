@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // release_inspector.go implements T4.4 of plan
 // 2026-05-28-meet-001-engineering-closure-plan.md.
 //
-// CR-10 (MEET-2026-05-28-001 SRE): "There is no loopzero-ops CLI command
-// like `loopzero admin release inspect <release-id>` showing which write
+// CR-10 (MEET-2026-05-28-001 SRE): "There is no loop-runtime-ops CLI command
+// like `loop-runtime admin release inspect <release-id>` showing which write
 // path was taken." Pairs with the AdminReleaseInspect HTTP handler and
-// the `loopzero admin release inspect` CLI command.
+// the `loop-runtime admin release inspect` CLI command.
 //
 // The inspector is read-only: it joins releases + audit_log + workflow
 // snapshot (when available) into a single diagnostic payload. EC-14 of
@@ -23,14 +23,14 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // ReleaseInspection is the JSON shape returned by
 // GET /api/v1/admin/releases/{id}/inspect and rendered by
-// `loopzero admin release inspect --json`.
+// `loop-runtime admin release inspect --json`.
 //
 // Field names are a stability contract (CLAUDE.md Rule 5); new fields
 // may be added but existing names cannot change without a major bump.
@@ -153,7 +153,7 @@ func NewReleaseInspector(
 // signing_path="unknown", NOT 500.
 func (s *releaseStoreInspector) Inspect(ctx context.Context, releaseID string) (*ReleaseInspection, error) {
 	rel, err := s.releases.GetByID(ctx, releaseID)
-	if errors.Is(err, loopzeroerrors.ErrReleaseNotFound) {
+	if errors.Is(err, loopruntimeerrors.ErrReleaseNotFound) {
 		// The store's not-found; (nil, nil) below is the older form (#415).
 		return nil, ErrReleaseInspectionNotFound{ReleaseID: releaseID}
 	}

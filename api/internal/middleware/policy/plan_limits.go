@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package policy
 
@@ -8,10 +8,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // PlanLimitCheck names the metric an operation is limited by and how the
@@ -76,15 +77,37 @@ func PlanLimits(
 // contract with the CLI and the dashboard: add fields, never rename.
 func planLimitExceededBody(result enforcement.LimitResult, upgradeURL string) map[string]interface{} {
 	return map[string]interface{}{
-		"code": "PLAN_LIMIT_EXCEEDED",
-		"message": fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d). Upgrade your plan to continue.",
-			domain.PlanTier(result.Plan).DisplayName(), result.Limit, limitMetricDisplayName(result.Metric), result.Current),
+		"code":        "PLAN_LIMIT_EXCEEDED",
+		"message":     planLimitSentence(result) + " " + UpgradeAdvice(upgradeURL),
 		"plan":        result.Plan,
 		"limit":       result.Metric,
 		"current":     result.Current,
 		"max":         result.Limit,
 		"upgrade_url": upgradeURL,
 	}
+}
+
+// PlanLimitMessage is the refusal a person reads when a plan limit is reached:
+// the limit, the usage and what to do. The commit status of a refused push
+// carries it; its link travels beside it, in the status target.
+func PlanLimitMessage(result enforcement.LimitResult) string {
+	return planLimitSentence(result) + " " + UpgradeAdvice("")
+}
+
+func planLimitSentence(result enforcement.LimitResult) string {
+	return fmt.Sprintf("Plan limit reached: %s allows %d %s (current: %d).",
+		domain.PlanTier(result.Plan).DisplayName(), result.Limit, limitMetricDisplayName(result.Metric), result.Current)
+}
+
+// UpgradeAdvice is the sentence that closes a plan limit refusal. It names the
+// upgrade address when that is one a person can open from anywhere: the CLI
+// prints the message and has no link to follow. A path inside the console is
+// left to the console, which links it.
+func UpgradeAdvice(upgradeURL string) string {
+	if strings.HasPrefix(upgradeURL, "https://") || strings.HasPrefix(upgradeURL, "http://") {
+		return "Upgrade your plan at " + upgradeURL + " to continue."
+	}
+	return "Upgrade your plan to continue."
 }
 
 // limitMetricDisplayName is the product wording of a plan-limit metric.

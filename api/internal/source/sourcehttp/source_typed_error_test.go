@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package sourcehttp
 
@@ -14,13 +14,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 
-	"github.com/getloopscale/loopzero/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
 )
 
 // Sprint 4 plan qa-sprint4-cleanup-2026-06-25 T3.3 — handler-level discriminator
-// ladder tests. Closes loopzero-cloud#31 typed PushBundleError mapping while
+// ladder tests. Closes loop-console#31 typed PushBundleError mapping while
 // preserving the 2 pre-existing discriminators (EC-3 absorption):
 //   - errors.Is(err, source.ErrInvalidTenantOrProject) → 400 INVALID_TENANT_OR_PROJECT
 //   - gitea-race substring match → 409 DEPLOY_IN_PROGRESS (F-03 fix 2026-05-14)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -12,10 +12,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/planentitlements"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/planentitlements"
 )
 
 // reconcilePriorityClass ensures the PriorityClass for the tenant's plan exists.
@@ -28,7 +28,7 @@ import (
 // Rationale: build pods are short-lived and managed by Argo Workflows with its own queue
 // and parallelism controls. Plan-based priority would create starvation for starter tenants
 // during peak build times, which is worse than FIFO ordering.
-func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopzerov1.Tenant) error {
+func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *loopruntimev1.Tenant) error {
 	entitled := planentitlements.For(tenant.Spec.Plan)
 	pcName, pcValue, preemptionPolicy := entitled.PriorityClassName, entitled.PriorityValue, entitled.Preemption
 
@@ -46,7 +46,7 @@ func (r *TenantReconciler) reconcilePriorityClass(ctx context.Context, tenant *l
 		pc.Value = pcValue
 		pc.PreemptionPolicy = &preemptionPolicy
 		pc.GlobalDefault = false
-		pc.Description = fmt.Sprintf("PriorityClass for LoopZero %s plan tenants", string(tenant.Spec.Plan))
+		pc.Description = fmt.Sprintf("PriorityClass for LoopRuntime %s plan tenants", string(tenant.Spec.Plan))
 		if pc.Labels == nil {
 			pc.Labels = make(map[string]string)
 		}

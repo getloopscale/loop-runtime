@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package devpublic
 
@@ -139,7 +139,7 @@ func TestDevPublic_Misc_SeedPostCleanroomTenantCR(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"id":         "tn-79611071399a2e5e",
 			"status":     "ACTIVE",
-			"apiVersion": "tenants.loopzero.io/v1",
+			"apiVersion": "tenants.runtime.getloopscale.com/v1",
 			"kind":       "Tenant",
 		})
 	})
@@ -155,8 +155,8 @@ func TestDevPublic_Misc_SeedPostCleanroomTenantCR(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode,
 		"paulohenrique.java Tenant CR MUST exist post-#118 canonical seed (pre-fix returned NotFound)")
 	body, _ := io.ReadAll(resp.Body)
-	require.Contains(t, string(body), `"apiVersion":"tenants.loopzero.io/v1"`,
-		"Tenant CR apiVersion MUST be canonical `tenants.loopzero.io/v1` per #118 (NOT typo `loopzero.sh`)")
+	require.Contains(t, string(body), `"apiVersion":"tenants.runtime.getloopscale.com/v1"`,
+		"Tenant CR apiVersion MUST be canonical `tenants.runtime.getloopscale.com/v1` per #118 (NOT typo `loop-runtime.sh`)")
 	require.Contains(t, string(body), `"status":"ACTIVE"`,
 		"Tenant CR MUST reach status ACTIVE post-seed per #118")
 }

@@ -29,8 +29,8 @@ vault:
 # S3-compatible storage (DO Spaces in prod; minio standalone for vault-local).
 s3:
   host: "sfo3.digitaloceanspaces.com"  # override per env (nyc3 for staging)
-  bucket: "loopzero-openbao-backups-prod"   # override per env (SCRIPT.5 created buckets)
-  uri: "s3://loopzero-openbao-backups-prod"
+  bucket: "loop-runtime-openbao-backups-prod"   # override per env (SCRIPT.5 created buckets)
+  uri: "s3://loop-runtime-openbao-backups-prod"
   expireDays: "90"  # snapshot retention (Q12 of openbao-adoption ADR)
   # Existing Secret with AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
   # (operator provisions per env from ~/.openbao-<env>-resources.env).

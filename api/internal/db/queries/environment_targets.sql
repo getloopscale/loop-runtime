@@ -107,7 +107,7 @@ WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND kind = $4;
 -- observation columns the dashboard badge reads, so it never contends with
 -- the release pointers the env lock guards. Zero rows affected means the
 -- (tenant, project, environment) has no target row — the caller reports it.
--- Cross-tenant by design: runs on the background (loopzero_worker) pool.
+-- Cross-tenant by design: runs on the background (loop_runtime_worker) pool.
 UPDATE environment_targets
 SET last_replicas_ready_value = $1, last_replicas_ready_at = $2
 WHERE tenant_id = $3 AND project_id = $4 AND environment = $5;

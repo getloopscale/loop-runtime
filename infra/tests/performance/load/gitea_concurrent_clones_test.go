@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-28-LAYERED-BOOTSTRAP iter 18 — Gitea concurrent clones load test.
 // Closes the PARCIAL gap on regression matrix #22 (CAPACITY: Gitea
@@ -30,29 +30,29 @@ import (
 //   - 0 timeout (>30s)
 //   - p95 < 5s
 //
-// Gated on LOOPZERO_GITEA_LOAD=1 + LOOPZERO_GITEA_URL + LOOPZERO_GITEA_TOKEN.
+// Gated on LOOP_RUNTIME_GITEA_LOAD=1 + LOOP_RUNTIME_GITEA_URL + LOOP_RUNTIME_GITEA_TOKEN.
 func TestGiteaConcurrentClones(t *testing.T) {
-	if os.Getenv("LOOPZERO_GITEA_LOAD") != "1" {
-		t.Skip("set LOOPZERO_GITEA_LOAD=1 to run Gitea concurrent clones load test")
+	if os.Getenv("LOOP_RUNTIME_GITEA_LOAD") != "1" {
+		t.Skip("set LOOP_RUNTIME_GITEA_LOAD=1 to run Gitea concurrent clones load test")
 	}
 
-	giteaURL := os.Getenv("LOOPZERO_GITEA_URL")
+	giteaURL := os.Getenv("LOOP_RUNTIME_GITEA_URL")
 	if giteaURL == "" {
-		t.Fatal("LOOPZERO_GITEA_URL required (e.g., https://git.dev.getloopscale.com)")
+		t.Fatal("LOOP_RUNTIME_GITEA_URL required (e.g., https://git.dev.getloopscale.com)")
 	}
-	token := os.Getenv("LOOPZERO_GITEA_TOKEN")
+	token := os.Getenv("LOOP_RUNTIME_GITEA_TOKEN")
 	if token == "" {
-		t.Fatal("LOOPZERO_GITEA_TOKEN required (admin token from loopzero-system/gitea-admin Secret)")
+		t.Fatal("LOOP_RUNTIME_GITEA_TOKEN required (admin token from loop-runtime-system/gitea-admin Secret)")
 	}
 
-	// Repo path: e.g., loopzero-platform/loopzero-cloud or any seed repo
-	repoPath := os.Getenv("LOOPZERO_GITEA_TEST_REPO")
+	// Repo path: e.g., loop-runtime-platform/loop-console or any seed repo
+	repoPath := os.Getenv("LOOP_RUNTIME_GITEA_TEST_REPO")
 	if repoPath == "" {
-		repoPath = "loopzero-platform/loopzero-cloud"
+		repoPath = "loop-runtime-platform/loop-console"
 	}
 
 	concurrency := 200
-	if v := os.Getenv("LOOPZERO_GITEA_CONCURRENCY"); v != "" {
+	if v := os.Getenv("LOOP_RUNTIME_GITEA_CONCURRENCY"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			concurrency = n
 		}
@@ -90,7 +90,7 @@ func TestGiteaConcurrentClones(t *testing.T) {
 				return
 			}
 			req.Header.Set("User-Agent", "git/2.40.0")
-			req.SetBasicAuth("loopzero-admin", token)
+			req.SetBasicAuth("loop-runtime-admin", token)
 
 			t0 := time.Now()
 			client := &http.Client{Timeout: 30 * time.Second}

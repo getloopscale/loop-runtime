@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -11,9 +11,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/metrics"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
 // misplacedTenantScanInterval is how often the scan re-reads the cluster.
@@ -22,14 +22,14 @@ import (
 const misplacedTenantScanInterval = 5 * time.Minute
 
 // MisplacedTenantScanner surfaces Tenant CRs outside the canonical namespace
-// (ADR-0018 C2/C5). The tenant-operator's cache is scoped to loopzero-system, so
+// (ADR-0018 C2/C5). The tenant-operator's cache is scoped to loop-runtime-system, so
 // such a Tenant is invisible to every reconciler; this scan reads the cluster
 // uncached, at start and then periodically, and publishes the count per
-// namespace in loopzero_misplaced_tenant_total — the series the
+// namespace in loop_runtime_misplaced_tenant_total — the series the
 // MisplacedTenantDetected alert queries.
 type MisplacedTenantScanner struct {
 	// Reader must be uncached (mgr.GetAPIReader()): the cache cannot see
-	// outside loopzero-system, which is the whole point.
+	// outside loop-runtime-system, which is the whole point.
 	Reader   client.Reader
 	Interval time.Duration
 }
@@ -64,7 +64,7 @@ func (s *MisplacedTenantScanner) Start(ctx context.Context) error {
 // List leaves the previous reading in place: zeroing it would clear a firing
 // alert because the scan could not see, not because anything was fixed.
 func scanMisplacedTenants(ctx context.Context, reader client.Reader) error {
-	var tenants loopzerov1.TenantList
+	var tenants loopruntimev1.TenantList
 	if err := reader.List(ctx, &tenants); err != nil {
 		return fmt.Errorf("list Tenants cluster-wide: %w", err)
 	}

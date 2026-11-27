@@ -13,11 +13,11 @@ const html = `<!DOCTYPE html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LoopZero Load Test - Static Frontend</title>
+  <title>LoopRuntime Load Test - Static Frontend</title>
 </head>
 <body>
   <div id="root">
-    <h1>LoopZero Static Frontend</h1>
+    <h1>LoopRuntime Static Frontend</h1>
     <p>Build timestamp: ${new Date().toISOString()}</p>
     <p>Status: OK</p>
   </div>

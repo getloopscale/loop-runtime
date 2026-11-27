@@ -1,43 +1,43 @@
-# App Operator — manages LoopZeroApplication and ExposedRoute CRDs
+# App Operator — manages LoopRuntimeApplication and ExposedRoute CRDs
 # Split from monolithic operator-deployment.yaml for independent scaling and faster dev loops.
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: app-operator
-  namespace: loopzero-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: app-operator
 rules:
-  # --- LoopZero CRDs: LoopZeroApplication + ExposedRoute lifecycle ---
-  - apiGroups: ["loopzero.io"]
-    resources: ["loopzeroapplications", "exposedroutes"]
+  # --- LoopRuntime CRDs: LoopRuntimeApplication + ExposedRoute lifecycle ---
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["loopruntimeapplications", "exposedroutes"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["loopzero.io"]
-    resources: ["loopzeroapplications/status", "exposedroutes/status"]
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["loopruntimeapplications/status", "exposedroutes/status"]
     verbs: ["get", "update", "patch"]
-  - apiGroups: ["loopzero.io"]
-    resources: ["loopzeroapplications/finalizers", "exposedroutes/finalizers"]
+  - apiGroups: ["runtime.getloopscale.com"]
+    resources: ["loopruntimeapplications/finalizers", "exposedroutes/finalizers"]
     verbs: ["update"]
 
   # --- Tenant CR: read-only for fast-path Healthy resolution
   # (dogfood-2026-05-08-fixes T4.2 — ApplicationReconciler reads tenant.Spec.CellID)
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["tenants"]
     verbs: ["get", "list", "watch"]
 
   # --- ClusterCredential CR: read-only for cell-aware runtime client factory
   # (dogfood-2026-05-08-fixes T4.2 — CellAwareRuntimeClientFactory.For
   # lists ClusterCredentials by spec.cellID)
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["clustercredentials"]
     verbs: ["get", "list", "watch"]
 
-  # --- Secrets: NOT here — Role app-operator-secrets-loopzero-system below.
-  # Mirrors charts/loopzero-app-operator/templates/role-secret-access.yaml.
+  # --- Secrets: NOT here — Role app-operator-secrets-loop-runtime-system below.
+  # Mirrors charts/loop-runtime-app-operator/templates/role-secret-access.yaml.
 
   # --- Services: read-only for routing validation ---
   - apiGroups: [""]
@@ -70,15 +70,15 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: app-operator
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 ---
-# Secret read in loopzero-system only: cell kubeconfigs. The operator's Secret
+# Secret read in loop-runtime-system only: cell kubeconfigs. The operator's Secret
 # cache watches this namespace alone.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: app-operator-secrets-loopzero-system
-  namespace: loopzero-system
+  name: app-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -87,36 +87,36 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: app-operator-secrets-loopzero-system
-  namespace: loopzero-system
+  name: app-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: app-operator-secrets-loopzero-system
+  name: app-operator-secrets-loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: app-operator
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-operator
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app: app-operator
-    app.kubernetes.io/component: loopzero-operator
+    app.kubernetes.io/component: loop-runtime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: app-operator
-      app.kubernetes.io/component: loopzero-operator
+      app.kubernetes.io/component: loop-runtime-operator
   template:
     metadata:
       labels:
         app: app-operator
-        app.kubernetes.io/component: loopzero-operator
+        app.kubernetes.io/component: loop-runtime-operator
     spec:
       serviceAccountName: app-operator
       securityContext:
@@ -125,23 +125,23 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopzero-app-operator
+          image: loop-runtime-app-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"
             - "--metrics-bind-address=:8080"
           env:
             - name: BASE_DOMAIN
-              value: "loopzero.local"
+              value: "loop-runtime.local"
             # dogfood-2026-05-08-fixes T4.2 (F-6, ADR D6 + EC-5):
             # ApplicationController fast-path Healthy needs a cell-0-cluster
             # client (cell-aware via CellAwareRuntimeClientFactory). Mount the
-            # runtime kubeconfig from loopzero-cluster-kubeconfigs Secret (same
-            # mount as tenant-operator + loopzero-api). Without CELL_0_KUBECONFIG
+            # runtime kubeconfig from loop-runtime-cluster-kubeconfigs Secret (same
+            # mount as tenant-operator + loop-runtime-api). Without CELL_0_KUBECONFIG
             # the controller falls back to legacy mode (Application phase
             # only converges via ExposedRoute Reachable).
             - name: CELL_0_KUBECONFIG
-              value: "/etc/loopzero/runtime/kubeconfig"
+              value: "/etc/loop-runtime/runtime/kubeconfig"
           ports:
             - containerPort: 8081
               name: health
@@ -173,7 +173,7 @@ spec:
               mountPath: /tmp
             # dogfood-2026-05-08-fixes T4.2: mount runtime kubeconfig
             - name: runtime-kubeconfig
-              mountPath: /etc/loopzero/runtime
+              mountPath: /etc/loop-runtime/runtime
               readOnly: true
           securityContext:
             runAsNonRoot: true
@@ -189,7 +189,7 @@ spec:
           emptyDir: {}
         - name: runtime-kubeconfig
           secret:
-            secretName: loopzero-cluster-kubeconfigs
+            secretName: loop-runtime-cluster-kubeconfigs
             items:
               - key: cell-0.kubeconfig
                 path: kubeconfig

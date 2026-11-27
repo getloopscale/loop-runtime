@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://loopzero.platform/schemas/smoke-test/values.schema.json",
+  "$id": "https://loop-runtime.platform/schemas/smoke-test/values.schema.json",
   "title": "smoke-test chart values schema",
   "description": "Plan 2026-05-20 T2.5 ext — fail-fast on smoke-test config drift. Smoke test is a Job that asserts every Deployment/StatefulSet in declared namespaces is Ready + that critical endpoints respond. Misconfigured namespaces[] / endpoints[] = silent false-pass.",
   "type": "object",

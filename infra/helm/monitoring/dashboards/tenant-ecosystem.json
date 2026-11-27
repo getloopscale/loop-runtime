@@ -111,7 +111,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     },
     {
       "asDropdown": false,
@@ -123,7 +123,7 @@
       "title": "Per-Tenant Health",
       "tooltip": "Drill into a specific tenant",
       "type": "link",
-      "url": "/d/loopzero-per-tenant"
+      "url": "/d/loop-runtime-per-tenant"
     },
     {
       "asDropdown": false,
@@ -135,7 +135,7 @@
       "title": "Tenant Workloads",
       "tooltip": "Runtime pod details per tenant",
       "type": "link",
-      "url": "/d/loopzero-tenant-workloads"
+      "url": "/d/loop-runtime-tenant-workloads"
     }
   ],
   "panels": [
@@ -205,7 +205,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_cell_tenant_count) or count(count by (tenant) (loopzero_deploys_total)) or vector(0)",
+          "expr": "sum(loop_runtime_cell_tenant_count) or count(count by (tenant) (loop_runtime_deploys_total)) or vector(0)",
           "legendFormat": "Tenants",
           "instant": true,
           "refId": "A"
@@ -262,7 +262,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(count by (tenant, app) (loopzero_application_cr_ensure_total)) or vector(0)",
+          "expr": "count(count by (tenant, app) (loop_runtime_application_cr_ensure_total)) or vector(0)",
           "legendFormat": "Apps",
           "instant": true,
           "refId": "A"
@@ -319,7 +319,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(loopzero_releasing_builds) or vector(0)",
+          "expr": "max(loop_runtime_releasing_builds) or vector(0)",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -383,7 +383,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_custom_domains_total) or vector(0)",
+          "expr": "sum(loop_runtime_custom_domains_total) or vector(0)",
           "legendFormat": "Domains",
           "instant": true,
           "refId": "A"
@@ -440,7 +440,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kube_namespace_status_phase{namespace=~\"loopzero-tn-.*\",phase=\"Active\",job=\"runtime-kube-state-metrics\"}) or vector(0)",
+          "expr": "count(kube_namespace_status_phase{namespace=~\"loop-runtime-tn-.*\",phase=\"Active\",job=\"runtime-kube-state-metrics\"}) or vector(0)",
           "legendFormat": "Namespaces",
           "instant": true,
           "refId": "A"
@@ -497,7 +497,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(loopzero_deploys_total[24h])) or vector(0)",
+          "expr": "sum(increase(loop_runtime_deploys_total[24h])) or vector(0)",
           "legendFormat": "Deploys",
           "instant": true,
           "refId": "A"
@@ -563,7 +563,7 @@
                 "value": [
                   {
                     "title": "Per-Tenant Health: ${__data.fields.Tenant}",
-                    "url": "/d/loopzero-per-tenant?var-tenant=${__data.fields.Tenant}",
+                    "url": "/d/loop-runtime-per-tenant?var-tenant=${__data.fields.Tenant}",
                     "targetBlank": false
                   }
                 ]
@@ -759,7 +759,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count by (tenant) (count by (tenant, app) (loopzero_application_cr_ensure_total))",
+          "expr": "count by (tenant) (count by (tenant, app) (loop_runtime_application_cr_ensure_total))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -770,7 +770,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant) (increase(loopzero_deploys_total[24h]))",
+          "expr": "sum by (tenant) (increase(loop_runtime_deploys_total[24h]))",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -781,7 +781,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant) (increase(loopzero_builds_total{status=\"succeeded\"}[24h])) / clamp_min(sum by (tenant) (increase(loopzero_builds_total[24h])), 1)",
+          "expr": "sum by (tenant) (increase(loop_runtime_builds_total{status=\"succeeded\"}[24h])) / clamp_min(sum by (tenant) (increase(loop_runtime_builds_total[24h])), 1)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -792,7 +792,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant) (loopzero_releasing_builds)",
+          "expr": "sum by (tenant) (loop_runtime_releasing_builds)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -803,7 +803,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant) (loopzero_custom_domains_total)",
+          "expr": "sum by (tenant) (loop_runtime_custom_domains_total)",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -863,7 +863,7 @@
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
-      "description": "Number of distinct apps tracked per tenant. Derived from LoopZeroApplication CR ensure operations.",
+      "description": "Number of distinct apps tracked per tenant. Derived from LoopRuntimeApplication CR ensure operations.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -912,7 +912,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count by (tenant) (count by (tenant, app) (loopzero_application_cr_ensure_total))",
+          "expr": "count by (tenant) (count by (tenant, app) (loop_runtime_application_cr_ensure_total))",
           "legendFormat": "{{tenant}}",
           "instant": true,
           "refId": "A"
@@ -1017,7 +1017,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant, status) (increase(loopzero_builds_total[1h]))",
+          "expr": "sum by (tenant, status) (increase(loop_runtime_builds_total[1h]))",
           "legendFormat": "{{tenant}} {{status}}",
           "refId": "A"
         }
@@ -1102,7 +1102,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_builds_total{builder=\"static\"}) or vector(0)",
+          "expr": "sum(loop_runtime_builds_total{builder=\"static\"}) or vector(0)",
           "legendFormat": "Static (CF Edge)",
           "instant": true,
           "refId": "Static"
@@ -1112,7 +1112,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_builds_total{builder=\"buildkit\"}) or vector(0)",
+          "expr": "sum(loop_runtime_builds_total{builder=\"buildkit\"}) or vector(0)",
           "legendFormat": "Dynamic (Pods)",
           "instant": true,
           "refId": "Dynamic"
@@ -1211,7 +1211,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(loopzero_cfkv_operations_total{op=\"put\",result=\"success\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_cfkv_operations_total{op=\"put\",result=\"success\"}[5m])) or vector(0)",
           "legendFormat": "Static Put (success)",
           "refId": "A"
         },
@@ -1220,7 +1220,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(loopzero_cfkv_operations_total{op=\"put\",result=\"failure\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_cfkv_operations_total{op=\"put\",result=\"failure\"}[5m])) or vector(0)",
           "legendFormat": "Static Put (failure)",
           "refId": "B"
         },
@@ -1229,7 +1229,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(loopzero_cfkv_operations_total{op=\"delete\"}[5m])) or vector(0)",
+          "expr": "sum(rate(loop_runtime_cfkv_operations_total{op=\"delete\"}[5m])) or vector(0)",
           "legendFormat": "Static Delete",
           "refId": "C"
         }
@@ -1282,7 +1282,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count by (namespace) (kube_pod_info{namespace=~\"loopzero-tn-.*\",job=\"runtime-kube-state-metrics\"})",
+          "expr": "count by (namespace) (kube_pod_info{namespace=~\"loop-runtime-tn-.*\",job=\"runtime-kube-state-metrics\"})",
           "legendFormat": "{{namespace}}",
           "refId": "A"
         }
@@ -1356,7 +1356,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant) (rate(loopzero_deploys_total[5m]))",
+          "expr": "sum by (tenant) (rate(loop_runtime_deploys_total[5m]))",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }
@@ -1411,7 +1411,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.95, sum by (tenant, le) (rate(loopzero_build_duration_seconds_bucket[15m])))",
+          "expr": "histogram_quantile(0.95, sum by (tenant, le) (rate(loop_runtime_build_duration_seconds_bucket[15m])))",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }
@@ -1478,7 +1478,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant) (rate(loopzero_lock_acquired_total{result=\"conflict\"}[5m])) > 0",
+          "expr": "sum by (tenant) (rate(loop_runtime_lock_acquired_total{result=\"conflict\"}[5m])) > 0",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }
@@ -1549,7 +1549,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "histogram_quantile(0.95, sum by (tenant, le) (rate(loopzero_build_duration_seconds_bucket[15m])))",
+          "expr": "histogram_quantile(0.95, sum by (tenant, le) (rate(loop_runtime_build_duration_seconds_bucket[15m])))",
           "legendFormat": "{{tenant}}",
           "refId": "A"
         }
@@ -1664,7 +1664,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (status) (loopzero_custom_domains_total)",
+          "expr": "sum by (status) (loop_runtime_custom_domains_total)",
           "legendFormat": "{{status}}",
           "instant": true,
           "refId": "A"
@@ -1730,7 +1730,7 @@
                 "value": [
                   {
                     "title": "Per-Tenant Health: ${__data.fields.Tenant}",
-                    "url": "/d/loopzero-per-tenant?var-tenant=${__data.fields.Tenant}",
+                    "url": "/d/loop-runtime-per-tenant?var-tenant=${__data.fields.Tenant}",
                     "targetBlank": false
                   }
                 ]
@@ -1838,7 +1838,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant, app) (loopzero_application_cr_ensure_total{result=\"success\"})",
+          "expr": "sum by (tenant, app) (loop_runtime_application_cr_ensure_total{result=\"success\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -1849,7 +1849,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (tenant, app) (loopzero_application_cr_ensure_total{result=\"failure\"})",
+          "expr": "sum by (tenant, app) (loop_runtime_application_cr_ensure_total{result=\"failure\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -1980,7 +1980,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (result) (rate(loopzero_webhook_push_total[5m]))",
+          "expr": "sum by (result) (rate(loop_runtime_webhook_push_total[5m]))",
           "legendFormat": "{{result}}",
           "refId": "A"
         }
@@ -2007,7 +2007,7 @@
         "type": "loki",
         "uid": "${DS_LOKI}"
       },
-      "description": "Error-level logs from all tenant namespaces (loopzero-tn-*). Shows errors, panics, and fatal messages from user applications. Empty = no errors (healthy).",
+      "description": "Error-level logs from all tenant namespaces (loop-runtime-tn-*). Shows errors, panics, and fatal messages from user applications. Empty = no errors (healthy).",
       "gridPos": {
         "h": 12,
         "w": 24,
@@ -2033,7 +2033,7 @@
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "expr": "{namespace=~\"loopzero-tn-.*\"} |~ \"(?i)error|panic|fatal|exception|fail\" | line_format \"{{.namespace}} | {{.pod}} | {{.container}} :: {{__line__}}\"",
+          "expr": "{namespace=~\"loop-runtime-tn-.*\"} |~ \"(?i)error|panic|fatal|exception|fail\" | line_format \"{{.namespace}} | {{.pod}} | {{.container}} :: {{__line__}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -2088,7 +2088,7 @@
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "expr": "sum by (namespace) (count_over_time({namespace=~\"loopzero-tn-.*\"} |~ \"(?i)error|panic|fatal\" [5m]))",
+          "expr": "sum by (namespace) (count_over_time({namespace=~\"loop-runtime-tn-.*\"} |~ \"(?i)error|panic|fatal\" [5m]))",
           "legendFormat": "{{namespace}}",
           "refId": "A"
         }
@@ -2125,7 +2125,7 @@
             "type": "loki",
             "uid": "${DS_LOKI}"
           },
-          "expr": "{namespace=~\"loopzero-system|argocd|argo|loopzero-system\"} |~ \"(?i)\\\"level\\\":\\\"error\\\"\" | line_format \"{{.namespace}}/{{.pod}} :: {{__line__}}\"",
+          "expr": "{namespace=~\"loop-runtime-system|argocd|argo|loop-runtime-system\"} |~ \"(?i)\\\"level\\\":\\\"error\\\"\" | line_format \"{{.namespace}}/{{.pod}} :: {{__line__}}\"",
           "legendFormat": "",
           "refId": "A"
         }
@@ -2192,7 +2192,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_cell_tenant_count)",
+          "expr": "sum(loop_runtime_cell_tenant_count)",
           "legendFormat": "Total Tenants",
           "refId": "A"
         }
@@ -2243,7 +2243,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(loopzero_deploys_total)",
+          "expr": "sum(loop_runtime_deploys_total)",
           "legendFormat": "Total Deploys",
           "refId": "A"
         }
@@ -2316,7 +2316,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "loopzero_cell_tenant_count",
+          "expr": "loop_runtime_cell_tenant_count",
           "legendFormat": "Cell: {{cell_id}}",
           "refId": "A"
         }
@@ -2326,7 +2326,7 @@
   "refresh": "30s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "tenants",
     "apps",
     "ecosystem"
@@ -2369,7 +2369,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero — Tenant Ecosystem",
-  "uid": "loopzero-tenant-ecosystem",
+  "title": "LoopRuntime — Tenant Ecosystem",
+  "uid": "loop-runtime-tenant-ecosystem",
   "version": 1
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package bootstrapuser holds the one rule every environment's bootstrap seed
 // applies: the machine user a Hydra client_credentials JWT names (`sub`) exists,

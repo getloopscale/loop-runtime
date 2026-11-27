@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package logshttp_test
 
@@ -10,9 +10,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/logs"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/logs"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
 
 	"github.com/go-chi/chi/v5"
 )

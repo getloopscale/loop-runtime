@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -7,16 +7,16 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/k8s/secretsync"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
-	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/secretsync"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/workload"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
 )
 
 // K8sDeps holds Kubernetes client managers used by the API server.
@@ -38,12 +38,12 @@ func setupK8s(cfg config.Config, logger *slog.Logger) (*K8sDeps, error) {
 		return nil, fmt.Errorf("tenant CR manager: %w", err)
 	}
 
-	// Application CR manager — creates LoopZeroApplication CRs on mgmt cluster.
+	// Application CR manager — creates LoopRuntimeApplication CRs on mgmt cluster.
 	appCRMgr := &buildsadapter.ApplicationCRAdapter{Mgr: workload.NewApplicationCRManager(tenantCRMgr.Client, "")}
 
 	// Preview CR manager — creates/queries PreviewEnvironment CRs on
 	// mgmt cluster. Shares the same typed client + namespace as
-	// TenantCRManager (both target loopzero-system in the mgmt cluster).
+	// TenantCRManager (both target loop-runtime-system in the mgmt cluster).
 	previewCRMgr := workload.NewPreviewCRManager(tenantCRMgr.Client)
 
 	return &K8sDeps{

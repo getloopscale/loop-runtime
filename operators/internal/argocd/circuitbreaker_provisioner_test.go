@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 // failingProvisioner returns err from every call.

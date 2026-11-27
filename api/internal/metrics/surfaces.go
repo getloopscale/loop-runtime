@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -7,7 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
 )
 
 // SurfaceEnabled reports, per HTTP surface, whether the router registered it.
@@ -38,7 +38,7 @@ import (
 // deploy-timeline metrics above). The reason belongs in the startup summary,
 // which is read once by a human, not stored once per series forever.
 var SurfaceEnabled = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "loopzero_api_surface_enabled",
+	Name: "loop_runtime_api_surface_enabled",
 	Help: "1 when the router registered this HTTP surface, 0 when a missing dependency made it skip it.",
 }, []string{"surface"})
 

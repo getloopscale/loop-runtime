@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Directory-wide regression-lock for issue #117 (and the #115 class it
 // generalizes): a helmfile script that invokes `kubectl` without making
 // its target cluster explicit silently writes to whatever kubecontext
 // happens to be active. On a clean machine it passes; on a dev box
-// carrying residue (e.g. `k3d-loopzero-secrets` left over from a vault
+// carrying residue (e.g. `k3d-loop-runtime-secrets` left over from a vault
 // bootstrap) it provisions into the WRONG CLUSTER and `task setup`
 // dies mid-chain — or worse, succeeds against the wrong target.
 //
@@ -34,7 +34,7 @@
 //	(4) Caller-pinned contract made EXPLICIT AND FAIL-FAST via
 //	    `: "${KUBECONFIG:?...}"`. Some scripts legitimately target a
 //	    cluster chosen by the caller (generate-runtime-secrets.sh is
-//	    invoked as `KUBECONFIG=$(k3d kubeconfig write loopzero-cell-0)
+//	    invoked as `KUBECONFIG=$(k3d kubeconfig write loop-runtime-cell-0)
 //	    bash ...`). Inheriting is fine; inheriting SILENTLY is not.
 //	    The `:?` form aborts with a message when the caller forgot.
 //
@@ -48,7 +48,7 @@
 //	is a deliberate raw bypass used by mechanism (1) itself.
 //
 // Cross-references:
-//   - Issues: getloopscale/loopzero#117 (this sweep), #115 (the single-script precursor)
+//   - Issues: getloopscale/loop-runtime#117 (this sweep), #115 (the single-script precursor)
 //   - Sibling single-script guard: generate_secrets_context_pin_test.go
 //   - Canonical reference implementation: infra/helmfile/scripts/generate-secrets.sh
 package charts

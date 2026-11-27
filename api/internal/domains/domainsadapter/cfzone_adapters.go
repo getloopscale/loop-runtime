@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainsadapter
 
 import (
 	"context"
 
-	domainsvc "github.com/getloopscale/loopzero/api/internal/domains"
-	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
+	domainsvc "github.com/getloopscale/loop-runtime/api/internal/domains"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/cfzone"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
 )
 
 // CFZoneAdapter bridges cfzone.Client → domains.CFZoneManager.

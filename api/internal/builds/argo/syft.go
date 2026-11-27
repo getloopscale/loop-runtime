@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
@@ -9,7 +9,7 @@ import (
 	forge "github.com/getloopscale/argo-workflows-go"
 	"github.com/getloopscale/argo-workflows-go/model"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // SBOM artifact constants — single source of truth for paths/format.
@@ -41,7 +41,7 @@ const (
 //   - Outputs are written to the container's OWN /tmp filesystem; they
 //     are not shared with other containers in the pod.
 //
-// SEC-006: Uses pre-built loopzero-syft-scanner image with syft baked in.
+// SEC-006: Uses pre-built loop-runtime-syft-scanner image with syft baked in.
 // No runtime binary downloads.
 //
 // CHG-2026-04-22-001 (B7): RegistryInsecure mirrors BuildKit's flag for
@@ -52,7 +52,7 @@ const (
 // ContinueOn{Failed: true}. SBOM failure must NOT block the deploy.
 func syftScanTemplate(
 	tenantID, projectID, commitSHA, appName, imageTag string,
-	insecureRegistry bool, scannerImage string,
+	insecureRegistry bool, scannerImage string, store objectStore,
 ) *forge.Script {
 	metadataFile := metadataFileFor(appName)
 	sbomLocalPath := fmt.Sprintf("%s/sbom-%s.cdx.json", sbomLocalDir, appName)
@@ -84,8 +84,8 @@ func syftScanTemplate(
 	// 4. Upload to S3 (MinIO/DO Spaces) using aws-cli already in image.
 	// 5. Write Argo workflow output files.
 	//
-	// Bucket: loopzero-static-assets (s3BucketStaticAssets) — same bucket
-	// as static apps; SBOMs use the sbom/ prefix to avoid collision.
+	// Bucket: loop-runtime-static-assets (s3BucketStaticAssets) by default, or the
+	// configured StaticAssetsBucket; SBOMs live under the sbom/ prefix.
 	//
 	// AWS_ENDPOINT_URL is set via env (workflow level) for MinIO local
 	// dev; in prod the default DO Spaces endpoint is used.
@@ -108,10 +108,10 @@ if [ ! -s %s ]; then
   exit 1
 fi
 
-# Component count (CycloneDX: top-level "components" array).
-# Robust to absence: default to 0 if the field is missing or non-array.
-COMPONENT_COUNT=$(awk -F'"components"' 'NR>1 || /"components"/' %s 2>/dev/null \
-  | tr -cd '{' | wc -c)
+# Component count: length of the top-level CycloneDX "components" array.
+# python3 ships with aws-cli in the scanner image; jq does not. 0 when the
+# field is missing, is not an array, or the file does not parse.
+COMPONENT_COUNT=$(python3 -c 'import json,sys; c=json.load(open(sys.argv[1])).get("components"); print(len(c) if isinstance(c, list) else 0)' %s 2>/dev/null || echo 0)
 if [ -z "$COMPONENT_COUNT" ]; then COMPONENT_COUNT=0; fi
 
 # Upload to S3 (bucket: %s). Path: %s
@@ -129,10 +129,10 @@ echo "SBOM generated and uploaded successfully"
 		insecureEnv,                      // 3: syft env vars for insecure registry (Plan T6.1)
 		imageTag,                         // 4: scan target
 		sbomFormatCDXJSON, sbomLocalPath, // 5,6: format + local path
-		sbomLocalPath,               // 7: existence check path
-		sbomLocalPath,               // 8: count source path
-		s3BucketStaticAssets, s3Key, // 9,10: bucket + key (echo)
-		sbomLocalPath, s3BucketStaticAssets, s3Key, // 11,12,13: aws s3 cp
+		sbomLocalPath,                     // 7: existence check path
+		sbomLocalPath,                     // 8: count source path
+		store.staticAssetsBucket(), s3Key, // 9,10: bucket + key (echo)
+		sbomLocalPath, store.staticAssetsBucket(), s3Key, // 11,12,13: aws s3 cp
 		s3Key, outS3KeyPath, // 14,15: write s3 key output
 		sbomFormatCDXJSON, outFormatPath, // 16,17: write format output
 		outComponentCountPath, // 18: write count output
@@ -157,16 +157,7 @@ echo "SBOM generated and uploaded successfully"
 				ValueFrom: &model.ValueFrom{Path: outComponentCountPath},
 			},
 		},
-		Env: []forge.EnvBuilder{
-			// MinIO (local dev) credentials. In prod, AWS_ACCESS_KEY/SECRET
-			// for DO Spaces are also injected via the same Secret.
-			forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"},         //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"},       //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"},           //nolint:gosec // G101 false positive: env var KEY name, not credential value
-			// Docker config — syft needs this to read from private registries.
-			forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount},
-		},
+		Env: syftEnv(store),
 		VolumeMounts: []forge.VolumeBuilder{
 			&forge.EmptyDirVolume{BaseVolume: forge.BaseVolume{Name: volumeWorkspace, MountPath: workspaceMountPath}},
 			&forge.SecretVolume{BaseVolume: forge.BaseVolume{
@@ -190,4 +181,21 @@ echo "SBOM generated and uploaded successfully"
 			RunAsNonRoot: forge.Ptr(true),
 		},
 	}
+}
+
+// syftEnv is the SBOM step's environment. With IRSA the aws CLI signs as the pod's
+// role and reads its region and endpoint from what EKS injects; otherwise the
+// credentials, region and endpoint come from the MinIO Secret.
+func syftEnv(store objectStore) []forge.EnvBuilder {
+	// Docker config: syft reads private registries with it.
+	env := []forge.EnvBuilder{forge.Env{Name: "DOCKER_CONFIG", Value: buildkitRegistryMount}}
+	if store.IRSA {
+		return env
+	}
+	return append([]forge.EnvBuilder{
+		forge.SecretEnv{Name: "AWS_ACCESS_KEY_ID", SecretName: secretMinIOCreds, SecretKey: "AWS_ACCESS_KEY_ID"},         //nolint:gosec // G101 false positive: env var KEY name, not credential value
+		forge.SecretEnv{Name: "AWS_SECRET_ACCESS_KEY", SecretName: secretMinIOCreds, SecretKey: "AWS_SECRET_ACCESS_KEY"}, //nolint:gosec // G101 false positive: env var KEY name, not credential value
+		forge.SecretEnv{Name: "AWS_DEFAULT_REGION", SecretName: secretMinIOCreds, SecretKey: "AWS_DEFAULT_REGION"},       //nolint:gosec // G101 false positive: env var KEY name, not credential value
+		forge.SecretEnv{Name: "AWS_ENDPOINT_URL", SecretName: secretMinIOCreds, SecretKey: "AWS_ENDPOINT_URL"},           //nolint:gosec // G101 false positive: env var KEY name, not credential value
+	}, env...)
 }

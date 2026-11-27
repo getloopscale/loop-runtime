@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package placement is the tenant-placement feature. It decides a NEW tenant's
 // cell, once, at bootstrap (RoundRobinEngine), resolves a cell id to its
@@ -28,9 +28,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // TenantCRPatcher moves a tenant's Tenant CR to a cell (spec.cellID).
@@ -72,7 +72,7 @@ var (
 
 // ErrCellPinNotApplied means the Tenant CR could not be patched and the database
 // move was reverted: the tenant did not move, and the pin may be retried.
-var ErrCellPinNotApplied = &loopzeroerrors.LoopZeroError{
+var ErrCellPinNotApplied = &loopruntimeerrors.LoopRuntimeError{
 	Code:    "CELL_PIN_NOT_APPLIED",
 	Message: "tenant not moved: the Tenant CR could not be updated, so the database change was reverted",
 }
@@ -80,7 +80,7 @@ var ErrCellPinNotApplied = &loopzeroerrors.LoopZeroError{
 // ErrCellPinDiverged is the partial failure: the database records the new cell,
 // the Tenant CR still names the old one, and the revert was impossible or failed.
 // The operator keeps reconciling the previous cell until the CR is patched.
-var ErrCellPinDiverged = &loopzeroerrors.LoopZeroError{
+var ErrCellPinDiverged = &loopruntimeerrors.LoopRuntimeError{
 	Code:    "CELL_PIN_DIVERGED",
 	Message: "tenant partially moved: the database records the new cell but the Tenant CR does not",
 }
@@ -216,21 +216,21 @@ func intPow(base, exp int) int {
 // repairHint is the operator guidance attached to ErrCellPinDiverged, when the
 // database already records the new cell and the Tenant CR is the stale side.
 //
-// It does NOT say "run `loopzero admin tenants pin`" as if that were a new idea:
+// It does NOT say "run `loop-runtime admin tenants pin`" as if that were a new idea:
 // this function IS that path, and it just failed. What unblocks it is re-running
-// the pin, so the patch is retried under the loopzero-api identity. The direct
+// the pin, so the patch is retried under the loop-runtime-api identity. The direct
 // `kubectl patch` is quoted for the identities allowed to use it, and the
 // warning that everyone else is denied is the point: since 2026-08-13 the
-// ValidatingAdmissionPolicy `loopzero-tenant-cr-shape` makes spec.cellID immutable
-// except for system:masters and the loopzero-api ServiceAccount, and a bare
+// ValidatingAdmissionPolicy `loop-runtime-tenant-cr-shape` makes spec.cellID immutable
+// except for system:masters and the loop-runtime-api ServiceAccount, and a bare
 // `kubectl patch` from an unprivileged kubeconfig gets `Denied` with no reason
 // given (B-097).
 func repairHint(ns, tenantID, cellID string) string {
 	return fmt.Sprintf(
 		"the database already records the new cell; the Tenant CR is the stale side. "+
-			"Re-run the pin so the patch is retried under the loopzero-api identity. "+
+			"Re-run the pin so the patch is retried under the loop-runtime-api identity. "+
 			"The direct patch `kubectl -n %s patch tenant %s --type=merge -p '{\"spec\":{\"cellID\":%q}}'` "+
-			"is DENIED by the loopzero-tenant-cr-shape admission policy (spec.cellID is immutable) "+
-			"for every identity except system:masters and the loopzero-api ServiceAccount",
+			"is DENIED by the loop-runtime-tenant-cr-shape admission policy (spec.cellID is immutable) "+
+			"for every identity except system:masters and the loop-runtime-api ServiceAccount",
 		ns, tenantID, cellID)
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argocd
 
@@ -17,20 +17,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 	"github.com/golang-jwt/jwt/v5"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // KubeMintingTokenProvider is a self-healing ArgoCD token provider:
 //
-//  1. Reads the current token from a K8s Secret (default: loopzero-api-tokens.argocd-token).
+//  1. Reads the current token from a K8s Secret (default: loop-runtime-api-tokens.argocd-token).
 //  2. Inspects the token's JWT exp claim and refreshes proactively when
 //     the token has < ProactiveRefreshThreshold time until expiry.
 //  3. On reactive auth-failure signal, re-mints the token immediately.
@@ -41,8 +41,8 @@ import (
 //  5. Persists the new token back to the same K8s Secret AND updates the
 //     in-memory atomic value used by SyncClient on its hot path.
 //  6. Exposes Prometheus metrics:
-//     loopzero_argocd_token_age_seconds        — gauge, sec since last mint
-//     loopzero_argocd_token_refreshes_total    — counter, labels: trigger,
+//     loop_runtime_argocd_token_age_seconds        — gauge, sec since last mint
+//     loop_runtime_argocd_token_refreshes_total    — counter, labels: trigger,
 //     outcome ∈ {success,error}
 //
 // Goroutine model: a single background loop ticks every PollInterval and
@@ -51,7 +51,7 @@ import (
 // (single-flight). All public state reads are lock-free (atomic.Value).
 //
 // FAANG-grade requirements driven by 2026-04-30 NEW-15: ArgoCD admin session
-// tokens expire after 24h; loopzero-api had no automatic refresh path so a
+// tokens expire after 24h; loop-runtime-api had no automatic refresh path so a
 // single 24h+ uptime window broke project delete + every post-deploy sync
 // silently. This provider eliminates the operational burden of manual
 // `task k3d:heal` H11 by self-healing in-process.
@@ -102,7 +102,7 @@ type KubeMintingConfig struct {
 	// e.g. http://argocd-server.argocd.svc.cluster.local:80
 	ArgoCDBaseURL string
 
-	// AccountName — ArgoCD account whose token is minted. Default: "loopzero-api".
+	// AccountName — ArgoCD account whose token is minted. Default: "loop-runtime-api".
 	// Must have apiKey capability configured in argocd-cm.
 	AccountName string
 
@@ -118,11 +118,11 @@ type KubeMintingConfig struct {
 	// minted token back to the storage Secret. Required.
 	KubeClient kubernetes.Interface
 
-	// Namespace where both Secrets live. Default: "loopzero-system".
+	// Namespace where both Secrets live. Default: "loop-runtime-system".
 	Namespace string
 
 	// TokenSecretName — Secret holding the active token. Default:
-	// "loopzero-api-tokens". Updated in place on every mint.
+	// "loop-runtime-api-tokens". Updated in place on every mint.
 	TokenSecretName string
 
 	// TokenSecretKey — data key in TokenSecretName. Default: "argocd-token".
@@ -152,21 +152,21 @@ type KubeMintingConfig struct {
 // caller must invoke Start(ctx) to begin the polling loop. If the token in
 // the Secret is invalid (expired or empty), Start will mint immediately.
 func NewKubeMintingTokenProvider(cfg KubeMintingConfig) (*KubeMintingTokenProvider, error) {
-	// Audit gap M02 #13 fix: typed LoopZeroError for constructor validation.
+	// Audit gap M02 #13 fix: typed LoopRuntimeError for constructor validation.
 	if cfg.ArgoCDBaseURL == "" {
-		return nil, loopzeroerrors.ErrMissingField.Wrap("argocd: ArgoCDBaseURL required")
+		return nil, loopruntimeerrors.ErrMissingField.Wrap("argocd: ArgoCDBaseURL required")
 	}
 	if cfg.KubeClient == nil {
-		return nil, loopzeroerrors.ErrMissingField.Wrap("argocd: KubeClient required")
+		return nil, loopruntimeerrors.ErrMissingField.Wrap("argocd: KubeClient required")
 	}
 	if cfg.AccountName == "" {
-		cfg.AccountName = "loopzero-api"
+		cfg.AccountName = "loop-runtime-api"
 	}
 	if cfg.Namespace == "" {
 		cfg.Namespace = k8s.ControlPlaneNamespace
 	}
 	if cfg.TokenSecretName == "" {
-		cfg.TokenSecretName = "loopzero-api-tokens"
+		cfg.TokenSecretName = "loop-runtime-api-tokens"
 	}
 	if cfg.TokenSecretKey == "" {
 		cfg.TokenSecretKey = "argocd-token"
@@ -419,9 +419,9 @@ func (p *KubeMintingTokenProvider) mintAndPersist(ctx context.Context, trigger s
 	}
 	if newToken == "" {
 		metrics.ArgoCDTokenRefreshesTotal.WithLabelValues(trigger, "error").Inc()
-		// Audit gap M02 #13 fix: typed LoopZeroError so this surfaces with a
+		// Audit gap M02 #13 fix: typed LoopRuntimeError so this surfaces with a
 		// stable code in token-refresh failure metrics + audit logs.
-		return loopzeroerrors.ErrInternalError.Wrap("argocd minted empty token")
+		return loopruntimeerrors.ErrInternalError.Wrap("argocd minted empty token")
 	}
 
 	if err := p.writeSecretToken(ctx, newToken); err != nil {
@@ -477,7 +477,7 @@ func (p *KubeMintingTokenProvider) readCredentials(ctx context.Context) (refresh
 //	(a) admin /api/v1/session login with username+password, OR
 //	(b) reusing a pre-existing apiKey bearer token directly,
 //
-// and then exchanges that for a new loopzero-api account token via
+// and then exchanges that for a new loop-runtime-api account token via
 // /api/v1/account/{AccountName}/token.
 func (p *KubeMintingTokenProvider) mintToken(ctx context.Context, creds refreshCreds) (string, error) {
 	bearer := creds.bearerToken
@@ -594,7 +594,7 @@ func (p *KubeMintingTokenProvider) writeSecretToken(ctx context.Context, token s
 	return err
 }
 
-// updateAgeMetric refreshes loopzero_argocd_token_age_seconds.
+// updateAgeMetric refreshes loop_runtime_argocd_token_age_seconds.
 // issuedAt = 0 → age unknown; the metric is set to NaN-substitute -1
 // (matches Prometheus convention "stale" handled by alerts).
 func updateAgeMetric(issuedAt int64) {

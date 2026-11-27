@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // pkgadapter.go bridges this operator-internal `conditions` package to
 // the cross-cutting `pkg/conditions` shared layer introduced by
@@ -21,7 +21,7 @@
 package conditions
 
 import (
-	pkgconditions "github.com/getloopscale/loopzero/pkg/conditions"
+	pkgconditions "github.com/getloopscale/loop-runtime/pkg/conditions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 

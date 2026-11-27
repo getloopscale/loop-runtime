@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Phase 5 T5.4 — observability. Tests that DynamicRouter.Resolve()
-// emits loopzero_cell_routing_decisions_total with the right labels.
+// emits loop_runtime_cell_routing_decisions_total with the right labels.
 // Closes ADR D6 mandate (observability BEFORE feature ships) and
 // MEET-INFRA-NORMALIZE-T3-multi-cell condition C19 (deterministic
 // routing decisions; cell-unavailable handled).
@@ -17,7 +17,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 func TestCellRoutingDecisions_AssignedOnSuccess(t *testing.T) {

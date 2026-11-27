@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -33,6 +33,24 @@ type EdgeRouteSource interface {
 	ListEdgeRoutes(ctx context.Context) ([]EdgeRoute, error)
 }
 
+// EdgeRouteSources lists the routes of several sources as one. A source that fails
+// fails the listing: the router keeps the index it had, where a partial listing
+// would drop every host of the source that could not be read.
+type EdgeRouteSources []EdgeRouteSource
+
+// ListEdgeRoutes returns the routes of every source, in order.
+func (s EdgeRouteSources) ListEdgeRoutes(ctx context.Context) ([]EdgeRoute, error) {
+	var all []EdgeRoute
+	for _, source := range s {
+		routes, err := source.ListEdgeRoutes(ctx)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, routes...)
+	}
+	return all, nil
+}
+
 // TenantCellResolver returns the cell a tenant was placed on (tenants.cell_id).
 type TenantCellResolver interface {
 	GetCell(ctx context.Context, tenantID string) (string, error)
@@ -41,7 +59,7 @@ type TenantCellResolver interface {
 // EdgeRouterConfig says how hostnames map between the edge and the cells.
 type EdgeRouterConfig struct {
 	// InternalDomain is the suffix routes are published under inside a cell
-	// (loopzero.local on dev-public). A route under it is indexed by its first label.
+	// (loop-runtime.local on dev-public). A route under it is indexed by its first label.
 	InternalDomain string
 	// PublicDomains are the suffixes users reach; the label in front of one is the
 	// same label the route was published with.

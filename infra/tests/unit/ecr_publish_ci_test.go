@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // The platform images are published to Amazon ECR, the registry production pulls from.
 //
-// The repositories are created by loopzero-infra-live (`registry/ecr` unit) with IMMUTABLE
+// The repositories are created by loop-runtime-infra-live (`registry/ecr` unit) with IMMUTABLE
 // tags, so a push that reuses a tag is refused. That is the property that makes an image
 // reference traceable to one commit, and it is also why this file exists: the GHCR channel
 // moves `:develop` and `:latest` on every build, and copying those rules onto ECR would
@@ -26,17 +26,17 @@ import (
 const buildPublishWorkflow = ".github/workflows/build-publish.yml"
 
 // engineImageDockerfiles is every ECR repository this repository builds. The other two
-// repositories in the registry (loopzero-cloud, loopzero-dashboard) are built by loopzero-cloud.
+// repositories in the registry (loop-console, loop-console-dashboard) are built by loop-console.
 var engineImageDockerfiles = map[string]string{
-	"loopzero-api":               "api/Dockerfile",
-	"loopzero-tenant-operator":   "operators/Dockerfile.tenant-operator",
-	"loopzero-app-operator":      "operators/Dockerfile.app-operator",
-	"loopzero-preview-operator":  "operators/Dockerfile.preview-operator",
-	"loopzero-platform-operator": "operators/Dockerfile.platform-operator",
-	"loopzero-minio":             "infra/images/minio/Dockerfile",
-	"loopzero-clone-runner":      "infra/images/clone-runner/Dockerfile",
-	"loopzero-syft-scanner":      "infra/images/syft-scanner/Dockerfile",
-	"loopzero-cosign-signer":     "infra/images/cosign-signer/Dockerfile",
+	"loop-runtime-api":               "api/Dockerfile",
+	"loop-runtime-tenant-operator":   "operators/Dockerfile.tenant-operator",
+	"loop-runtime-app-operator":      "operators/Dockerfile.app-operator",
+	"loop-runtime-preview-operator":  "operators/Dockerfile.preview-operator",
+	"loop-runtime-platform-operator": "operators/Dockerfile.platform-operator",
+	"loop-runtime-minio":             "infra/images/minio/Dockerfile",
+	"loop-runtime-clone-runner":      "infra/images/clone-runner/Dockerfile",
+	"loop-runtime-syft-scanner":      "infra/images/syft-scanner/Dockerfile",
+	"loop-runtime-cosign-signer":     "infra/images/cosign-signer/Dockerfile",
 }
 
 type workflowStep struct {
@@ -116,6 +116,40 @@ func TestImagesJobPublishesToECRThroughOIDC(t *testing.T) {
 	}
 }
 
+// loop-edge is the Caddy that serves tenants' custom domains, built with the storage
+// module that lets a fleet share its certificates. It is published like the other images
+// and has no ECR repository yet (getloopscale/infra-live#39), so it is not in
+// engineImageDockerfiles.
+func TestReleaseMatrixBuildsTheCustomDomainEdge(t *testing.T) {
+	const image, dockerfile = "loop-edge", "infra/images/loop-edge/Dockerfile"
+	for _, img := range planMatrix(t, loadReleaseArtifactsPlan(t)) {
+		if img.Image != image {
+			continue
+		}
+		if img.Dockerfile != dockerfile {
+			t.Errorf("%s: %q builds from %q, want %q", releaseArtifactsWorkflow, image, img.Dockerfile, dockerfile)
+		}
+		data, err := os.ReadFile(filepath.Join(repoRoot(), dockerfile))
+		if err != nil {
+			t.Fatalf("%s: %v", dockerfile, err)
+		}
+		// Without the module, Caddy refuses the `storage redis` block the chart writes.
+		if !strings.Contains(string(data), "github.com/pberkel/caddy-storage-redis@") ||
+			!strings.Contains(string(data), "caddy.storage.redis") {
+			t.Errorf("%s does not build Caddy with the Redis storage module and check that it is there", dockerfile)
+		}
+		// The chart runs the container with no capability and no privilege escalation. The
+		// Caddy builder image makes xcaddy give the binary a file capability, and the
+		// kernel then refuses to start it: "exec /usr/bin/caddy: operation not permitted"
+		// (measured on staging, 2026-11-27).
+		if !strings.Contains(string(data), "XCADDY_SETCAP=0") {
+			t.Errorf("%s lets xcaddy set a file capability on the binary, which a pod without privileges cannot run", dockerfile)
+		}
+		return
+	}
+	t.Errorf("%s: %q is not in the release matrix", releaseArtifactsWorkflow, image)
+}
+
 func buildPublishStep(t *testing.T, id string) workflowStep {
 	t.Helper()
 	for _, s := range loadWorkflow(t, buildPublishWorkflow).Jobs["build-publish"].Steps {
@@ -192,7 +226,7 @@ func TestImagesJobGrantsEveryPermissionTheReusableDeclares(t *testing.T) {
 // organisation's plan ("Feature not available for the getloopscale organization"), and
 // every repository calling this workflow is private. Unconditional, the step failed the
 // whole publish after the image was already pushed — and before the cosign keyless
-// signature that follows it could run (loopzero-cloud run 36512769358). The cosign
+// signature that follows it could run (loop-console run 36512769358). The cosign
 // signature is the guarantee; the native attestation is where a public repository
 // also publishes it.
 func TestNativeAttestationRunsOnlyOnPublicRepositories(t *testing.T) {
@@ -213,7 +247,7 @@ func TestNativeAttestationRunsOnlyOnPublicRepositories(t *testing.T) {
 
 // The engine's images go to production, so they pass the same vulnerability gate the
 // control plane's do (CRITICAL+HIGH with a fix available, in build-publish.yml). Without
-// it the images built on Go 1.26.1 reached ECR carrying 53 HIGH findings (loopzero-api) and
+// it the images built on Go 1.26.1 reached ECR carrying 53 HIGH findings (loop-runtime-api) and
 // nothing measured them.
 func TestImagesJobGatesOnKnownVulnerabilities(t *testing.T) {
 	job := loadWorkflow(t, releaseArtifactsWorkflow).Jobs["images"]

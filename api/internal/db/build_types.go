@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -23,7 +23,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // buildMachine is the build state machine singleton. Used to validate
@@ -70,6 +70,8 @@ type BuildAppAutoscaling struct {
 	MinReplicas int `json:"min,omitempty"`
 	MaxReplicas int `json:"max,omitempty"`
 	TargetCPU   int `json:"target_cpu,omitempty"`
+	// TargetMemory is the memory utilization target; 0 scales on CPU alone.
+	TargetMemory int `json:"target_memory,omitempty"`
 }
 
 // BuildAppSpec is a single app spec stored at build submission time.
@@ -78,10 +80,10 @@ type BuildAppAutoscaling struct {
 type BuildAppSpec struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
-	Rendering string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Rendering string `json:"rendering,omitempty"` // "server" or empty; older rows may say "static", which is no longer delivered
 	Port      int    `json:"port"`
 	// T0.2 (plan simplify-deploy-loopzerokit-only v2.0): persist the declared
-	// services.json start command + app path + build mode. Removing loopzero-packs
+	// services.json start command + app path + build mode. Removing loop-runtime-packs
 	// (which auto-detected these at build time) means the canonical Dockerfile
 	// generator needs them from the stored spec, not from heuristics.
 	// JSONB back-compat: legacy rows omit these keys → decode as empty.
@@ -92,6 +94,25 @@ type BuildAppSpec struct {
 	Secrets     []string             `json:"secrets,omitempty"`
 	Replicas    int                  `json:"replicas,omitempty"`
 	Autoscaling *BuildAppAutoscaling `json:"autoscaling,omitempty"`
+	// ReusedImage is set when an earlier build already built and signed this
+	// app's image for the same commit. The workflow then skips the app's image
+	// build, signing and SBOM, and the reconcile loop delivers this image.
+	ReusedImage *ReusedImage `json:"reused_image,omitempty"`
+}
+
+// ReusedImage is the signed image an earlier build produced for one app at a
+// given commit. Image tags are the commit SHA and the tenant repositories have
+// immutable tags, so a second build of the same commit cannot push the image
+// again: BuildKit's rebuild yields a different index digest (the provenance
+// attestation changes) and the registry refuses the manifest. The build uses
+// this image instead.
+type ReusedImage struct {
+	Digest             string    `json:"digest"`
+	Signature          string    `json:"signature"`
+	SignedAt           time.Time `json:"signed_at"`
+	SBOMS3Key          string    `json:"sbom_s3_key,omitempty"`
+	SBOMFormat         string    `json:"sbom_format,omitempty"`
+	SBOMComponentCount int       `json:"sbom_component_count,omitempty"`
 }
 
 // BuildStore defines the interface for build persistence operations.

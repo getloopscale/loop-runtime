@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -7,21 +7,28 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // Every field a build persists must survive the trip back to an AppSpec. A
 // stored app that loses Runtime, Path, Build or Start rebuilds with the wrong
-// strategy (loopzero#185: empty runtime -> unsupportedStrategy -> SYNC_FAILED), so
+// strategy (loop-runtime#185: empty runtime -> unsupportedStrategy -> SYNC_FAILED), so
 // this test fills every field of db.BuildAppSpec by reflection and requires the
 // same-named AppSpec field to come back non-zero. A field added to the stored
 // shape and forgotten here fails this test instead of a preview build.
+//
+// derivedAtSubmit lists the stored fields that are not part of what the user
+// submitted: SubmitBuild derives them, so a rebuilt AppSpec must not carry
+// them. ReusedImage is looked up again on every submission; carrying a stored
+// one back would skip that lookup with a possibly stale image.
 func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
+	derivedAtSubmit := map[string]bool{"ReusedImage": true}
 	stored := db.BuildAppSpec{
 		Name: "api", Type: "server", Rendering: "server", Port: 8080,
 		Start: "node server.js", Path: "apps/api", Build: "dockerfile", Runtime: "node",
 		Secrets: []string{"DB_URL"}, Replicas: 2,
-		Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70},
+		Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70, TargetMemory: 60},
+		ReusedImage: &db.ReusedImage{Digest: "sha256:01", Signature: "sig"},
 	}
 	sv := reflect.ValueOf(stored)
 	for i := 0; i < sv.NumField(); i++ {
@@ -34,6 +41,9 @@ func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
 	got := reflect.ValueOf(AppSpecFromStored(stored))
 	for i := 0; i < sv.NumField(); i++ {
 		name := sv.Type().Field(i).Name
+		if derivedAtSubmit[name] {
+			continue
+		}
 		f := got.FieldByName(name)
 		if !f.IsValid() {
 			t.Errorf("AppSpec has no field %s; a persisted field has nowhere to go", name)
@@ -43,8 +53,8 @@ func TestAppSpecFromStored_CarriesEveryPersistedField(t *testing.T) {
 			t.Errorf("AppSpecFromStored dropped %s", name)
 		}
 	}
-	if a := AppSpecFromStored(stored).Autoscaling; a.MinReplicas != 1 || a.MaxReplicas != 3 || a.TargetCPU != 70 {
-		t.Errorf("autoscaling = %+v, want {1 3 70}", *a)
+	if a := AppSpecFromStored(stored).Autoscaling; a.MinReplicas != 1 || a.MaxReplicas != 3 || a.TargetCPU != 70 || a.TargetMemory != 60 {
+		t.Errorf("autoscaling = %+v, want min 1, max 3, cpu 70, memory 60", *a)
 	}
 }
 

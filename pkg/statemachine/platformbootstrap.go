@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
-// PlatformBootstrap states as defined in the CRD (loopzero.io/v1 PlatformBootstrap).
+// PlatformBootstrap states as defined in the CRD (runtime.getloopscale.com/v1 PlatformBootstrap).
 // PlatformBootstrapEmpty represents the initial zero-value before first reconcile.
 const (
 	PlatformBootstrapEmpty            State = ""

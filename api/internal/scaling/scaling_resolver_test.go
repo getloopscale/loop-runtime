@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
-// Tests for ScalingResolver — see docs/plans/loopzero-scale-end-to-end-plan.md T1.1.
+// Tests for ScalingResolver — see docs/plans/loop-runtime-scale-end-to-end-plan.md T1.1.
 // RED tests written FIRST per TDD; implementation in scaling_resolver.go.
 
 package scaling
@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // fakeScalingStore is a stub implementing store.ScalingStore for tests.
@@ -116,6 +116,9 @@ func TestResolve_DBRowOverridesYAML_HPA(t *testing.T) {
 	}
 	if out[0].Autoscaling == nil {
 		t.Fatalf("expected Autoscaling != nil for HPA, got nil")
+	}
+	if out[0].Replicas != 0 {
+		t.Errorf("expected Replicas=0 next to a range (the yaml had 1), got %d", out[0].Replicas)
 	}
 	if out[0].Autoscaling.MinReplicas != 2 {
 		t.Errorf("expected Min=2, got %d", out[0].Autoscaling.MinReplicas)
@@ -253,4 +256,28 @@ func mustResolver(t *testing.T, store ScalingConfigReader) ScalingResolver {
 		t.Fatalf("NewDBScalingResolver: %v", err)
 	}
 	return r
+}
+
+func TestResolve_DBRowCarriesTheMemoryTarget(t *testing.T) {
+	store := &fakeScalingStore{
+		get: func(_ context.Context, _, _, _, _ string) (*store.ScalingConfig, error) {
+			return &store.ScalingConfig{
+				MinReplicas:     1,
+				MaxReplicas:     3,
+				TargetCPUPct:    i32ptr(80),
+				TargetMemoryPct: i32ptr(65),
+			}, nil
+		},
+	}
+	r := mustResolver(t, store)
+
+	out, err := r.Resolve(context.Background(), "tn-x", "proj-x", "production",
+		[]deploycontracts.AppSpec{makeAppSpec("api", 1)})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out[0].Autoscaling == nil || out[0].Autoscaling.TargetMemory != 65 {
+		t.Errorf("autoscaling = %+v, want TargetMemory 65", out[0].Autoscaling)
+	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,12 +9,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/cfkv"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // OnBuildCompleted handles the callback from the build system when a build finishes.
@@ -43,7 +42,7 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 
 	// Validation before acquiring lock (stateless check)
 	if result.Status == "succeeded" && len(result.Apps) == 0 {
-		return loopzeroerrors.NewLoopZeroError(
+		return loopruntimeerrors.NewLoopRuntimeError(
 			"INVALID_CALLBACK",
 			"build callback reported success but provided no apps")
 	}
@@ -128,15 +127,12 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	// Phase 2: Release activation via the DeliveryActivator wired at the
 	// composition root (MEET-2026-03-26-009). Each sub-phase acquires and
 	// releases its own lock.
-	// Write CF KV routing entries for static apps BEFORE activation (Sprint 10).
-	// The assets are already in S3 at this point (uploaded by Argo Workflow).
-	// Writing KV early ensures the CF Worker serves the new version immediately,
-	// even if the ArgoCD sync (container delivery) takes longer or fails.
-	o.writeStaticRoutingEntries(ctx, build, result)
-
 	activationErr := o.activate(ctx, build, result)
 
 	if activationErr != nil {
+		if o.failOnUndeliveredSecrets(ctx, build, activationErr) {
+			return nil
+		}
 		// BRC-002 fix: if the delivery activator already handled the failure
 		// (emitted SSE event, transitioned release state), skip our own emit
 		// to prevent duplicate deploy.sync_failed events in the CLI stream.
@@ -155,45 +151,4 @@ func (o *BuildOrchestrator) OnBuildCompleted(ctx context.Context, buildID string
 	}
 
 	return nil
-}
-
-// writeStaticRoutingEntries writes CF KV entries for static apps in the build.
-// This enables the Cloudflare Worker to serve static assets from DO Spaces
-// without any cluster involvement (Sprint 10).
-func (o *BuildOrchestrator) writeStaticRoutingEntries(ctx context.Context, build *db.Build, result deploycontracts.BuildCallbackRequest) {
-	if o.kvClient == nil {
-		return // CF KV not configured (local dev or not enabled)
-	}
-
-	for _, app := range result.Apps {
-		// Only write KV for static apps
-		if app.Rendering != "static" {
-			continue
-		}
-
-		// ARCH-004 fix: Use cfkv.Subdomain() instead of inline generation to avoid
-		// divergence with the canonical function (missing TrimRight for trailing hyphens).
-		subdomain := cfkv.Subdomain(build.TenantID, build.ProjectID, app.Name, build.Environment)
-
-		entry := map[string]string{
-			"buildId":  build.ID,
-			"s3Prefix": fmt.Sprintf("/%s/%s/%s/%s", build.TenantID, build.ProjectID, app.Name, build.ID),
-		}
-
-		if err := o.kvClient.Put(ctx, subdomain, entry); err != nil {
-			slog.Error("static routing: failed to write KV entry",
-				"subdomain", subdomain,
-				"build_id", build.ID,
-				"error", err,
-			)
-			// Non-fatal: assets are still accessible via nginx-s3-gateway in cluster
-			continue
-		}
-
-		slog.Info("static routing: KV entry written",
-			"subdomain", subdomain,
-			"build_id", build.ID,
-			"url", fmt.Sprintf("https://%s.%s", subdomain, o.baseDomain),
-		)
-	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -14,9 +14,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 
 	"k8s.io/klog/v2"
 )
@@ -27,10 +27,10 @@ import (
 const healthPort = ":9091"
 
 // cellID returns the cell to which this controller instance is scoped. It
-// reads LOOPZERO_CELL_ID; if unset, falls back to the roadmap 03 default so a
+// reads LOOP_RUNTIME_CELL_ID; if unset, falls back to the roadmap 03 default so a
 // single-cell deployment works out of the box.
 func cellID(_ config.Config) string {
-	if v := os.Getenv("LOOPZERO_CELL_ID"); v != "" {
+	if v := os.Getenv("LOOP_RUNTIME_CELL_ID"); v != "" {
 		return v
 	}
 	return domain.DefaultCellID
@@ -38,12 +38,12 @@ func cellID(_ config.Config) string {
 
 // podName returns the holder identifier for the leader lease. Prefers
 // HOSTNAME (which Kubernetes sets to the pod name) and falls back to
-// "loopzero-controller" to remain usable outside Kubernetes.
+// "loop-runtime-controller" to remain usable outside Kubernetes.
 func podName() string {
 	if n := os.Getenv("HOSTNAME"); n != "" {
 		return n
 	}
-	return "loopzero-controller"
+	return "loop-runtime-controller"
 }
 
 // silenceKlog redirects the klog output from the embedded Kubernetes client

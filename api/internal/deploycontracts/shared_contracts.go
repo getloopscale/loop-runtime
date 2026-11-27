@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // shared_contracts.go — M9 Step 6 P1: the cross-context shared DTOs + narrow
@@ -28,7 +28,7 @@ type AppSpec struct {
 	Build       string              `json:"build,omitempty"`       // v2: "dockerfile", "buildpack", "custom"
 	Start       string              `json:"start,omitempty"`       // T0.2: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile  string              `json:"dockerfile,omitempty"`  // v2: Dockerfile path relative to app path
-	Rendering   string              `json:"rendering,omitempty"`   // v2: "static" or "server" (MEET-009)
+	Rendering   string              `json:"rendering,omitempty"`   // "server" or empty; NormalizeApp refuses anything else
 	Secrets     []string            `json:"secrets,omitempty"`     // declared secret names from loopzero.yaml
 	Replicas    int                 `json:"replicas,omitempty"`    // desired replica count (default: 1)
 	Autoscaling *AppAutoscalingSpec `json:"autoscaling,omitempty"` // HPA configuration
@@ -39,7 +39,8 @@ type AppAutoscalingSpec struct {
 	MinReplicas    int `json:"min,omitempty"`
 	MaxReplicas    int `json:"max,omitempty"`
 	TargetCPU      int `json:"target_cpu,omitempty"`
-	CooldownPeriod int `json:"cooldown,omitempty"` // Seconds before scale-to-zero (default: 300)
+	TargetMemory   int `json:"target_memory,omitempty"` // Memory utilization target; 0 scales on CPU alone
+	CooldownPeriod int `json:"cooldown,omitempty"`      // Seconds before scale-to-zero (default: 300)
 }
 
 // AppRelease describes a built app with its image digest and URL.
@@ -48,7 +49,7 @@ type AppRelease struct {
 	ImageDigest string `json:"image_digest"` // legacy: this is actually the image TAG (e.g., registry/org/app:commit), NOT the cryptographic digest. See ImageDigestSHA256 below for the real sha256.
 	URL         string `json:"url"`
 	Type        string `json:"type,omitempty"`      // "server", "worker", "frontend"
-	Rendering   string `json:"rendering,omitempty"` // "static" or "server" (Sprint 10)
+	Rendering   string `json:"rendering,omitempty"` // copied from the stored app spec; every app is a container
 	DurationMs  int    `json:"duration_ms"`
 
 	// CHG-2026-04-25-ATTESTATION-WIRE: supply-chain attestation fields
@@ -76,6 +77,11 @@ type AppRelease struct {
 	// Backed by nullable releases.image_attestation_rekor_url DB column
 	// (migration 000019 — forward-only per pre-release governance).
 	ImageAttestationRekorURL string `json:"image_attestation_rekor_url,omitempty"`
+
+	// ImageReused is true when this build did not build or sign the image: it
+	// deploys the signed image an earlier build of the same commit produced,
+	// and the attestation fields above are copied from that build.
+	ImageReused bool `json:"image_reused,omitempty"`
 }
 
 // WorkflowSpec contains everything needed to submit a build workflow.
@@ -112,7 +118,7 @@ type WorkflowStatus struct {
 	// workflow declared no outputs (legacy or non-build workflows).
 	Outputs map[string]map[string]string
 
-	// Red Team loopzero-cloud#133: pod-level stuck-state signal. When Argo reports
+	// Red Team loop-console#133: pod-level stuck-state signal. When Argo reports
 	// the workflow Phase as "Running" but the underlying pod is wedged in
 	// ImagePullBackOff / ErrImagePull / CreateContainerError sustained past
 	// the RunningTimeout window, the reaper's M-03 "skip if workflow still
@@ -124,6 +130,13 @@ type WorkflowStatus struct {
 	// Populated by WorkflowSubmitter.GetStatus from `wf.status.nodes[*].message`
 	// which Argo copies from Kubernetes pod containerStatuses.reason.
 	StuckPodReason string
+
+	// FailedStep is the first required step of the build that failed on every
+	// attempt, and FailedStepMessage what Argo recorded for its last attempt.
+	// Both are empty when no required step failed. Phase is "Failed" whenever
+	// FailedStep is set, also when Argo reported the workflow Succeeded.
+	FailedStep        string
+	FailedStepMessage string
 }
 
 // GitOpsPushOpts contains everything needed to push manifests to the GitOps repo.

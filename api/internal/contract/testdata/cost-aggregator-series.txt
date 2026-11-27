@@ -1,18 +1,18 @@
 # Cost-aggregator PromQL series <-> producer contract (B-181).
 #
-# loopzero-cloud's cost aggregator (internal/billing/cost_aggregator.go, the
+# loop-console's cost aggregator (internal/billing/cost_aggregator.go, the
 # `promQueries` map) runs one PromQL query per cost metric. The queries NAME
-# `loopzero_*` series; the producers that would EMIT them live in this repository.
+# `loop_runtime_*` series; the producers that would EMIT them live in this repository.
 # Nothing joined the two sides, so a query naming a series nobody emits
 # returned an empty vector every five minutes and `cost_counters` stayed at
 # zero by construction -- silent on both sides.
 #
-# Measured 2026-09-05 against k3d-loopzero-core: all three queries returned
-# {"resultType":"vector","result":[]}, and Prometheus knew 48 `loopzero_*` series
+# Measured 2026-09-05 against k3d-loop-runtime-core: all three queries returned
+# {"resultType":"vector","result":[]}, and Prometheus knew 48 `loop_runtime_*` series
 # names, none of them the three queried.
 #
 # This file is the pin. The `cost-series-producers` gate
-# (cmd/loopzero-ops/internal/quality/costseriesproducers) reads it and answers,
+# (cmd/loop-runtime-ops/internal/quality/costseriesproducers) reads it and answers,
 # for every series the aggregator queries, exactly ONE of three things, and
 # says which:
 #
@@ -37,6 +37,6 @@
 # Histogram/summary-derived series (_sum, _count, _bucket) resolve to their
 # base metric name when the producer is looked up.
 
-loopzero_egress_bytes_total          ABSENT B-181
-loopzero_docr_pulls_total            ABSENT B-181
-loopzero_build_duration_seconds_sum  PRODUCER api/internal/metrics/build_metrics.go
+loop_runtime_egress_bytes_total          ABSENT B-181
+loop_runtime_docr_pulls_total            ABSENT B-181
+loop_runtime_build_duration_seconds_sum  PRODUCER api/internal/metrics/build_metrics.go

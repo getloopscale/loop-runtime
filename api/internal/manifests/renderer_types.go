@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -52,7 +52,8 @@ type k8sPodTemplateSpec struct {
 }
 
 type k8sPodMeta struct {
-	Labels map[string]string `json:"labels"`
+	Labels      map[string]string `json:"labels"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type k8sPodSpec struct {
@@ -162,7 +163,8 @@ type k8sEnvFromSource struct {
 }
 
 type k8sSecretRef struct {
-	Name string `json:"name"`
+	Name     string `json:"name"`
+	Optional *bool  `json:"optional,omitempty"`
 }
 
 type k8sProbe struct {
@@ -424,7 +426,7 @@ type k8sTrafficRouting struct {
 	//   - Traefik v2 (legacy traefik.containo.us) requires controller flags
 	//     --traefik-api-group=traefik.containo.us
 	//     --traefik-api-version=traefik.containo.us/v1alpha1
-	// LoopZero runs Traefik v3 so no flags needed.
+	// LoopRuntime runs Traefik v3 so no flags needed.
 	Traefik *k8sTraefikRouting `json:"traefik,omitempty"`
 }
 

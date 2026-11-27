@@ -72,7 +72,7 @@ const getScalingConfigByApp = `-- name: GetScalingConfigByApp :one
 
 SELECT id, tenant_id, project_id, environment, app_name,
        min_replicas, max_replicas, target_cpu_pct, scale_to_zero,
-       updated_at, updated_by, config_hash
+       updated_at, updated_by, config_hash, target_memory_pct
 FROM app_scaling_config
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3 AND app_name = $4
 `
@@ -116,6 +116,7 @@ func (q *Queries) GetScalingConfigByApp(ctx context.Context, db DBTX, arg GetSca
 		&i.UpdatedAt,
 		&i.UpdatedBy,
 		&i.ConfigHash,
+		&i.TargetMemoryPct,
 	)
 	return i, err
 }
@@ -123,7 +124,7 @@ func (q *Queries) GetScalingConfigByApp(ctx context.Context, db DBTX, arg GetSca
 const listScalingConfigsByEnv = `-- name: ListScalingConfigsByEnv :many
 SELECT id, tenant_id, project_id, environment, app_name,
        min_replicas, max_replicas, target_cpu_pct, scale_to_zero,
-       updated_at, updated_by, config_hash
+       updated_at, updated_by, config_hash, target_memory_pct
 FROM app_scaling_config
 WHERE tenant_id = $1 AND project_id = $2 AND environment = $3
 ORDER BY app_name
@@ -159,6 +160,7 @@ func (q *Queries) ListScalingConfigsByEnv(ctx context.Context, db DBTX, arg List
 			&i.UpdatedAt,
 			&i.UpdatedBy,
 			&i.ConfigHash,
+			&i.TargetMemoryPct,
 		); err != nil {
 			return nil, err
 		}
@@ -174,15 +176,16 @@ const upsertScalingConfig = `-- name: UpsertScalingConfig :one
 INSERT INTO app_scaling_config (
   tenant_id, project_id, environment, app_name,
   min_replicas, max_replicas, target_cpu_pct, scale_to_zero,
-  updated_by, config_hash
+  updated_by, config_hash, target_memory_pct
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 ON CONFLICT (tenant_id, project_id, environment, app_name)
 DO UPDATE SET
   min_replicas = EXCLUDED.min_replicas,
   max_replicas = EXCLUDED.max_replicas,
   target_cpu_pct = EXCLUDED.target_cpu_pct,
+  target_memory_pct = EXCLUDED.target_memory_pct,
   scale_to_zero = EXCLUDED.scale_to_zero,
   updated_at = NOW(),
   updated_by = EXCLUDED.updated_by,
@@ -191,16 +194,17 @@ RETURNING id, updated_at
 `
 
 type UpsertScalingConfigParams struct {
-	TenantID     string `json:"tenant_id"`
-	ProjectID    string `json:"project_id"`
-	Environment  string `json:"environment"`
-	AppName      string `json:"app_name"`
-	MinReplicas  int32  `json:"min_replicas"`
-	MaxReplicas  int32  `json:"max_replicas"`
-	TargetCpuPct *int32 `json:"target_cpu_pct"`
-	ScaleToZero  bool   `json:"scale_to_zero"`
-	UpdatedBy    string `json:"updated_by"`
-	ConfigHash   string `json:"config_hash"`
+	TenantID        string `json:"tenant_id"`
+	ProjectID       string `json:"project_id"`
+	Environment     string `json:"environment"`
+	AppName         string `json:"app_name"`
+	MinReplicas     int32  `json:"min_replicas"`
+	MaxReplicas     int32  `json:"max_replicas"`
+	TargetCpuPct    *int32 `json:"target_cpu_pct"`
+	ScaleToZero     bool   `json:"scale_to_zero"`
+	UpdatedBy       string `json:"updated_by"`
+	ConfigHash      string `json:"config_hash"`
+	TargetMemoryPct *int32 `json:"target_memory_pct"`
 }
 
 type UpsertScalingConfigRow struct {
@@ -224,6 +228,7 @@ func (q *Queries) UpsertScalingConfig(ctx context.Context, db DBTX, arg UpsertSc
 		arg.ScaleToZero,
 		arg.UpdatedBy,
 		arg.ConfigHash,
+		arg.TargetMemoryPct,
 	)
 	var i UpsertScalingConfigRow
 	err := row.Scan(&i.ID, &i.UpdatedAt)

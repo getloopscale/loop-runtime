@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // previewCells routes each cellID to its own client, as the production factory
@@ -48,36 +48,36 @@ func previewCellScheme(t *testing.T) *runtime.Scheme {
 	if err := clientgoscheme.AddToScheme(s); err != nil {
 		t.Fatalf("client-go scheme: %v", err)
 	}
-	if err := loopzerov1.AddToScheme(s); err != nil {
-		t.Fatalf("loopzero scheme: %v", err)
+	if err := loopruntimev1.AddToScheme(s); err != nil {
+		t.Fatalf("loop-runtime scheme: %v", err)
 	}
 	return s
 }
 
-func cellPreview(cellID string) *loopzerov1.PreviewEnvironment {
-	return &loopzerov1.PreviewEnvironment{
+func cellPreview(cellID string) *loopruntimev1.PreviewEnvironment {
+	return &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "pr-7",
-			Namespace:  "loopzero-system",
+			Namespace:  "loop-runtime-system",
 			Finalizers: []string{previewFinalizer},
 		},
-		Spec: loopzerov1.PreviewEnvironmentSpec{TenantID: "tn-acme", ProjectID: "shop", PRNumber: 7, CellID: cellID},
+		Spec: loopruntimev1.PreviewEnvironmentSpec{TenantID: "tn-acme", ProjectID: "shop", PRNumber: 7, CellID: cellID},
 	}
 }
 
-const cellPreviewNamespace = "loopzero-tn-acme-shop-preview-pr-7"
+const cellPreviewNamespace = "loop-runtime-tn-acme-shop-preview-pr-7"
 
 func reconcileCellPreview(t *testing.T, r *PreviewReconciler) error {
 	t.Helper()
 	_, err := r.Reconcile(context.Background(),
-		ctrl.Request{NamespacedName: types.NamespacedName{Name: "pr-7", Namespace: "loopzero-system"}})
+		ctrl.Request{NamespacedName: types.NamespacedName{Name: "pr-7", Namespace: "loop-runtime-system"}})
 	return err
 }
 
 func TestPreviewReconcile_ProvisionsEveryResourceInThePreviewCell(t *testing.T) {
 	s := previewCellScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).WithObjects(cellPreview("cell-1")).
-		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
+		WithStatusSubresource(&loopruntimev1.PreviewEnvironment{}).Build()
 	cell0 := fake.NewClientBuilder().WithScheme(s).Build()
 	cell1 := fake.NewClientBuilder().WithScheme(s).Build()
 	r := &PreviewReconciler{Client: mgmt, Scheme: s,
@@ -95,8 +95,8 @@ func TestPreviewReconcile_ProvisionsEveryResourceInThePreviewCell(t *testing.T) 
 	if err := cell1.List(ctx, &policies, client.InNamespace(cellPreviewNamespace)); err != nil || len(policies.Items) == 0 {
 		t.Fatalf("isolation NetworkPolicies must be in the preview's cell, got %d (err %v)", len(policies.Items), err)
 	}
-	if err := cell1.Get(ctx, client.ObjectKey{Namespace: cellPreviewNamespace, Name: "loopzero-app"}, &corev1.ServiceAccount{}); err != nil {
-		t.Fatalf("loopzero-app ServiceAccount must be in the preview's cell: %v", err)
+	if err := cell1.Get(ctx, client.ObjectKey{Namespace: cellPreviewNamespace, Name: "loop-runtime-app"}, &corev1.ServiceAccount{}); err != nil {
+		t.Fatalf("loop-runtime-app ServiceAccount must be in the preview's cell: %v", err)
 	}
 	var quotas corev1.ResourceQuotaList
 	if err := cell1.List(ctx, &quotas, client.InNamespace(cellPreviewNamespace)); err != nil || len(quotas.Items) == 0 {
@@ -115,7 +115,7 @@ func TestPreviewReconcile_ProvisionsEveryResourceInThePreviewCell(t *testing.T) 
 func TestPreviewReconcile_FailsWhenThePreviewCellCannotBeResolved(t *testing.T) {
 	s := previewCellScheme(t)
 	mgmt := fake.NewClientBuilder().WithScheme(s).WithObjects(cellPreview("cell-1")).
-		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
+		WithStatusSubresource(&loopruntimev1.PreviewEnvironment{}).Build()
 	factoryErr := errors.New("cell-1 kubeconfig Secret unreadable")
 	r := &PreviewReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: previewCells{err: factoryErr}}
@@ -131,7 +131,7 @@ func TestPreviewDelete_DeletesTheNamespaceInThePreviewCell(t *testing.T) {
 	now := metav1.NewTime(time.Now())
 	deleting.DeletionTimestamp = &now
 	mgmt := fake.NewClientBuilder().WithScheme(s).WithObjects(deleting).
-		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
+		WithStatusSubresource(&loopruntimev1.PreviewEnvironment{}).Build()
 	cell1 := fake.NewClientBuilder().WithScheme(s).
 		WithObjects(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: cellPreviewNamespace}}).Build()
 	r := &PreviewReconciler{Client: mgmt, Scheme: s,
@@ -153,7 +153,7 @@ func TestPreviewReconcile_ReportsTheURLTheAPIComputed(t *testing.T) {
 	pv := cellPreview("cell-1")
 	pv.Spec.PublicURL = "https://tn-acme-shop-web-preview-pr-7.preview.example.test"
 	mgmt := fake.NewClientBuilder().WithScheme(s).WithObjects(pv).
-		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).Build()
+		WithStatusSubresource(&loopruntimev1.PreviewEnvironment{}).Build()
 	r := &PreviewReconciler{Client: mgmt, Scheme: s,
 		RuntimeFactory: previewCells{cells: map[string]client.Client{"cell-1": fake.NewClientBuilder().WithScheme(s).Build()}}}
 
@@ -161,8 +161,8 @@ func TestPreviewReconcile_ReportsTheURLTheAPIComputed(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 
-	var got loopzerov1.PreviewEnvironment
-	if err := mgmt.Get(context.Background(), types.NamespacedName{Name: "pr-7", Namespace: "loopzero-system"}, &got); err != nil {
+	var got loopruntimev1.PreviewEnvironment
+	if err := mgmt.Get(context.Background(), types.NamespacedName{Name: "pr-7", Namespace: "loop-runtime-system"}, &got); err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	if got.Status.URL != pv.Spec.PublicURL {

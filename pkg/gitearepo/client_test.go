@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package gitearepo
 
@@ -33,7 +33,7 @@ func newFakeGitea(t *testing.T, answers map[string]fakeAnswer) (*fakeGitea, *Cli
 	f := &fakeGitea{t: t, bodies: map[string]map[string]any{}, answers: answers}
 	srv := httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(srv.Close)
-	return f, New(srv.URL+"/", "tok", "loopzero", srv.Client())
+	return f, New(srv.URL+"/", "tok", "loop-runtime", srv.Client())
 }
 
 func (f *fakeGitea) serve(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +72,8 @@ func (f *fakeGitea) called(key string) bool {
 }
 
 const (
-	repoPath   = "/api/v1/repos/loopzero/acme-api"
-	createPath = "/api/v1/orgs/loopzero/repos"
+	repoPath   = "/api/v1/repos/loop-runtime/acme-api"
+	createPath = "/api/v1/orgs/loop-runtime/repos"
 )
 
 func TestEnsureRepo_LeavesAnActiveRepositoryAlone(t *testing.T) {
@@ -203,14 +203,14 @@ func TestArchiveRepo_IsIdempotentForAMissingRepository(t *testing.T) {
 }
 
 func TestRepoURL_IsBuiltFromTheConfiguredBaseURL(t *testing.T) {
-	c := New("http://gitea.loopzero-system.svc:3000/", "tok", "loopzero", nil)
-	if got, want := c.RepoURL("acme-api"), "http://gitea.loopzero-system.svc:3000/loopzero/acme-api.git"; got != want {
+	c := New("http://gitea.loop-runtime-system.svc:3000/", "tok", "loop-runtime", nil)
+	if got, want := c.RepoURL("acme-api"), "http://gitea.loop-runtime-system.svc:3000/loop-runtime/acme-api.git"; got != want {
 		t.Errorf("RepoURL = %q, want %q", got, want)
 	}
 }
 
 func TestNew_DefaultsToAClientWithATimeout(t *testing.T) {
-	c := New("http://gitea", "tok", "loopzero", nil)
+	c := New("http://gitea", "tok", "loop-runtime", nil)
 	if c.http == http.DefaultClient || c.http.Timeout <= 0 {
 		t.Fatalf("default client has no timeout (%v): a hung server would block the caller forever", c.http.Timeout)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -34,7 +34,7 @@ func NewMetricsServer(port string) *http.Server {
 
 // ValidateProductionEnv checks that all security-sensitive environment variables
 // are set. Returns an error listing missing variables. Intended for use when
-// LOOPZERO_ENV=production — in dev mode, fallback defaults are acceptable.
+// LOOP_RUNTIME_ENV=production — in dev mode, fallback defaults are acceptable.
 func ValidateProductionEnv(logger *slog.Logger, vars map[string]string) error {
 	var missing []string
 	for name, val := range vars {

@@ -5,27 +5,27 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: platform-operator
-  namespace: loopzero-system
+  namespace: loop-runtime-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: platform-operator
 rules:
-  # --- LoopZero CRDs: ClusterCredential, GitRepositoryBinding, PlatformBootstrap lifecycle ---
-  - apiGroups: ["loopzero.io"]
+  # --- LoopRuntime CRDs: ClusterCredential, GitRepositoryBinding, PlatformBootstrap lifecycle ---
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["clustercredentials", "gitrepositorybindings", "platformbootstraps"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["clustercredentials/status", "gitrepositorybindings/status", "platformbootstraps/status"]
     verbs: ["get", "update", "patch"]
-  - apiGroups: ["loopzero.io"]
+  - apiGroups: ["runtime.getloopscale.com"]
     resources: ["clustercredentials/finalizers", "gitrepositorybindings/finalizers", "platformbootstraps/finalizers"]
     verbs: ["update"]
 
-  # --- Secrets: NOT here — Roles platform-operator-secrets-loopzero-system and
+  # --- Secrets: NOT here — Roles platform-operator-secrets-loop-runtime-system and
   # platform-operator-secrets-argocd below. Mirrors
-  # charts/loopzero-platform-operator/templates/role-{loopzero-system,argocd}.yaml.
+  # charts/loop-runtime-platform-operator/templates/role-{loop-runtime-system,argocd}.yaml.
 
   # --- Events: emit Kubernetes events for observability ---
   - apiGroups: [""]
@@ -48,15 +48,15 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platform-operator
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 ---
-# Secret access in loopzero-system: kubeconfigs, Gitea admin Secret,
+# Secret access in loop-runtime-system: kubeconfigs, Gitea admin Secret,
 # platform-tokens, Git credentials. Delete only on platform-tokens.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: platform-operator-secrets-loopzero-system
-  namespace: loopzero-system
+  name: platform-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -69,16 +69,16 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: platform-operator-secrets-loopzero-system
-  namespace: loopzero-system
+  name: platform-operator-secrets-loop-runtime-system
+  namespace: loop-runtime-system
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: platform-operator-secrets-loopzero-system
+  name: platform-operator-secrets-loop-runtime-system
 subjects:
   - kind: ServiceAccount
     name: platform-operator
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 ---
 # Secret access in the ArgoCD namespace: the cluster, repository and
 # repo-creds Secrets the operator writes, and the ArgoCD admin Secret.
@@ -104,27 +104,27 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: platform-operator
-    namespace: loopzero-system
+    namespace: loop-runtime-system
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: platform-operator
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app: platform-operator
-    app.kubernetes.io/component: loopzero-operator
+    app.kubernetes.io/component: loop-runtime-operator
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: platform-operator
-      app.kubernetes.io/component: loopzero-operator
+      app.kubernetes.io/component: loop-runtime-operator
   template:
     metadata:
       labels:
         app: platform-operator
-        app.kubernetes.io/component: loopzero-operator
+        app.kubernetes.io/component: loop-runtime-operator
     spec:
       serviceAccountName: platform-operator
       securityContext:
@@ -133,7 +133,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: operator
-          image: loopzero-platform-operator
+          image: loop-runtime-platform-operator
           args:
             - "--leader-elect=false"
             - "--health-probe-bind-address=:8081"

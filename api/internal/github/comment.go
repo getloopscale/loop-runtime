@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package github
 
@@ -40,11 +40,11 @@ func NewPreviewCommentor(app *AppClient, logger *slog.Logger) *PreviewCommentor 
 	return &PreviewCommentor{app: app, logger: logger}
 }
 
-// previewCommentMarker is embedded in every loopzero-managed comment as the
-// first line. The (project, pr_number) tuple lets multiple LoopZero projects
+// previewCommentMarker is embedded in every loop-runtime-managed comment as the
+// first line. The (project, pr_number) tuple lets multiple LoopRuntime projects
 // (monorepos) coexist on the same PR without colliding.
 func previewCommentMarker(projectID string, prNumber int) string {
-	return fmt.Sprintf("<!-- loopzero-preview:%s:%d -->", projectID, prNumber)
+	return fmt.Sprintf("<!-- loop-runtime-preview:%s:%d -->", projectID, prNumber)
 }
 
 // renderPreviewComment composes the markdown body of the comment.
@@ -82,7 +82,7 @@ func renderPreviewComment(params PreviewCommentParams) string {
 | **Updated** | %s |
 
 ---
-*Deployed by [LoopZero](https://loopzero.com)*
+*Deployed by [LoopRuntime](https://loop-runtime.com)*
 `,
 		previewCommentMarker(params.ProjectID, params.PRNumber),
 		statusEmoji, params.Status,
@@ -92,7 +92,7 @@ func renderPreviewComment(params PreviewCommentParams) string {
 	)
 }
 
-// UpsertPreviewComment creates or updates the loopzero-managed comment on the
+// UpsertPreviewComment creates or updates the loop-runtime-managed comment on the
 // PR. Idempotent across pushes for the same (project, PR).
 func (c *PreviewCommentor) UpsertPreviewComment(ctx context.Context, params PreviewCommentParams) error {
 	if c.app == nil {

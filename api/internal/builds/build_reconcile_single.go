@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -32,9 +33,9 @@ import (
 // that submitted the build, and for no other.
 func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build) {
 	ctx = dbtx.WithTenantScope(ctx, build.TenantID)
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.reconcile",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.build.reconcile",
 		trace.WithAttributes(
-			attribute.String("loopzero.build_id", build.ID),
+			attribute.String("loop-runtime.build_id", build.ID),
 		))
 	defer span.End()
 
@@ -88,11 +89,24 @@ func (r *BuildReconcileLoop) reconcileBuild(ctx context.Context, build *db.Build
 				"build_id", build.ID, "workflow_id", build.WorkflowID, "phase", status.Phase)
 			return
 		}
-		r.failBuild(ctx, build, fmt.Sprintf("Build %s", strings.ToLower(status.Phase)))
+		r.failBuild(ctx, build, workflowFailureReason(status))
 	case "Running", "Pending":
 		// Workflow is still active — nothing to do
 	default:
 		r.logger.Warn("reconcile loop: unknown workflow phase",
 			"build_id", build.ID, "workflow_id", build.WorkflowID, "phase", status.Phase)
 	}
+}
+
+// workflowFailureReason is the sentence a build that failed in its workflow is
+// recorded with. It names the step when the workflow tells which one failed.
+// The cause itself is in the step's log: Argo keeps only the exit code.
+func workflowFailureReason(status *deploycontracts.WorkflowStatus) string {
+	if status.FailedStep == "" {
+		return fmt.Sprintf("Build %s", strings.ToLower(status.Phase))
+	}
+	if status.FailedStepMessage == "" {
+		return fmt.Sprintf("Build failed at step %q. The step's log has the cause.", status.FailedStep)
+	}
+	return fmt.Sprintf("Build failed at step %q: %s. The step's log has the cause.", status.FailedStep, status.FailedStepMessage)
 }

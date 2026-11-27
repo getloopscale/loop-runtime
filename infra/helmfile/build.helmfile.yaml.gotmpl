@@ -4,7 +4,7 @@
 # Replaces `infra/pulumi/src/components/build-bootstrap.ts` and friends.
 #
 # Invocation:
-#   KUBECONFIG=~/.kube/loopzero-build.yaml helmfile -f infra/helmfile/build.helmfile.yaml -e dev sync
+#   KUBECONFIG=~/.kube/loop-runtime-build.yaml helmfile -f infra/helmfile/build.helmfile.yaml -e dev sync
 
 # The environments are declared once, in environments.yaml.
 bases:
@@ -22,7 +22,7 @@ helmDefaults:
   # The flag STILL wins when passed (measured: it overrides silently, with no
   # error). What turns a divergence into a failure is the
   # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
-  kubeContext: {{ env "LOOPZERO_BUILD_CONTEXT" | default "k3d-loopzero-build" }}
+  kubeContext: {{ env "LOOP_RUNTIME_BUILD_CONTEXT" | default "k3d-loop-runtime-build" }}
   wait: true
   waitForJobs: true
   timeout: 600
@@ -34,6 +34,14 @@ repositories:
     url: https://argoproj.github.io/argo-helm
   - name: grafana
     url: https://grafana.github.io/helm-charts
+  # External Secrets and the AWS Load Balancer Controller (the AWS profile).
+  - name: external-secrets
+    url: https://charts.external-secrets.io
+  - name: eks
+    url: https://aws.github.io/eks-charts
+  # The federation Prometheus (profile.awsLoadBalancerController).
+  - name: prometheus-community
+    url: https://prometheus-community.github.io/helm-charts
 
 # ---------------------------------------------------------------------------
 # Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
@@ -54,39 +62,66 @@ releases:
     version: 1.0.5
     values:
       - ../helm/argo-workflows/values.yaml
+{{- if .Values.profile.awsSecretsManager }}
+      # IRSA: infra-live's `identity/build-workflows` trusts argo:loop-runtime-build-sa, the
+      # ServiceAccount every build workflow runs as (artifacts and static assets read-write,
+      # builds read-only).
+      - ../helm/argo-workflows/values-irsa.yaml.gotmpl
+{{- end }}
 
   # B71 (end-to-end-deploy-validation-plan iter 9) — ClusterWorkflowTemplates
-  # (loopzero-clone, loopzero-cache-save, loopzero-cache-restore) are referenced by every
-  # build pipeline submitted via the API. Without this release, loopzero-api
-  # creates Workflow CRs that fail with "template reference loopzero-clone.clone-repo
+  # (loop-runtime-clone, loop-runtime-cache-save, loop-runtime-cache-restore) are referenced by every
+  # build pipeline submitted via the API. Without this release, loop-runtime-api
+  # creates Workflow CRs that fail with "template reference loop-runtime-clone.clone-repo
   # not found". In production, Pulumi build-bootstrap.ts used to deploy these;
   # after T1.1 deletion, this Helmfile release is the sole source.
-  - name: loopzero-build-cwts
+  - name: loop-runtime-build-cwts
     namespace: argo
-    chart: ../../charts/loopzero-build-cwts
+    chart: ../../charts/loop-runtime-build-cwts
     needs:
       - argo/argo-workflows
     values:
-      # The bucket loopzero-api stages source bundles in (core.helmfile passes the
-      # same environment value to loopzero-api's config.sourceBucket).
-      - sourceBucket: {{ .Values | get "sourceBucket" "loopzero-builds" | quote }}
+      # The bucket loop-runtime-api stages source bundles in (core.helmfile passes the
+      # same environment value to loop-runtime-api's config.sourceBucket).
+      - sourceBucket: {{ .Values | get "sourceBucket" "loop-runtime-builds" | quote }}
+{{- if .Values.profile.awsSecretsManager }}
+        # AWS S3 as the IRSA role of loop-runtime-build-sa (identity/build-workflows), which
+        # reads the builds bucket and writes the artifacts bucket, over verified TLS.
+        objectStorage:
+          credentials: irsa
+        cacheBucket: {{ .Values.artifactsBucket | quote }}
+        minio:
+          insecure: false
+{{- end }}
+{{- with .Values | get "emulator.endpoint" "" }}
+{{- $emulator := splitList ":" (urlParse .).host }}
+        # Staging only: S3, STS and ECR answer on the emulator's host and port, not 443.
+        networkPolicy:
+          extraEgress:
+            - to:
+                - ipBlock:
+                    cidr: {{ printf "%s/32" (index $emulator 0) | quote }}
+              ports:
+                - protocol: TCP
+                  port: {{ index $emulator 1 }}
+{{- end }}
 {{- if .Values | get "platformImages.registry" "" }}
         # Pinned by the commit CI built it from, from the environment's platform
         # registry (#435) — the same rule as every other platform image.
         images:
-          cloneRunner: "{{ .Values.platformImages.registry }}loopzero-clone-runner:{{ index .Values.platformImages.tags "loopzero-clone-runner" }}"
+          cloneRunner: "{{ .Values.platformImages.registry }}loop-runtime-clone-runner:{{ index .Values.platformImages.tags "loop-runtime-clone-runner" }}"
 {{- else if .Values.profile.localRegistry }}
         # The clone runner `task images:build` pushes to the local registry
         # (taskfiles/infra.yml tags it v0.1.0, the chart's default tag).
         images:
-          cloneRunner: "k3d-loopzero-registry:5000/loopzero-clone-runner:v0.1.0"
+          cloneRunner: "k3d-loop-runtime-registry:5000/loop-runtime-clone-runner:v0.1.0"
 {{- end }}
     # Skip ServiceAccount/RBAC duplication — argo-workflows release already
-    # creates loopzero-build-sa with the right permissions.
+    # creates loop-runtime-build-sa with the right permissions.
     # 2026-04-30 NEW-8 fix: chart templates read `workflow.serviceAccount.create`
     # (with the `workflow.` prefix), but the gate was setting plain
     # `serviceAccount.create`. The override was ignored and the install would
-    # fail with "ServiceAccount loopzero-build-sa exists and cannot be imported"
+    # fail with "ServiceAccount loop-runtime-build-sa exists and cannot be imported"
     # whenever argo-workflows had created it first. Discovered LIVE during
     # full-dogfood unblock attempt 2026-04-30.
     set:
@@ -128,20 +163,25 @@ releases:
       - argo-events/argo-events
     values:
       - ../helm/argo-events-bus/values.yaml
+{{- with .Values | get "defaultStorageClass" "" }}
+      - eventBus:
+          persistence:
+            storageClassName: {{ . | quote }}
+{{- end }}
 
-  # loopzero-ci-workflows RETIRED on 2026-08-18 (B-019).
+  # loop-runtime-ci-workflows RETIRED on 2026-08-18 (B-019).
   #
   # The whole chart was non-functional, not part of it: `eventsource-gitea` -> `sensor-pr-trigger`
   # -> `workflowTemplateRef` -> the quality-gate WorkflowTemplate, plus the four CronWorkflows,
-  # ALL running `registry.digitalocean.com/loopzero-system/loopzero-ops`. Measured on 2026-08-18:
+  # ALL running `registry.digitalocean.com/loop-runtime-system/loop-runtime-ops`. Measured on 2026-08-18:
   #
   #   the registry           `doctl registry get` -> 404 registry does not exist
-  #   the Dockerfile         there is none for loopzero-ops in the tree
+  #   the Dockerfile         there is none for loop-runtime-ops in the tree
   #   the build task         does not exist — the only mention of it was a comment declaring it
-  #   the matrix             release-artifacts.yml publishes 5 images; loopzero-ops is not among them
+  #   the matrix             release-artifacts.yml publishes 5 images; loop-runtime-ops is not among them
   #   infra/images/ (3)      also outside the matrix — there is no reachable image to host it
   #
-  # And the workloads did not run the loopzero-ops binary: they ran `task ...` and a bash script, with
+  # And the workloads did not run the loop-runtime-ops binary: they ran `task ...` and a bash script, with
   # no clone of the repository and no volume. What was missing was a CI RUNNER with the tree and
   # the toolchain inside — a new published artifact, to run checks that
   # `hooks/delivery-gate.sh` already runs on EVERY push via `task quality:all`, with no cluster at all.
@@ -154,10 +194,22 @@ releases:
     namespace: monitoring
     chart: grafana/loki
     version: 6.24.0
+{{- if .Values.profile.awsLoadBalancerController }}
+    # The controller's webhook validates the loki-internal Ingress (values-alb.yaml).
+    needs:
+      - kube-system/aws-load-balancer-controller
+{{- end }}
     values:
       - ../helm/loki/values.yaml
+{{- if .Values.profile.awsSecretsManager }}
+      - ../helm/loki/values-s3.yaml.gotmpl
+{{- end }}
+{{- if .Values.profile.awsLoadBalancerController }}
+      # Published to the other clusters' Promtail through an internal ALB.
+      - ../helm/loki/values-alb.yaml
+{{- end }}
 {{- with .Values | get "crossCluster.lokiNodePort" nil }}
-      # The cross-cluster query bridge: loopzero-api on the core cluster reads Loki at
+      # The cross-cluster query bridge: loop-runtime-api on the core cluster reads Loki at
       # host.k3d.internal:<lokiNodePort>, a port infra/k3d/build-cluster.yaml publishes
       # on the build serverlb. The chart hard-codes its own `loki` Service as ClusterIP,
       # so the bridge is a second Service rendered here — it used to be the
@@ -199,7 +251,86 @@ releases:
     # Secret to the same URL after every sync.
     labels:
       lokiPush: colocated
+{{- if .Values.profile.awsLoadBalancerController }}
+      # The cluster every stream is labelled with.
+      cluster: build
+{{- end }}
     needs:
       - monitoring/loki
     values:
       - ../helm/promtail/values.yaml.gotmpl
+{{- if .Values.profile.awsSecretsManager }}
+
+  # External Secrets with infra-live's `identity/build-external-secrets` role, and its store.
+  - name: external-secrets
+    namespace: external-secrets
+    chart: external-secrets/external-secrets
+    version: 0.14.3
+    values:
+      - ../helm/external-secrets/values.yaml
+      - serviceAccount:
+          name: external-secrets
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-build-external-secrets" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+{{- with .Values | get "emulator.endpoint" "" }}
+        # Staging only (environments/staging.yaml `emulator:`): aws-sdk-go v1 ignores
+        # AWS_ENDPOINT_URL and reads one endpoint variable per service.
+        extraEnv:
+          - name: AWS_SECRETSMANAGER_ENDPOINT
+            value: {{ . | quote }}
+          - name: AWS_STS_ENDPOINT
+            value: {{ . | quote }}
+{{- end }}
+
+  - name: aws-secrets-manager
+    namespace: external-secrets
+    chart: ../helm/aws-secrets-manager
+    needs:
+      - external-secrets/external-secrets
+    values:
+      - region: {{ .Values.aws.region | quote }}
+        buildSigningKey:
+          secretsManagerKey: {{ .Values.aws | get "signingKeySecret" "" | quote }}
+{{- with .Values | get "tenantRegistry" dict }}
+
+  # The credential the build pushes tenant images with: an ECR token for the tenant
+  # registry under infra-live's identity/build-registry-push role, refreshed by a CronJob.
+  - name: ecr-registry-auth
+    namespace: argo
+    chart: ../helm/ecr-registry-auth
+    values:
+      - registryHost: {{ .host | quote }}
+        region: {{ $.Values.aws.region | quote }}
+        roleArn: {{ printf "arn:aws:iam::%s:role/%s-build-registry-push" $.Values.aws.accountId $.Values.aws.namePrefix | quote }}
+        images:
+          awsCli: "{{ $.Values.platformImages.registry }}loop-runtime-syft-scanner:{{ index $.Values.platformImages.tags "loop-runtime-syft-scanner" }}"
+{{- end }}
+{{- end }}
+{{- if .Values.profile.awsLoadBalancerController }}
+
+  # This cluster's metrics for the core Prometheus, which federates them through the
+  # internal ALB of ../helm/monitoring/values-prometheus-federation.yaml. The build
+  # cluster runs no kube-state-metrics of its own, so the chart's is installed.
+  - name: prometheus-federation
+    namespace: monitoring
+    chart: prometheus-community/prometheus
+    version: 25.27.0
+    needs:
+      - kube-system/aws-load-balancer-controller
+    values:
+      - ../helm/monitoring/values-prometheus-federation.yaml
+      - kube-state-metrics:
+          enabled: true
+
+  # The AWS Load Balancer Controller, with infra-live's `identity/build-lb-controller` role.
+  - name: aws-load-balancer-controller
+    namespace: kube-system
+    chart: eks/aws-load-balancer-controller
+    version: 3.6.3
+    values:
+      - ../helm/aws-load-balancer-controller/values.yaml.gotmpl
+      - clusterName: {{ printf "%s-build" .Values.aws.namePrefix | quote }}
+        serviceAccount:
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "arn:aws:iam::%s:role/%s-build-lb-controller" .Values.aws.accountId .Values.aws.namePrefix | quote }}
+{{- end }}

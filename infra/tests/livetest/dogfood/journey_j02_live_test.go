@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -42,14 +42,49 @@ var _ = Describe("J-02 Register — sign-up new tenant", Label("live", "dogfood"
 	})
 
 	Context("Scenario B — submission triggers email verification", func() {
-		It("POST registration flow with email triggers Resend queueing", func() {
-			Skip("implementation in T4.1 follow-up — requires Resend courier mock + flow submission helper")
+		It("a submitted registration hands a verification mail to the provider", func() {
+			admin := KratosAdminURL()
+			if admin == "" {
+				Skip(KratosAdminEnv + " is not set: the courier of Kratos cannot be read")
+			}
+			email := SinkAddress("signup", time.Now())
+			password, err := NewPassword()
+			Expect(err).ToNot(HaveOccurred())
+
+			_, answer, err := SignUp(ctx, env, email, password)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(answer.Status).To(Equal(200), "registration: %s", answer.Body)
+
+			// Kratos keeps no readable copy of the code, so the journey ends where
+			// the provider accepted the mail.
+			Eventually(func() (bool, error) {
+				return SentTo(ctx, admin, email, "verification_code_valid")
+			}).WithTimeout(90*time.Second).WithPolling(3*time.Second).Should(BeTrue(),
+				"no verification mail to %s reached the provider", email)
 		})
 	})
 
-	Context("Scenario C — new tenant created in PG with starter plan", func() {
-		It("tenants row + tenant_members row appears post-verification", func() {
-			Skip("implementation in T4.1 follow-up — requires PG probe helper + flow completion")
+	Context("Scenario C — a new account gets a team on the starter plan", func() {
+		It("the first token of a new account names a team whose plan is starter", func() {
+			email := SinkAddress("team", time.Now())
+			password, err := NewPassword()
+			Expect(err).ToNot(HaveOccurred())
+
+			browser, answer, err := SignUp(ctx, env, email, password)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(answer.Status).To(Equal(200), "registration: %s", answer.Body)
+
+			exchanged, err := browser.Do(ctx, "POST", env.CloudBaseURL+"/v1/auth/session/token", "application/json", map[string]any{}, false)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(exchanged.Status).To(Equal(200), "the session of the new account was not exchanged for a token")
+			token, _ := exchanged.JSON()["access_token"].(string)
+			Expect(token).ToNot(BeEmpty())
+
+			status, billing, err := CurlJSON(ctx, env, "GET", env.CloudBaseURL+"/engine/api/v1/billing", token, nil)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(status).To(Equal(200))
+			Expect(billing["plan"]).To(Equal("starter"))
+			Expect(billing["team"]).To(HavePrefix("tn-"))
 		})
 	})
 })

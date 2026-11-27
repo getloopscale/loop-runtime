@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package leader
 
@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 )
 
 // TestController_LeaderElection — roadmap 02 DoD (unit-level variant).
@@ -125,7 +125,7 @@ func TestController_LeaderElection_OnlyOneWinner(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			lease, err := acq.Acquire(context.Background(),
-				"loopzero-controller", "cell-0",
+				"loop-runtime-controller", "cell-0",
 				// Each goroutine has a unique "holder" string so we can
 				// tell them apart, but only one holder gets the row.
 				"pod-"+string(rune('A'+idx)))

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package manifests generates Kubernetes manifests for tenant applications.
 //
@@ -116,6 +116,7 @@ type AutoscalingConfig struct {
 	MinReplicas    int // Minimum replicas (default: 1, 0 = scale-to-zero via KEDA)
 	MaxReplicas    int // Maximum replicas (default: 3)
 	TargetCPU      int // Target CPU utilization percentage (default: 80)
+	TargetMemory   int // Target memory utilization percentage (0: the HPA scales on CPU alone)
 	CooldownPeriod int // Seconds before scale-to-zero (default: 300, only when MinReplicas = 0)
 }
 
@@ -128,15 +129,13 @@ const (
 
 // AppManifestInput contains everything needed to generate manifests for a single app.
 type AppManifestInput struct {
-	Name      string            // e.g., "api", "worker", "dashboard"
-	Type      string            // "server", "worker", "frontend"
-	Rendering string            // "static" or "server" (MEET-009). Static → S3 proxy, no pod.
-	Port      int               // Container port (server/frontend only)
-	ImageRef  string            // Full image reference (container apps only)
-	S3Prefix  string            // S3 path prefix for static assets (static apps only)
-	Secrets   []string          // Secret names from loopzero.yaml (injected via envFrom)
-	Env       map[string]string // Environment variables
-	Replicas  int               // Desired replica count (default: 1 when 0)
+	Name     string            // e.g., "api", "worker", "dashboard"
+	Type     string            // "server", "worker", "frontend"
+	Port     int               // Container port (server/frontend only)
+	ImageRef string            // Full image reference
+	Secrets  []string          // Secret names from loopzero.yaml (injected via envFrom)
+	Env      map[string]string // Environment variables
+	Replicas int               // Desired replica count (default: 1 when 0)
 
 	// Autoscaling configures HPA generation. When non-nil, an HPA is rendered
 	// alongside the Deployment and the Deployment replicas are set to MinReplicas.
@@ -149,21 +148,19 @@ type AppManifestInput struct {
 
 // RenderInput contains everything needed to generate manifests for a full deployment.
 type RenderInput struct {
-	TenantID     string
-	ProjectID    string
-	Environment  string
-	BuildID      string
-	ReleaseID    string
-	BaseDomain   string
-	S3Endpoint   string // DO Spaces endpoint for static proxy (e.g., "sfo3.digitaloceanspaces.com")
-	S3BucketName string // Static assets bucket (e.g., "loopzero-static-assets")
-	Apps         []AppManifestInput
+	TenantID    string
+	ProjectID   string
+	Environment string
+	BuildID     string
+	ReleaseID   string
+	BaseDomain  string
+	Apps        []AppManifestInput
 
 	// Configurable defaults (arch-cp-006). Zero values fall back to built-in defaults.
 	// B14 (MEET-2026-04-23-058): ClusterIssuerName is REQUIRED — no fallback.
-	// Set from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER). Empty = RenderDocs error.
+	// Set from Config.ClusterIssuer (env LOOP_RUNTIME_CLUSTER_ISSUER). Empty = RenderDocs error.
 	ClusterIssuerName    string // Required — no default; RenderDocs returns an error when empty
-	GatewayNamespace     string // Default: "loopzero-system"
+	GatewayNamespace     string // Default: "loop-runtime-system"
 	DefaultCPURequest    string // Default: "100m"
 	DefaultMemoryRequest string // Default: "128Mi"
 	DefaultCPULimit      string // Default: "500m"
@@ -185,7 +182,7 @@ type RenderInput struct {
 
 	// ProgressiveDelivery controls whether to emit Rollout (canary) or
 	// legacy Deployment manifests (D8). Callers fill it from
-	// config.Config.ProgressiveDelivery (env LOOPZERO_PROGRESSIVE_DELIVERY,
+	// config.Config.ProgressiveDelivery (env LOOP_RUNTIME_PROGRESSIVE_DELIVERY,
 	// default on), so an operator can revert to legacy Deployment during an
 	// incident rollback.
 	ProgressiveDelivery bool
@@ -193,7 +190,7 @@ type RenderInput struct {
 	// LeanResources halves the fallback resource defaults (the Default*
 	// fields above still win when set) to fit 100 apps in the current DO dev
 	// runtime cluster while a droplet quota increase is in flight. Callers
-	// fill it from config.Config.LeanResources (env LOOPZERO_LEAN_RESOURCES).
+	// fill it from config.Config.LeanResources (env LOOP_RUNTIME_LEAN_RESOURCES).
 	LeanResources bool
 }
 
@@ -203,7 +200,7 @@ type RenderInput struct {
 // keep using Render() (which delegates here + Concat).
 //
 // B14 (MEET-2026-04-23-058): ClusterIssuerName is required. Callers MUST
-// populate it from Config.ClusterIssuer (env LOOPZERO_CLUSTER_ISSUER).
+// populate it from Config.ClusterIssuer (env LOOP_RUNTIME_CLUSTER_ISSUER).
 func RenderDocs(input RenderInput) ([]K8sDoc, error) {
 	if input.ClusterIssuerName == "" {
 		return nil, fmt.Errorf("manifests.Render: ClusterIssuerName is required (B14 — wire from Config.ClusterIssuer)")

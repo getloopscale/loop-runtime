@@ -2,10 +2,10 @@ apiVersion: v2
 name: network-policies
 description: |
   NetworkPolicies for the runtime cluster — default-deny + per-component
-  ingress/egress rules for loopzero-system, loopzero-auth, loopzero-build, etc.
+  ingress/egress rules for loop-runtime-system, loop-runtime-auth, loop-runtime-build, etc.
   CHG-2026-04-28-LAYERED-BOOTSTRAP / T2.3.
 
-  Source: previously raw manifest at infra/helm/network-policies/loopzero-system.yaml.
+  Source: previously raw manifest at infra/helm/network-policies/loop-runtime-system.yaml.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

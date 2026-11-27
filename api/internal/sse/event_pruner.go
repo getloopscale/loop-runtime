@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package sse implements the Server-Sent-Events streams that deliver
 // build + deploy + rollout progress to CLI/dashboard clients. Events are

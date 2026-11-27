@@ -4,8 +4,8 @@
 // operator chart renders is a MEMBER of the delete-guard allowlist, at a release name
 // the chart does not control (B-047).
 //
-// The coupling is the subject. charts/loopzero-common/templates/_helpers.tpl defaults the
-// ServiceAccount name to loopzero-common.fullname, whose only non-override input is
+// The coupling is the subject. charts/loop-runtime-common/templates/_helpers.tpl defaults the
+// ServiceAccount name to loop-runtime-common.fullname, whose only non-override input is
 // .Release.Name, while two places read that name as a literal string: the delete-guard
 // ValidatingAdmissionPolicy, and OpenBao's boundServiceAccountNames. A derived name and
 // a literal allowlist can agree only by coincidence, and that coincidence already broke
@@ -23,12 +23,12 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 	"github.com/stretchr/testify/require"
 	coreV1 "k8s.io/api/core/v1"
 )
 
-// controlRelease is deliberately outside loopzero-common.fullname's `contains` branch: at a
+// controlRelease is deliberately outside loop-runtime-common.fullname's `contains` branch: at a
 // release name containing the chart name the helper returns the release unchanged, which
 // happens to be the allowlisted string, so a suite built on such a name is green against
 // an unfixed tree.
@@ -37,10 +37,10 @@ const controlRelease = "zzqq"
 // mgmtOverlay is the values file of the admission-policies install that runs the delete
 // guard (core cluster). The exempt identities are no longer a literal in any template:
 // they are `systemActorExemptions.platformServiceAccounts`, expanded by the
-// loopzero-admission.systemActorExemptions helper, so only a render sees them — and
+// loop-runtime-admission.systemActorExemptions helper, so only a render sees them — and
 // rendering with the overlay the guard is actually installed with reads the list that
 // is really enforced.
-const mgmtOverlay = "charts/loopzero-admission-policies/values-mgmt.yaml"
+const mgmtOverlay = "charts/loop-runtime-admission-policies/values-mgmt.yaml"
 
 // expectedAllowlistSize is the number of identities the policy carries today. It is a
 // derivation guard, not an assertion about the policy's contents: if the parse breaks,
@@ -53,7 +53,7 @@ const expectedAllowlistSize = 6
 func allowlistedIdentities(t *testing.T) map[string]bool {
 	t.Helper()
 
-	chartPath, err := chartrender.PublishedChartPath("loopzero-admission-policies")
+	chartPath, err := chartrender.PublishedChartPath("loop-runtime-admission-policies")
 	require.NoError(t, err)
 	opts, err := chartrender.NewOptions(chartPath, mgmtOverlay)
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func allowlistedIdentities(t *testing.T) map[string]bool {
 
 	out := map[string]bool{}
 	for _, m := range regexp.MustCompile(
-		`system:serviceaccount:loopzero-system:([a-z0-9-]+)`).FindAllStringSubmatch(rendered, -1) {
+		`system:serviceaccount:loop-runtime-system:([a-z0-9-]+)`).FindAllStringSubmatch(rendered, -1) {
 		out[m[1]] = true
 	}
 	require.GreaterOrEqual(t, len(out), expectedAllowlistSize,
@@ -71,16 +71,16 @@ func allowlistedIdentities(t *testing.T) map[string]bool {
 	return out
 }
 
-// charts includes loopzero-api as the POSITIVE control. It is pinned already
-// (charts/loopzero-api/values.yaml), so it must pass BEFORE the change as well as after: a
+// charts includes loop-runtime-api as the POSITIVE control. It is pinned already
+// (charts/loop-runtime-api/values.yaml), so it must pass BEFORE the change as well as after: a
 // test whose every row is red at RED cannot distinguish a working assertion from one
 // that always fails.
 var charts = []string{
-	"loopzero-api",
-	"loopzero-app-operator",
-	"loopzero-platform-operator",
-	"loopzero-preview-operator",
-	"loopzero-tenant-operator",
+	"loop-runtime-api",
+	"loop-runtime-app-operator",
+	"loop-runtime-platform-operator",
+	"loop-runtime-preview-operator",
+	"loop-runtime-tenant-operator",
 }
 
 func TestServiceAccountIsAllowlistedAtAnyReleaseName(t *testing.T) {

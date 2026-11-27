@@ -40,42 +40,42 @@ tasks:
   dogfood-gate:open:
     desc: |
       §6.A.4 Phase 6 Dogfood Gate — Phase 1: open the gate window.
-      Creates ConfigMap `loopzero-dogfood-gate-window` with annotation
-      `loopzero.io/dogfood-window=active` in the target namespace. The
-      PrometheusRule recording rule `loopzero_dogfood_gate_window_active`
+      Creates ConfigMap `loop-runtime-dogfood-gate-window` with annotation
+      `runtime.getloopscale.com/dogfood-window=active` in the target namespace. The
+      PrometheusRule recording rule `loop_runtime_dogfood_gate_window_active`
       flips to 1 within 30s.
 
       Variables:
         CONTEXT — kubectl context (default: drill-mgmt)
-        NAMESPACE — loopzero namespace (default: loopzero-system)
+        NAMESPACE — loop-runtime namespace (default: loop-runtime-system)
     vars:
       CONTEXT: '{{.CONTEXT | default "drill-mgmt"}}'
-      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+      NAMESPACE: '{{.NAMESPACE | default "loop-runtime-system"}}'
     cmds:
       - |
         kubectl --context {{.CONTEXT}} -n {{.NAMESPACE}} create configmap \
-          loopzero-dogfood-gate-window \
+          loop-runtime-dogfood-gate-window \
           --from-literal=opened=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
           --dry-run=client -o yaml | \
           kubectl --context {{.CONTEXT}} apply -f -
-      - kubectl --context {{.CONTEXT}} annotate cm loopzero-dogfood-gate-window -n {{.NAMESPACE}} loopzero.io/dogfood-window=active --overwrite
+      - kubectl --context {{.CONTEXT}} annotate cm loop-runtime-dogfood-gate-window -n {{.NAMESPACE}} runtime.getloopscale.com/dogfood-window=active --overwrite
       - echo "Gate window OPENED. Watch panel 1 of dashboard 'Phase 6 Dogfood Gate'."
 
   dogfood-gate:close:
     desc: |
       §6.A.4 Phase 6 Dogfood Gate — Phase 6: close the gate window.
-      Removes the `loopzero.io/dogfood-window` annotation. Use BOTH on
+      Removes the `runtime.getloopscale.com/dogfood-window` annotation. Use BOTH on
       success AND abort — closing the window is mandatory so the
       alert evaluation stops scoping.
 
       Variables:
         CONTEXT — kubectl context (default: drill-mgmt)
-        NAMESPACE — loopzero namespace (default: loopzero-system)
+        NAMESPACE — loop-runtime namespace (default: loop-runtime-system)
     vars:
       CONTEXT: '{{.CONTEXT | default "drill-mgmt"}}'
-      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+      NAMESPACE: '{{.NAMESPACE | default "loop-runtime-system"}}'
     cmds:
-      - kubectl --context {{.CONTEXT}} annotate cm loopzero-dogfood-gate-window -n {{.NAMESPACE}} loopzero.io/dogfood-window- --overwrite || true
+      - kubectl --context {{.CONTEXT}} annotate cm loop-runtime-dogfood-gate-window -n {{.NAMESPACE}} runtime.getloopscale.com/dogfood-window- --overwrite || true
       - echo "Gate window CLOSED. File sign-off audit per runbook Phase 5."
 
   dogfood-gate:traffic:
@@ -118,10 +118,10 @@ tasks:
 
       Variables:
         CONTEXT — kubectl context for mgmt cluster (default: drill-mgmt)
-        LOKI_NS — Loki namespace (default: loopzero-observability)
+        LOKI_NS — Loki namespace (default: loop-runtime-observability)
     vars:
       CONTEXT: '{{.CONTEXT | default "drill-mgmt"}}'
-      LOKI_NS: '{{.LOKI_NS | default "loopzero-observability"}}'
+      LOKI_NS: '{{.LOKI_NS | default "loop-runtime-observability"}}'
     cmds:
       - |
         kubectl --context {{.CONTEXT}} port-forward -n {{.LOKI_NS}} svc/loki 3100:3100 &

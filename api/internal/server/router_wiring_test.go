@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server_test
 
 import (
 	"context"
 	"encoding/json"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
-	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
-	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/tenants/tenantshttp"
 	"io"
 	"log/slog"
 	"net/http"
@@ -25,14 +25,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/source"
-	"github.com/getloopscale/loopzero/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/audit/audithttp"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
 )
 
 // --- Stub implementations for router wiring test ---
@@ -339,6 +339,9 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 
 		// Plan J-09 T2.1: dashboard repo picker source.
 		{"GET", "/api/v1/integrations/github/installations/12345/repositories", true, false},
+		// Installations verified for the tenant, and the claim that verifies them.
+		{"GET", "/api/v1/integrations/github/installations", true, false},
+		{"POST", "/api/v1/integrations/github/installations/claim", true, false},
 
 		// Audit
 		{"GET", "/api/v1/audit", true, false},
@@ -353,12 +356,12 @@ func TestRouter_AllRoutesRegistered(t *testing.T) {
 	// future refactor that drops the chi r.With wrap (e.g., copy-paste
 	// from pin's inline pattern) could silently leave the route unguarded
 	// while the existing 404/405 wiring smoke above still passes.
-	t.Run("evict route has RequireAdminService middleware (closes loopzero-cloud#16 regression)", func(t *testing.T) {
+	t.Run("evict route has RequireAdminService middleware (closes loop-console#16 regression)", func(t *testing.T) {
 		// Build a minimal request with NO X-Service-Auth header. If the
 		// middleware is in the chain, the response MUST be 403 (the
 		// middleware rejects missing-header requests). If the middleware
 		// is NOT in the chain, the request reaches the handler which
-		// returns 404 (LOOPZERO_ADMIN_API gate) OR 400 (input validation).
+		// returns 404 (LOOP_RUNTIME_ADMIN_API gate) OR 400 (input validation).
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/tenants/evict", nil)
 		// IMPORTANT: do NOT set X-Service-Auth — that's the discriminator.
 		rec := httptest.NewRecorder()

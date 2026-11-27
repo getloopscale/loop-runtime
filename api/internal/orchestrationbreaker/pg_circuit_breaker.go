@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package orchestrationbreaker
 
@@ -9,10 +9,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // CircuitBreakerConfig configures the in-memory circuit breaker.
@@ -43,7 +43,7 @@ func runGuarded(ctx context.Context, b *circuitbreaker.Breaker, fn func(context.
 		return struct{}{}, fn(ctx)
 	})
 	if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
-		return loopzeroerrors.ErrPlatformDegraded
+		return loopruntimeerrors.ErrPlatformDegraded
 	}
 	return err
 }
@@ -129,11 +129,11 @@ func (cb *CircuitBreakerSyncClient) GetSyncRevision(ctx context.Context, appName
 func (cb *CircuitBreakerSyncClient) guard(ctx context.Context, fn func(context.Context) error) error {
 	err := runGuarded(ctx, cb.breaker, fn)
 	switch {
-	case errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed):
+	case errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed):
 		metrics.ArgoCDAuthFailures.Inc()
 		cb.logger.Error("argocd auth failure — not counted toward circuit breaker",
 			"suggestion", "check ARGOCD_TOKEN validity and regenerate if expired")
-	case errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress):
+	case errors.Is(err, loopruntimeerrors.ErrSyncOperationInProgress):
 		cb.logger.Warn("argocd sync operation in progress — not counted toward circuit breaker")
 	}
 	return err
@@ -144,8 +144,8 @@ func (cb *CircuitBreakerSyncClient) guard(ctx context.Context, fn func(context.C
 // means ArgoCD is down. Every other error, caller cancellation included,
 // counts toward the threshold.
 func isSyncFailureExcluded(err error) bool {
-	return errors.Is(err, loopzeroerrors.ErrDeployServiceAuthFailed) ||
-		errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
+	return errors.Is(err, loopruntimeerrors.ErrDeployServiceAuthFailed) ||
+		errors.Is(err, loopruntimeerrors.ErrSyncOperationInProgress)
 }
 
 // onStateChange publishes the state to the ArgoCDCircuitState gauge

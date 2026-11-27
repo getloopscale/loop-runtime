@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -10,33 +10,36 @@ import (
 	"os"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments"
-	"github.com/getloopscale/loopzero/api/internal/logs/logsadapter"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
-	"github.com/getloopscale/loopzero/api/internal/projects"
-	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
-	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
-	"github.com/getloopscale/loopzero/api/internal/release/releaseadapter"
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/status/statusadapter"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/projects"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/promotehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/releaseadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statusadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/scaling"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/logs/loki"
-	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/loki"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling/scalinghttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+
+	"github.com/getloopscale/loop-runtime/api/internal/gitops"
 )
 
 // planLimiterCapAdapter bridges *enforcement.PlanLimiter to the
@@ -90,7 +93,7 @@ type projectCapEnforcement struct {
 }
 
 // newProjectCapEnforcement builds the enforcement from the plan limiter and the
-// cross-tenant (loopzero_worker) connection. A nil limiter yields the zero value:
+// cross-tenant (loop_runtime_worker) connection. A nil limiter yields the zero value:
 // no enforcement, which is the dev-without-pool path.
 func newProjectCapEnforcement(limiter *enforcement.PlanLimiter, crossTenant db.DBTX) projectCapEnforcement {
 	if limiter == nil {
@@ -132,10 +135,42 @@ type OrchestratorDeps struct {
 	BuildStatsHandler   *buildshttp.BuildStatsHandler // J-06 D2 — Overview deploys aggregate
 	ProjectDeleter      projects.Deleter
 	ArgoCallbackHandler *argocdhttp.ArgoCallbackHandler
+	// ReleaseStatuses reads the deploy outcome of builds; nil when the release
+	// store cannot answer it.
+	ReleaseStatuses buildshttp.ReleaseStatusLookup
+	// GitOpsPusher is nil in a boot that has no GitOps repository.
+	GitOpsPusher *gitops.GiteaGitOpsPusher
 }
 
 // setupOrchestrator creates the build orchestrator, logs, rollback, status,
 // build list handlers, project deleter, and ArgoCD callback handler.
+// deployEnvironmentSecrets gives the delivery the confirmation that an
+// environment's secrets are in its cluster, from the syncer that writes them.
+// It returns a nil interface when the syncer is not wired, and a deploy then
+// does not wait: its pods may start before a changed secret arrives (#119).
+func deployEnvironmentSecrets(k8sDeps *K8sDeps, logger *slog.Logger) deploycontracts.EnvironmentSecrets {
+	if k8sDeps == nil || k8sDeps.SecretK8sSync == nil {
+		logger.Warn("secret K8s sync is not wired: a deploy does not wait for its secrets to reach the cluster")
+		return nil
+	}
+	confirmation, ok := k8sDeps.SecretK8sSync.(deploycontracts.EnvironmentSecrets)
+	if !ok {
+		logger.Warn("the secret K8s sync cannot confirm delivery: a deploy does not wait for its secrets to reach the cluster")
+		return nil
+	}
+	return confirmation
+}
+
+// promotionAppExposer is how a promote makes its apps reachable in the target
+// environment. Without a management cluster client there is nothing to ensure,
+// and the orchestrator takes nil.
+func promotionAppExposer(k8sDeps *K8sDeps) release.PromotionAppExposer {
+	if k8sDeps == nil || k8sDeps.AppCRMgr == nil {
+		return nil
+	}
+	return &buildsadapter.PromotionAppExposer{Ensurer: k8sDeps.AppCRMgr}
+}
+
 func setupOrchestrator(
 	dbAdapter *db.PgxAdapter,
 	stores *StoreDeps,
@@ -145,9 +180,11 @@ func setupOrchestrator(
 	logger *slog.Logger,
 	projectCap projectCapEnforcement,
 	envEnsurer *environments.EnvironmentEnsurer,
+	deploySecrets deploycontracts.EnvironmentSecrets,
+	promotedApps release.PromotionAppExposer,
 ) *OrchestratorDeps {
 	// The orchestrator builds its OWN project store for the deploy-time
-	// EnsureProject path (`loopzero deploy <new-name>`). It is wired through the same
+	// EnsureProject path (`loopscale deploy <new-name>`). It is wired through the same
 	// wireProjectCap and the same projectCapEnforcement as the API store, so the
 	// deploy path enforces the identical per-Account cap, counted across the
 	// Account's tenants. A zero projectCap (dev without a pool) leaves both the
@@ -191,6 +228,7 @@ func setupOrchestrator(
 		AppAttestationStore: store.NewAppAttestationStoreSqlc(dbAdapter),
 		// J-16 slice 3: deploy.succeeded outbox.
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
+		Secrets:          deploySecrets,
 	})
 
 	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
@@ -206,8 +244,6 @@ func setupOrchestrator(
 		Delivery:          delivery,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
-		KVClient:          workflows.KVClient,
-		BaseDomain:        cfg.BaseDomain,
 		PlanCap:           planCap,
 		ScalingResolver:   scalingResolver, // B40
 		// T1.2 mitigation #3 of MEET-2026-05-12: per-sign cosign audit
@@ -216,13 +252,16 @@ func setupOrchestrator(
 		// Plan deploy-timeline-canonical-5-phases T5.1 — per-deploy
 		// 5-phase aggregator spawn hook. Wired to a release_db-only
 		// minimal source set as the canonical v1 — the other 4 source
-		// adapters (loki_markers + argocd_app + loopzeroapp_informer +
+		// adapters (loki_markers + argocd_app + loopruntimeapp_informer +
 		// status_url_probe) are documented as the v1.1 production
 		// follow-up per the plan's Open Questions section. Nil-safe.
 		DeployTimelineSpawn: makeDeployTimelineSpawn(stores.PgEventStore),
 		// J-16 slice 3 (MEET-2026-07-04-001): deploy.failed outbox emit on the
 		// build-completed FAILED path.
 		DeployEventStore: store.NewDeployEventStoreSqlc(),
+		// A second build of a commit reuses the images an earlier build of it
+		// signed: the commit-SHA tag is immutable, so a rebuild cannot be pushed.
+		SignedImages: store.NewAppAttestationStoreSqlc(dbAdapter),
 	})
 
 	buildOrchestrator := &buildsadapter.BuildOrchestratorAdapter{
@@ -249,18 +288,48 @@ func setupOrchestrator(
 	// Re-delivery goes through the shared container delivery activator, which
 	// waits for sync confirmation (bounded by cfg.ArgocdSyncTimeout) before the
 	// orchestrator flips release state — the LIVE sponsor mandate of 2026-06-18.
-	rollbackOrch := release.NewRollbackOrchestrator(release.RollbackOrchestratorDeps{
+	rollbackLog := store.NewRollbackStoreSqlc(dbAdapter)
+	rollbackDeps := release.RollbackOrchestratorDeps{
+		Log:          rollbackLog,
 		Releases:     stores.ReleaseStore,
 		EnvTargets:   stores.EnvTargetStore,
 		Locker:       stores.Locker,
 		Delivery:     delivery,
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
-	})
+	}
+	// A stored scaling config reaches the running Rollout through the GitOps
+	// repository and an ArgoCD sync, the path a deploy uses (#113). Nil when
+	// this boot has no GitOps pusher or sync client.
+	var releaseScaler *scaling.ReleaseScaler
+	if workflows.GitOpsPusher != nil && workflows.SyncClient != nil {
+		releaseScaler = &scaling.ReleaseScaler{
+			Releases: stores.ReleaseStore,
+			Builds:   stores.BuildStore,
+			Configs:  scalingStore,
+			Domains:  stores.DomainStore,
+			Locker:   stores.Locker,
+			GitOps:   workflows.GitOpsPusher,
+			Sync:     workflows.SyncClient,
+			Render: scaling.RenderSettings{
+				RegistryURL:         cfg.RegistryURL,
+				BaseDomain:          cfg.BaseDomain,
+				ClusterIssuer:       cfg.ClusterIssuer,
+				PrometheusAddress:   cfg.PrometheusAddress,
+				ProgressiveDelivery: cfg.ProgressiveDelivery,
+				LeanResources:       cfg.LeanResources,
+			},
+		}
+		// The rolled back manifests carry the replica count of the older
+		// release; the saved config goes back over them (#116).
+		rollbackDeps.SavedScale = releaseScaler
+	}
+	rollbackOrch := release.NewRollbackOrchestrator(rollbackDeps)
 	rollbackService := &releaseadapter.RollbackServiceAdapter{Orchestrator: rollbackOrch}
 	projectStore := &store.PostgresProjectStore{DB: dbAdapter}
 	rollbackHandler := rollbackhttp.NewRollbackHandler(projectStore, rollbackService, cfg.BaseDomain).
-		WithReleaseLookup(&releaseadapter.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore})
+		WithReleaseLookup(&releaseadapter.RollbackReleaseLookupAdapter{Store: stores.ReleaseStore}).
+		WithHistory(&releaseadapter.RollbackHistoryAdapter{Store: rollbackLog})
 
 	// Promotion orchestrator — coordinates release promotion across environments
 	promotionOrch := release.NewPromotionOrchestrator(release.PromotionOrchestratorDeps{
@@ -271,13 +340,14 @@ func setupOrchestrator(
 		Sync:       workflows.SyncClient,
 		Locker:     stores.Locker,
 		BaseDomain: cfg.BaseDomain,
-		// 2026-06-30 (closes Red Team loopzero-cloud#120 sub-finding 3 — #61
+		// 2026-06-30 (closes Red Team loop-console#120 sub-finding 3 — #61
 		// regression): wire cfg.PublicDomain so the promote response URL is
 		// the canonical user-facing host (prod-dev.getloopscale.app) not the
-		// internal placeholder (loopzero.local). Empty PublicDomain falls back
+		// internal placeholder (loop-runtime.local). Empty PublicDomain falls back
 		// to BaseDomain inside the orchestrator (back-compat for local
-		// Tilt dev where LOOPZERO_PUBLIC_DOMAIN is unset). Mirrors the canonical
+		// Tilt dev where LOOP_RUNTIME_PUBLIC_DOMAIN is unset). Mirrors the canonical
 		// pattern already applied to ReleaseConvergenceLoop + SyncCallbackActivator.
+		Apps:         promotedApps,
 		PublicDomain: cfg.PublicDomain,
 		Logger:       logger,
 	})
@@ -290,18 +360,33 @@ func setupOrchestrator(
 
 	// Status handler — wires project, build, and release stores (H6 status endpoint)
 	statusBuildStore := &statusadapter.StatusBuildStoreAdapter{Store: stores.BuildStore}
-	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore}
+	statusReleaseStore := &statusadapter.StatusReleaseStoreAdapter{Store: stores.ReleaseStore, Rollbacks: rollbackLog}
 	statusHandler := statushttp.NewStatusHandler(projectStore, statusBuildStore, statusReleaseStore, cfg.BaseDomain, cfg.PublicDomain, cfg.GrafanaBaseURL)
+	// Desired replicas and the scaling block follow the saved scale
+	// configuration: a scale changes the running app without a build (#116).
+	statusHandler.SetScaleReader(statusadapter.StatusScaleAdapter{
+		Builds: stores.BuildStore,
+		Stored: scaling.StoredScaling{Configs: scalingStore},
+	})
+	// Ready replicas and the 5xx share come from the series the cells record
+	// per tenant app. Without a Prometheus the fields are omitted.
+	if url := metricsPrometheusURL(cfg); url != "" {
+		statusMetrics, metricsErr := statusadapter.NewPrometheusStatusMetrics(url)
+		if metricsErr != nil {
+			logger.Warn("status: Prometheus client not built; replicas_ready and traffic_5xx_pct_1h are omitted", "error", metricsErr)
+		} else {
+			statusHandler.SetMetricsSource(statusMetrics)
+		}
+	}
 
-	// T1.2 J-18 — Prometheus query_range proxy for the Status page KPI strip +
-	// SignalDetailSheet histograms. When LOOPZERO_PROMETHEUS_ADDRESS is set, wire the
-	// concrete HTTP client (mirrors the loki.NewClient wiring above); otherwise
-	// ship nil so the handler returns 503 prometheus_not_configured honestly
-	// (plan v1.1 ADR D2 — degraded UI is the canonical disabled state). Hermetic
+	// Prometheus query_range proxy for the Status page KPI strip and the
+	// SignalDetailSheet histograms, on the Prometheus the API pod reaches
+	// (metricsPrometheusURL). With none, the handler gets nil and answers 503
+	// prometheus_not_configured: the degraded UI is the disabled state. Hermetic
 	// Go tests inject httptest-backed fakes.
 	var promClient projectmetricshttp.PrometheusQueryClient
-	if cfg.PrometheusAddress != "" {
-		promClient = projectmetricshttp.NewPrometheusClient(cfg.PrometheusAddress, nil)
+	if url := metricsPrometheusURL(cfg); url != "" {
+		promClient = projectmetricshttp.NewPrometheusClient(url, nil)
 	}
 	metricsProxyHandler := projectmetricshttp.NewMetricsProxyHandler(projectStore, promClient)
 
@@ -319,22 +404,23 @@ func setupOrchestrator(
 	// CLAUDE.md Rule 6 requires every (tenant, project, environment) mutation
 	// to acquire withEnvironmentLock. Previously, scaleApply called
 	// scalingStore.Upsert(dbAdapter, ...) directly, bypassing the lock.
-	// Two concurrent `loopzero scale` calls on the same env could TOCTOU-race the
+	// Two concurrent `loopscale scale` calls on the same env could TOCTOU-race the
 	// read-current/write-new sequence inside Upsert. Now wrapped in WithLock
 	// so concurrent attempts serialize via pg_advisory_xact_lock.
 	scaleApply := func(ctx context.Context, in scalinghttp.ScaleConfigInput) (bool, error) {
 		var changed bool
 		err := stores.Locker.WithLock(ctx, in.TenantID, in.ProjectID, in.Environment, func(tx db.DBTX) error {
 			c := &store.ScalingConfig{
-				TenantID:     in.TenantID,
-				ProjectID:    in.ProjectID,
-				Environment:  in.Environment,
-				AppName:      in.AppName,
-				MinReplicas:  in.MinReplicas,
-				MaxReplicas:  in.MaxReplicas,
-				TargetCPUPct: in.TargetCPUPct,
-				ScaleToZero:  in.ScaleToZero,
-				UpdatedBy:    in.UpdatedBy,
+				TenantID:        in.TenantID,
+				ProjectID:       in.ProjectID,
+				Environment:     in.Environment,
+				AppName:         in.AppName,
+				MinReplicas:     in.MinReplicas,
+				MaxReplicas:     in.MaxReplicas,
+				TargetCPUPct:    in.TargetCPUPct,
+				TargetMemoryPct: in.TargetMemoryPct,
+				ScaleToZero:     in.ScaleToZero,
+				UpdatedBy:       in.UpdatedBy,
 			}
 			_, ch, upErr := scalingStore.Upsert(ctx, tx, c)
 			if upErr != nil {
@@ -346,7 +432,17 @@ func setupOrchestrator(
 		return changed, err
 	}
 	scaleHandler := scalinghttp.NewScaleHandler(projectStore, scaleApply, cfg.KEDAEnabled)
-	// Red Team loopzero-cloud#101 absorption (2026-06-27): wire the same
+	// Refuse a scale of an app the environment's active release does not declare:
+	// such a config scales nothing, yet the request answered 200.
+	scaleHandler.SetAppLookup(scaling.ReleaseAppLookup{Releases: stores.ReleaseStore})
+	// Without a deliverer only the next deploy reads a stored config, and the
+	// endpoint answers "saved" (#113).
+	if releaseScaler != nil {
+		scaleHandler.SetDeliverer(releaseScaler)
+	} else {
+		logger.Warn("scale: no GitOps pusher or sync client in this boot; a scale is stored and applied by the next deploy")
+	}
+	// Red Team loop-console#101 absorption (2026-06-27): wire the same
 	// plan-cap checker the build path uses so the scale endpoint can
 	// reject Starter:replicas:999 (and equivalent per-tier overshoots).
 	// Without this, the scale path silently bypassed the cap.
@@ -375,6 +471,12 @@ func setupOrchestrator(
 		&buildsadapter.BuildListStoreAdapter{Store: stores.BuildStore},
 		projectStore,
 	)
+	releaseStatuses, _ := stores.ReleaseStore.(buildshttp.ReleaseStatusLookup)
+	if releaseStatuses != nil {
+		buildListHandler = buildListHandler.WithReleaseStatuses(releaseStatuses)
+	} else {
+		logger.Warn("the release store cannot report deploy outcomes: builds are served without deploy_status")
+	}
 
 	// J-06 D2: the Overview deploys-aggregate needs the concrete sqlc store
 	// (BuildStatsByDay is not on the db.BuildStore interface — ISP). A fresh
@@ -400,15 +502,15 @@ func setupOrchestrator(
 	// ArgoCD sync callback activator — processes webhook from ArgoCD Notifications.
 	// Push-based activation: ArgoCD notifies when sync completes instead of API polling.
 	// release-blockers-2026-06-25-set v1.1 #61: cfg.PublicDomain is the
-	// canonical public wildcard (LOOPZERO_PUBLIC_DOMAIN) — same source
-	// status.go uses — so deploy.completed SSE URL matches `loopzero status`.
+	// canonical public wildcard (LOOP_RUNTIME_PUBLIC_DOMAIN) — same source
+	// status.go uses — so deploy.completed SSE URL matches `loopscale status`.
 	// Empty PublicDomain → fall back to BaseDomain (preserves pre-#61
 	// behavior for envs without a public override).
 	syncCallbackActivator := release.NewSyncCallbackActivator(
 		stores.ReleaseStore, stores.EnvTargetStore, stores.Locker, stores.EventStore, cfg.BaseDomain, cfg.PublicDomain, logger,
 	).WithDeployEventStore(store.NewDeployEventStoreSqlc()) // J-16 slice 3 — deploy.succeeded outbox
 	// The activator identifies the Application's tenant and environment from its
-	// loopzero.io/{tenant,environment} labels — the only decoder, since the
+	// runtime.getloopscale.com/{tenant,environment} labels — the only decoder, since the
 	// "{tenant}-{project}-{env}" name cannot be split positionally. Without the
 	// mgmt dynamic client the callback cannot identify releases and activation
 	// falls to the convergence loop.
@@ -423,6 +525,8 @@ func setupOrchestrator(
 	argoCallbackHandler := argocdhttp.NewArgoCallbackHandler(syncCallbackActivator, logger, cfg.ArgoCallbackSecret)
 
 	return &OrchestratorDeps{
+		GitOpsPusher:        workflows.GitOpsPusher,
+		ReleaseStatuses:     releaseStatuses,
 		Orchestrator:        orch,
 		BuildOrchestrator:   buildOrchestrator,
 		LogsHandler:         logsHandler,
@@ -438,4 +542,16 @@ func setupOrchestrator(
 		ProjectDeleter:      projectDeleter,
 		ArgoCallbackHandler: argoCallbackHandler,
 	}
+}
+
+// metricsPrometheusURL is the Prometheus the Status page's metrics are queried on. The
+// API sends those queries itself, so it prefers the Prometheus the API pod reaches
+// (LOOP_RUNTIME_DATA_PLANE_POLLER_PROMETHEUS_URL) over LOOP_RUNTIME_PROMETHEUS_ADDRESS, which is
+// written into canary analyses that run on the cells and may name a host only they
+// resolve.
+func metricsPrometheusURL(cfg config.Config) string {
+	if cfg.DataPlanePollerPrometheusURL != "" {
+		return cfg.DataPlanePollerPrometheusURL
+	}
+	return cfg.PrometheusAddress
 }

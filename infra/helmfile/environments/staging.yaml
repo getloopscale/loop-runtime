@@ -1,0 +1,287 @@
+# Helmfile environment: staging
+#
+# Production's AWS topology at a smaller scale. getloopscale/infra-live `staging` applies
+# the same Terraform units production uses to the AWS emulator
+# (github.com/paulohenriquevn/aws-emulator): four EKS clusters (core, build, cell-0,
+# cell-1), RDS PostgreSQL 16, ElastiCache Valkey with TLS and an AUTH token, S3 buckets
+# encrypted with KMS, Secrets Manager, and one IRSA role per workload that calls AWS.
+#
+# What a production AWS environment changes here is its names (`aws.namePrefix`,
+# `aws.accountId`, the hostnames) and the outputs of its own infra-live units, which
+# `task staging:platform` reads with `terragrunt output` and exports before every sync:
+#
+#   LOOP_RUNTIME_DB_HOST, LOOP_RUNTIME_DB_PORT, LOOP_RUNTIME_DB_NAME   data/rds address, port, db_name
+#   LOOP_RUNTIME_DB_MASTER_SECRET                              data/rds master_user_secret_arn
+#   LOOP_RUNTIME_CACHE_HOST, LOOP_RUNTIME_CACHE_PORT               data/valkey primary_endpoint_address, port
+#   LOOP_RUNTIME_CACHE_AUTH_SECRET                             data/valkey auth_token_secret_arn
+#   LOOP_RUNTIME_VPC_ID                                        networking/vpc vpc_id
+#   LOOP_RUNTIME_EDGE_KVS_ARN                                  edge/app-routes arn
+#
+# Nothing in the charts knows about the emulator. The emulator's EKS layer does what EKS
+# does for a pod whose ServiceAccount carries `eks.amazonaws.com/role-arn`: it injects the
+# web identity token, AWS_ROLE_ARN, AWS_ENDPOINT_URL and the emulator's CA. The settings a
+# tool cannot take from AWS_ENDPOINT_URL are under `emulator:` below, and only there.
+
+domain: staging.getloopscale.com
+dnsZone: staging.getloopscale.com
+
+vaultEnabled: false
+
+clusterRole: staging
+
+# EKS ships no metrics server. Without one an HPA reads no CPU or memory, and an
+# autoscaled tenant app stays at its minimum.
+installMetricsServer: true
+clusterTopology: multi-cluster
+
+replicas:
+  api: 1
+  controller: 1
+  argocd: 1
+  gitea: 1
+
+resources:
+  default:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# The name production uses. The emulated AWS cannot complete an ACME challenge, so the
+# cells create it as a self-signed issuer (#122).
+certIssuer:
+  kind: ClusterIssuer
+  name: letsencrypt-prod
+  selfSigned: true
+
+# The AWS account and the names infra-live gives every resource of this environment:
+# `<namePrefix>-<cluster>` for the EKS clusters, `<namePrefix>-<cluster>-<workload>` for
+# the IRSA roles, `<namePrefix>-<purpose>-<accountId>` for the buckets.
+aws:
+  accountId: "000000000000"
+  region: us-east-1
+  namePrefix: loop-runtime-staging
+  # security/secrets: the secret holding what the platform generates for itself (database
+  # role passwords, internal call secrets, identity cookie keys), as one JSON object.
+  # `infra/helmfile/scripts/seed-aws-platform-secret.sh` fills in the keys it lacks.
+  platformSecret: loop-runtime/staging/platform
+  # The key pair the build signs tenant images with ({"cosign.key", "cosign.pub",
+  # "cosign.password"}), created once by `infra/helmfile/scripts/seed-aws-cosign-key.sh`
+  # and written into the build cluster as argo/cosign-signing-key.
+  signingKeySecret: loop-runtime/staging/cosign-signing-key
+  # Staging only: the registry login for the private GHCR images (loop-console,
+  # loop-console-dashboard), a JSON object {"username": ..., "password": <token with
+  # read:packages>}. The aws-secrets-manager release writes it into loop-runtime-system as the
+  # kubernetes.io/dockerconfigjson Secret `ghcr-pull`. A production environment pulls
+  # from ECR with the node role and has no such secret.
+  imagePullSecret: loop-runtime/staging/ghcr-pull
+  # The credentials third parties issue, kept on the staging host in
+  # /etc/loop-runtime-staging/<name>.json and seeded into these secrets by `task
+  # staging:platform`: Resend's key ({"api-key"}) for Kratos's courier, and Stripe's
+  # test-mode keys and plan prices ({"api-key", "webhook-secret", "price-starter",
+  # "price-pro", "price-team"}) for loop-console.
+  resendSecret: loop-runtime/staging/resend
+  stripeSecret: loop-runtime/staging/stripe
+  # The staging GitHub App ({"app-id", "private-key", "webhook-secret", "client-id",
+  # "client-secret"}), the one the console installs on a repository and whose push
+  # deliveries deploy it.
+  githubAppSecret: loop-runtime/staging/github-app
+
+# Platform images. The emulator's ECR answers the registry API for reads but refuses
+# blob uploads (POST /v2/<repo>/blobs/uploads/ -> 405, measured 2026-11-22 against
+# v0.3.0), so nothing can be pushed to it and the nodes pull from GHCR, the published
+# fallback, pinned by the develop commit CI built from. A production environment names
+# its ECR registry here (`<account>.dkr.ecr.<region>.amazonaws.com/`).
+platformImages:
+  registry: "ghcr.io/getloopscale/"
+  tags:
+    # The first build that marks a failed push deploy on GitHub and refuses an app
+    # the build cannot make (#91, #92, #93).
+    loop-runtime-api: "develop-3e93755"
+    loop-runtime-tenant-operator: "develop-3e93755"
+    loop-runtime-app-operator: "develop-3e93755"
+    loop-runtime-preview-operator: "develop-3e93755"
+    loop-runtime-platform-operator: "develop-3e93755"
+    loop-runtime-minio: "develop-3e93755"
+    loop-runtime-clone-runner: "develop-3e93755"
+    loop-runtime-syft-scanner: "develop-3e93755"
+    loop-runtime-cosign-signer: "develop-3e93755"
+    # The first build that runs without privileges (#216).
+    loop-edge: "develop-a5438af"
+    # getloopscale/loop-console publishes these two (private on GHCR, pulled with
+    # aws.imagePullSecret). Required while profile.loopRuntimeCloud is on.
+    loop-console: "develop-8d41c35"
+    loop-console-dashboard: "develop-ce6ee75"
+    # getloopscale/looptrace publishes this one, public on GHCR.
+    looptrace: "develop-e98ec23"
+
+# The platform's own PostgreSQL, on CloudNativePG, for the data-plane services: one
+# Cluster on the core cluster and one database per service. RDS stays the control plane's
+# database. One instance: staging has no failover to test, and the nightly rebuild
+# recreates the data.
+platformPostgres:
+  enabled: true
+  image: "ghcr.io/cloudnative-pg/postgresql:19.0-minimal-trixie@sha256:12688a494f25aa0b7e1e3cd1800abe85b427fd1a09c991668a48162e3431a2af"
+  # One instance, in one zone: no standby, so no synchronous commit and no failover. A
+  # production environment sets 3, which spreads them over zones and makes commits wait
+  # for one standby (infra/helm/platform-postgres).
+  instances: 1
+  storage: 5Gi
+  # WAL on a volume of its own, as production has it.
+  walStorage: 2Gi
+  # Each instance, as request and limit. Idle, the instance used 112Mi and 6m
+  # (measured 2026-11-26 with one database).
+  cpu: 500m
+  memory: 512Mi
+  # One entry per service that keeps its data here. A service's entry goes in with its
+  # release (dataPlane.services below): the release writes the Secret the role's password
+  # is read from.
+  # Base backups and the WAL archive go to <namePrefix>-postgres-backups-<accountId>, as
+  # the role <namePrefix>-core-platform-postgres (infra-live storage/s3 and
+  # identity/core-platform-postgres). A week of history: the nightly rebuild empties the
+  # bucket with the rest of the emulator. Production keeps the chart's 30 days.
+  backup:
+    bucketPurpose: postgres-backups
+    retention: 7d
+  databases:
+    - name: looptrace
+      owner: looptrace
+      passwordSecret: looptrace-postgres-role
+
+# The data-plane services staging runs. looptrace only: memory and RAG are not deployed.
+dataPlane:
+  services:
+    - looptrace
+
+registries:
+  docrPrefix: "ghcr.io/getloopscale/"
+
+# Where builds push tenant app images and the cells pull them from. infra-live's
+# registry/ecr creates `<repositoryPrefix>/<tenant>/<project>-<app>` on the build's first
+# push, and identity/build-registry-push is the role allowed to push there. On AWS the host
+# is `<account>.dkr.ecr.<region>.amazonaws.com`. Staging only: the emulator's address as
+# pods reach it; its ECR names repositories `localhost:9597/...`, which from a pod is the pod.
+tenantRegistry:
+  host: "172.29.0.1:9597"
+  repositoryPrefix: loop-runtime-tenants
+
+# No pushUrl: the build cluster's Loki is published through an internal ALB
+# (profile.awsLoadBalancerController), whose DNSName `task staging:platform` reads after
+# the build sync and hands to the Promtail of core and the cells
+# (infra/helm/promtail/values.yaml.gotmpl).
+loki:
+  maxGlobalStreamsPerUser: 50000
+
+policyMode: enforce
+noRuntimeImageMutations: true
+noRuntimeImageMutationsAction: Deny
+noRuntimeImageMutationsFailurePolicy: Fail
+
+# RDS, not an in-cluster PostgreSQL.
+inClusterPostgres: false
+
+# The cluster's default StorageClass (gp2 on EKS).
+underlyingStorageClass: ""
+
+# The name of the cluster's default StorageClass, for the charts that must name a class
+# (the argo-events EventBus passes "" through, which disables provisioning). EKS names
+# it gp2; staging only: the emulator's EKS clusters name it `standard`.
+defaultStorageClass: standard
+
+cell0Id: cell-0
+cell1Id: cell-1
+cells:
+  - id: cell-0
+  - id: cell-1
+dynamicRouter: true
+
+# storage/s3: source bundles are staged in the builds bucket.
+sourceBucket: loop-runtime-staging-builds-000000000000
+# storage/s3: build dependency caches and SBOMs go to buckets the build role can write.
+artifactsBucket: loop-runtime-staging-artifacts-000000000000
+staticAssetsBucket: loop-runtime-staging-static-assets-000000000000
+
+# storage/s3 velero-backups. No s3Url: the AWS SDK resolves the S3 endpoint.
+velero:
+  bucket: loop-runtime-staging-velero-backups-000000000000
+  region: us-east-1
+  s3Url: ""
+
+uiBaseUrl: "https://app.staging.getloopscale.com"
+dashboardOrigin: "https://cloud.staging.getloopscale.com"
+publicAuthUrl: "https://auth.staging.getloopscale.com"
+publicCloudUrl: "https://cloud.staging.getloopscale.com"
+cookieDomain: "staging.getloopscale.com"
+corsAllowedOrigins:
+  - "https://app.staging.getloopscale.com"
+  - "https://cloud.staging.getloopscale.com"
+allowedReturnUrls:
+  - "https://app.staging.getloopscale.com"
+  - "https://app.staging.getloopscale.com/"
+  - "https://cloud.staging.getloopscale.com"
+  - "https://cloud.staging.getloopscale.com/"
+# Login and the console through Traefik: the public-routes release serves the auth host
+# (Hydra and Kratos public APIs) and, with profile.loopRuntimeCloud, the app host; the cloud
+# host is loop-console's own route. taskfiles/staging.yml EDGE_HOSTS lists the same
+# hostnames for the edge.
+publicRoutes:
+  enabled: true
+  # TLS terminates at the edge (Caddy), as for the API route.
+  certIssuer: CFManaged
+
+dashboardRoute:
+  login: /login
+  register: /register
+  recovery: /recovery
+  verification: /verification
+  settings: /settings
+  error: /login
+
+# Staging only: what the emulator needs that AWS_ENDPOINT_URL does not carry. External
+# Secrets 0.14 calls AWS through aws-sdk-go v1, which reads per-service endpoint variables
+# (AWS_SECRETSMANAGER_ENDPOINT, AWS_STS_ENDPOINT) and ignores AWS_ENDPOINT_URL. A
+# production environment has no `emulator:` block.
+emulator:
+  endpoint: "https://172.29.0.1:9597"
+
+# loop-edge, the fleet that serves tenants' custom domains in production, on the core
+# cluster. Staging only: the host's Caddy (infra/staging/edge) holds ports 80 and 443 of
+# the one public address, so the fleet has no load balancer and no ACME authority can
+# reach it; it issues from Caddy's own authority. Every deploy still proves the image, the
+# certificate store the pods share and the proxying to the cells. Production sets
+# `issuer: acme`, an `acmeEmail` and no `serviceType`.
+customDomainEdge:
+  enabled: true
+  issuer: internal
+  serviceType: ClusterIP
+  platformDomains:
+    - getloopscale.com
+
+profile:
+  highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays
+  managedRedis: true            # Gitea uses a managed Redis; the in-cluster gitea-redis release is not installed
+  kedaHttpAddon: false          # install the KEDA HTTP add-on on the cells
+  staticAssets: false           # install the static-assets server on the cells
+  # Turning it on installs loop-console and loop-console-dashboard and routes the app and
+  # cloud hosts. It needs the two image tags above and the Secrets Manager secret
+  # aws.imagePullSecret names.
+  loopRuntimeCloud: true           # install the control plane (loop-console), unless clusterRole is standalone
+  smokeTest: false              # run the post-install smoke-test release
+  localObjectStore: false       # in-cluster MinIO is the object store: deterministic dev root password, Velero waits for it
+  inClusterObjectStore: false   # the in-cluster MinIO release is the object store (false: the buckets are managed S3)
+  awsSecretsManager: true       # secrets come from AWS Secrets Manager through External Secrets with IRSA; also bootstraps the managed database
+  awsLoadBalancerController: true  # install the AWS Load Balancer Controller and publish the edge through an ALB; the build Loki and each remote cluster's federation Prometheus through internal ALBs
+  localRegistry: false          # cells admit images from the local k3d registry (k3d-loop-runtime-registry:5000)
+  secretFetchBroker: true       # install the ESO secret-fetch broker (loop-runtime-broker) on the cells; its chart allows a plaintext bearer only in dev-public. Here the cells reach core's internal secret-fetch ALB through the emulator (LOOP_RUNTIME_CORE_API_ALB_DNS_NAME)
+
+# The secrets plane (secrets.helmfile, on the `secrets` cluster): OpenBao, whose transit
+# engine encrypts tenant secrets (ADR 2026-11-25 tenant secrets on OpenBao). One Raft
+# voter; production runs three. clientCidr is the VPC (infra-live networking/vpc), where
+# the core cluster's loop-runtime-api reaches the NodePort from.
+openbaoEnabled: true
+openbao:
+  replicas: 1
+  nodePort: 30200
+  clientCidr: "10.40.0.0/16"

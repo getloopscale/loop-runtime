@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T0.1 of plan 2026-06-01-p1-security-hardening (Plano A) — regression tests
 // for comp-001 (CRITICAL): SecretHandler.locker MUST be non-nil at runtime
@@ -22,12 +22,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	loopzerovault "github.com/getloopscale/loopzero/pkg/vault"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	loopruntimevault "github.com/getloopscale/loop-runtime/pkg/vault"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // --- Fakes ---
@@ -354,6 +354,26 @@ func TestSecretBulk_PlanLimit_402(t *testing.T) {
 	}
 	if !bytes.Contains(w.Body.Bytes(), []byte(`"plan":"free"`)) {
 		t.Errorf("body should include plan=free: %s", w.Body.String())
+	}
+	// The person reads this in the console and in the CLI: it has to say what
+	// was refused and what to do about it.
+	var refusal struct {
+		Message    string `json:"message"`
+		UpgradeURL string `json:"upgrade_url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &refusal); err != nil {
+		t.Fatalf("decode the 402 body: %v", err)
+	}
+	for _, want := range []string{"secrets per environment", "production", "Upgrade your plan"} {
+		if !strings.Contains(refusal.Message, want) {
+			t.Errorf("message %q does not say %q", refusal.Message, want)
+		}
+	}
+	if strings.Contains(refusal.Message, `"`) {
+		t.Errorf("message %q quotes identifiers like a log line", refusal.Message)
+	}
+	if refusal.UpgradeURL != "/billing" {
+		t.Errorf("upgrade_url = %q, want /billing", refusal.UpgradeURL)
 	}
 	if store.setCalls != 0 {
 		t.Errorf("store.Set MUST NOT be invoked when plan denies; got %d", store.setCalls)
@@ -956,7 +976,7 @@ func TestSecretBulk_HandsTheUserValueToTheStore(t *testing.T) {
 // still written (EC-01 continue-best-effort).
 func TestSecretBulk_StoreTransitDenialReadsAsDenied(t *testing.T) {
 	store := &recordingStore{failWith: map[string]error{
-		"BAD_SECRET": fmt.Errorf("secret_store: encrypt: %w", loopzerovault.ErrTransitKeyCreateFailed),
+		"BAD_SECRET": fmt.Errorf("secret_store: encrypt: %w", loopruntimevault.ErrTransitKeyCreateFailed),
 	}}
 	h := NewSecretHandler(store, &lockCountingFake{})
 
@@ -1022,7 +1042,7 @@ func TestSecretBulk_CrossTenantAndNonexistentResponsesByteIdentical(t *testing.T
 	}
 }
 
-// Red Team loopzero-cloud#92 regression-protector (2026-06-27): the
+// Red Team loop-console#92 regression-protector (2026-06-27): the
 // /api/v1/secrets?project=<name> List endpoint MUST refuse non-existent
 // projects with 404 PROJECT_NOT_FOUND instead of 200 + empty list.
 // Without this, the dashboard's Secrets page rendered functional UI
@@ -1079,7 +1099,7 @@ func TestSecretHandler_List_ExistingProject_AllowsThrough(t *testing.T) {
 // separates them shipped untested in its first version — an independent review
 // measured that no test asserted "denied".
 func TestTransitFailureStatus_SeparatesDenialFromTransient(t *testing.T) {
-	if got := transitFailureStatus(fmt.Errorf("wrapped: %w", loopzerovault.ErrTransitKeyCreateFailed)); got != "denied" {
+	if got := transitFailureStatus(fmt.Errorf("wrapped: %w", loopruntimevault.ErrTransitKeyCreateFailed)); got != "denied" {
 		t.Errorf("policy denial classified as %q; it is PERMANENT and needs an operator, so it must "+
 			"not read like a timeout that clears itself (Rule 8)", got)
 	}
@@ -1088,5 +1108,38 @@ func TestTransitFailureStatus_SeparatesDenialFromTransient(t *testing.T) {
 	}
 	if got := transitFailureStatus(errors.New("boom")); got != "failed" {
 		t.Errorf("an unclassified error became %q; the default must be the recoverable one", got)
+	}
+}
+
+// The gate of the other routes answers with the address the platform is configured
+// with (BILLING_UPGRADE_URL). This one answered "/billing" whatever was configured,
+// which a person at the CLI cannot open.
+func TestSecretBulk_PlanLimitNamesTheConfiguredUpgradeAddress(t *testing.T) {
+	h := NewSecretHandler(&fakeSecretStoreT01{}, &lockCountingFake{})
+	h.SetPlanLimiter(fakePlanLimiterDeny{})
+	h.SetUpgradeURL("https://app.example.com/billing")
+	body, _ := json.Marshal(map[string]any{
+		"project": "proj-x",
+		"secrets": []map[string]any{{"name": "API_KEY", "value": "y", "envs": []string{"production"}}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/secrets/bulk", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.Bulk(w, req)
+
+	var refusal struct {
+		Message    string `json:"message"`
+		UpgradeURL string `json:"upgrade_url"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &refusal); err != nil {
+		t.Fatalf("decode the 402 body: %v", err)
+	}
+	if refusal.UpgradeURL != "https://app.example.com/billing" {
+		t.Errorf("upgrade_url = %q, want the configured address", refusal.UpgradeURL)
+	}
+	if !strings.Contains(refusal.Message, "Upgrade your plan at https://app.example.com/billing to continue.") {
+		t.Errorf("message %q does not name the upgrade address", refusal.Message)
 	}
 }

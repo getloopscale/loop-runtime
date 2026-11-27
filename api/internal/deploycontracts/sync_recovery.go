@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -22,7 +22,7 @@ import (
 	"log/slog"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // SyncRecoveryClient is the part of the sync client the recovery policy drives. Both methods
@@ -59,7 +59,7 @@ func (p SyncRecoveryPolicy) ShouldTerminate(consecutiveStuck int) bool {
 // IsSyncStuck reports whether err is ArgoCD refusing a sync because an operation is
 // already running on the application.
 func IsSyncStuck(err error) bool {
-	return errors.Is(err, loopzeroerrors.ErrSyncOperationInProgress)
+	return errors.Is(err, loopruntimeerrors.ErrSyncOperationInProgress)
 }
 
 // TerminateStuckSync kills the in-flight operation on appName, logs the outcome at the

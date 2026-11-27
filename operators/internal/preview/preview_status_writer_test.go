@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // The single-status-writer contract, asserted for the Preview controller.
 //
@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
 )
 
 // controllerSource reads the WHOLE package with comments removed.
@@ -176,16 +176,16 @@ func TestPreviewController_HasNoRefetchRestoreDance(t *testing.T) {
 // carries no resourceVersion, because a snapshot taken after the finalizer write
 // shares the object's version and the diff is therefore empty of it.
 func TestPreviewController_ReconcileEmitsAStatusPatchWithoutResourceVersion(t *testing.T) {
-	bodies := capturedStatusPatches(t, &loopzerov1.PreviewEnvironment{
+	bodies := capturedStatusPatches(t, &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:       "pr-42",
-			Namespace:  "loopzero-system",
+			Namespace:  "loop-runtime-system",
 			Generation: 1,
 			// No finalizer: Reconcile must add one, which is the metadata write
 			// that bumps resourceVersion and is exactly what the snapshot must
 			// come after.
 		},
-		Spec: loopzerov1.PreviewEnvironmentSpec{TenantID: "tn-x", ProjectID: "api", PRNumber: 42},
+		Spec: loopruntimev1.PreviewEnvironmentSpec{TenantID: "tn-x", ProjectID: "api", PRNumber: 42},
 	})
 
 	// The controller is the single status writer: every write folds the
@@ -213,12 +213,12 @@ func TestPreviewController_ReconcileEmitsAStatusPatchWithoutResourceVersion(t *t
 // Without this the assertion above could be green for a reason having nothing to
 // do with placement — which is precisely how the synthetic version fooled me.
 func TestPreviewStatusPatch_ASnapshotTakenBeforeTheFinalizerLeaksTheVersion(t *testing.T) {
-	stale := &loopzerov1.PreviewEnvironment{
-		ObjectMeta: metav1.ObjectMeta{Name: "pr-42", Namespace: "loopzero-system", ResourceVersion: "12345"},
+	stale := &loopruntimev1.PreviewEnvironment{
+		ObjectMeta: metav1.ObjectMeta{Name: "pr-42", Namespace: "loop-runtime-system", ResourceVersion: "12345"},
 	}
 	obj := stale.DeepCopy()
 	obj.ResourceVersion = "12346" // the finalizer Update bumped it
-	obj.Status.Phase = loopzerov1.PreviewPhaseActive
+	obj.Status.Phase = loopruntimev1.PreviewPhaseActive
 
 	data, err := client.MergeFrom(stale).Data(obj)
 	if err != nil {
@@ -236,11 +236,11 @@ func TestPreviewStatusPatch_ASnapshotTakenBeforeTheFinalizerLeaksTheVersion(t *t
 // The interceptor is the honest observer: it sits where the controller's write
 // actually goes, so it cannot be satisfied by a helper, a rename, or a synthetic
 // object built to match.
-func capturedStatusPatches(t *testing.T, seed *loopzerov1.PreviewEnvironment) []string {
+func capturedStatusPatches(t *testing.T, seed *loopruntimev1.PreviewEnvironment) []string {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -251,7 +251,7 @@ func capturedStatusPatches(t *testing.T, seed *loopzerov1.PreviewEnvironment) []
 	base := fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjects(seed).
-		WithStatusSubresource(&loopzerov1.PreviewEnvironment{}).
+		WithStatusSubresource(&loopruntimev1.PreviewEnvironment{}).
 		Build()
 
 	c := interceptor.NewClient(base, interceptor.Funcs{

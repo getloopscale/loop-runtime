@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts
 
@@ -15,7 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/getloopscale/loopzero/infra/tests/helm/chartrender"
+	"github.com/getloopscale/loop-runtime/infra/tests/helm/chartrender"
 )
 
 // helmfileRun is the one place in this package that executes helmfile without a
@@ -34,9 +34,21 @@ import (
 //     network rather than on the content.
 //
 // extraEnv adds (never replaces) process environment: the helmfiles read
-// `requiredEnv` for LOOPZERO_DB_PASSWORD and LOOPZERO_CELL_CONTEXT, and a test must say
+// `requiredEnv` for LOOP_RUNTIME_DB_PASSWORD and LOOP_RUNTIME_CELL_CONTEXT, and a test must say
 // which it needed instead of inheriting whatever the shell exported.
 func helmfileRun(t *testing.T, extraEnv []string, args ...string) string {
+	t.Helper()
+	out, stderr, err := helmfileRunResult(t, extraEnv, args...)
+	if err != nil {
+		_, howToRead := ClassifyRenderFailure(stderr)
+		t.Fatalf("helmfile %s failed: %v\n%s\n\n%s", strings.Join(args, " "), err, truncate(stderr, 1500), howToRead)
+	}
+	return out
+}
+
+// helmfileRunResult runs helmfile like helmfileRun and hands back the failure instead
+// of failing the test, for a test whose point is that the render refuses its input.
+func helmfileRunResult(t *testing.T, extraEnv []string, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	full := append([]string{}, args[:len(args)-1]...)
 	full = append(full, "--skip-deps", args[len(args)-1])
@@ -45,19 +57,15 @@ func helmfileRun(t *testing.T, extraEnv []string, args ...string) string {
 	cmd.Env = append(os.Environ(), extraEnv...)
 	// Manifests only: helmfile narrates ("Templating release=...") on stderr, and
 	// that narration is not a YAML document.
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	var errBuf bytes.Buffer
+	cmd.Stderr = &errBuf
 	out, err := cmd.Output()
-	if err != nil {
-		_, howToRead := ClassifyRenderFailure(stderr.String())
-		t.Fatalf("helmfile %s failed: %v\n%s\n\n%s", strings.Join(full, " "), err, truncate(stderr.String(), 1500), howToRead)
-	}
-	return string(out)
+	return string(out), errBuf.String(), err
 }
 
 // helmfileTemplate renders one release of a LOCAL chart. localChart is the
 // chart's directory relative to the repository root: its dependencies (the
-// file:// loopzero-common library, for the published charts) are resolved first
+// file:// loop-runtime-common library, for the published charts) are resolved first
 // through chartrender, because `--skip-deps` also skips `helm dependency build`
 // and a fresh clone has no charts/ directory to render from.
 func helmfileTemplate(t *testing.T, helmfile, env, release, localChart string, extraEnv ...string) string {

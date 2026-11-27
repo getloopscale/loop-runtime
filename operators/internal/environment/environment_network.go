@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environment
 
@@ -8,9 +8,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenantpolicy"
 )
 
 // reconcileNetworkPolicies ensures deny-all + allow-ingress + allow-egress policies exist.
@@ -29,7 +29,7 @@ func (r *EnvironmentReconciler) reconcileNetworkPolicies(ctx context.Context, ru
 // CHG-2026-04-29-DOGFOOD-FB / drift-baseline.md port #4: defaults to
 // constants.NamespaceIngress ("traefik") so allow-ingress-traefik
 // NetworkPolicies admit traffic from the actual Traefik namespace, not
-// loopzero-system. Previously this returned NamespacePlatformSystem which
+// loop-runtime-system. Previously this returned NamespacePlatformSystem which
 // silently produced HTTP 502 in every deploy because Traefik couldn't
 // reach tenant pods. Override via EnvironmentReconciler.IngressNamespace
 // for operators that install Traefik elsewhere.

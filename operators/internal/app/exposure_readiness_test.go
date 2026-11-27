@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package app
 
@@ -9,19 +9,19 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
-func routeWithIssuedCertificate() *loopzerov1.ExposedRoute {
-	route := &loopzerov1.ExposedRoute{}
+func routeWithIssuedCertificate() *loopruntimev1.ExposedRoute {
+	route := &loopruntimev1.ExposedRoute{}
 	route.Generation = 1
 	conditions.SetCondition(&route.Status.Conditions, conditions.TypeCertificateIssued,
 		metav1.ConditionTrue, conditions.ReasonReady, "certificate is ready", 1)
 	return route
 }
 
-func conditionStatus(route *loopzerov1.ExposedRoute, conditionType string) metav1.ConditionStatus {
+func conditionStatus(route *loopruntimev1.ExposedRoute, conditionType string) metav1.ConditionStatus {
 	for _, c := range route.Status.Conditions {
 		if c.Type == conditionType {
 			return c.Status

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -74,11 +75,22 @@ type DeliveryActivator interface {
 	Activate(ctx context.Context, build ActivationBuild, result BuildCallbackRequest) error
 
 	// Rollback re-delivers a previous release's manifests (read back from the
-	// GitOps history), triggers the sync and returns only once the sync is
-	// confirmed, so the caller may flip release state afterwards.
+	// GitOps history) and triggers the sync. It returns once the sync is
+	// triggered, not once it is confirmed: a release rolls its pods through
+	// canary steps, which outlives the request that asked for the rollback.
 	// State machine transitions (ACTIVE→ROLLED_BACK, SUPERSEDED→ACTIVE) are handled
 	// by the RollbackOrchestrator, NOT by this method.
 	Rollback(ctx context.Context, req RollbackDeliveryRequest) error
+
+	// AwaitRollback waits until the sync of a rollback started with Rollback
+	// is confirmed, so the caller may flip release state afterwards. The
+	// caller gives it a context that does not end with an HTTP request.
+	AwaitRollback(ctx context.Context, req RollbackDeliveryRequest) error
+
+	// RollbackConverged reports, without waiting, whether the environment runs
+	// the manifests of the rollback: synced and healthy. It settles a rollback
+	// whose AwaitRollback failed.
+	RollbackConverged(ctx context.Context, req RollbackDeliveryRequest) (bool, error)
 }
 
 // RollbackTarget is the release being reactivated, reduced to what delivery
@@ -94,6 +106,12 @@ type RollbackTarget struct {
 	// GitCommit is the GitOps commit the manifests are read back from. Empty
 	// means the release never reached the mirror and cannot be rolled back to.
 	GitCommit string
+	// Apps names the workloads of the release's apps, as ArgoCD lists them
+	// (`<project>-<app>`). The sync of a rollback is confirmed by the health
+	// of these, not of the whole Application: another resource that never
+	// becomes ready must not fail a rollback the cluster completed (#121).
+	// Empty falls back to the Application's own health.
+	Apps []string
 }
 
 // RollbackDeliveryRequest contains the delivery-specific inputs for rollback.
@@ -106,4 +124,39 @@ type RollbackDeliveryRequest struct {
 	Environment   string
 	TargetRelease *RollbackTarget // the release to reactivate
 	CorrelationID string
+}
+
+// EnvironmentSecrets confirms that the secrets of an environment are in its
+// cluster.
+//
+// A pod reads its secrets once, when it starts, and the cluster receives them
+// from the secret store on a refresh interval. A deploy that follows a secret
+// change by less than that interval would start its pods with the old values
+// (#119), so delivery asks for this confirmation before it delivers a Rollout.
+type EnvironmentSecrets interface {
+	// AwaitDelivered returns nil once every secret stored for the environment
+	// when the call began is in the cluster, and immediately when the
+	// environment has none. It returns a *SecretsNotDeliveredError when the
+	// cluster did not receive them in time.
+	AwaitDelivered(ctx context.Context, tenantID, projectID, environment string) error
+}
+
+// SecretsNotDeliveredError reports that the secret store did not deliver an
+// environment's secrets to its cluster in time. The deploy that waited for
+// them stops before any pod is replaced.
+type SecretsNotDeliveredError struct {
+	// Store is the secret store the cluster reads from.
+	Store string
+	// Namespace and ExternalSecret name the object that did not sync.
+	Namespace      string
+	ExternalSecret string
+	// Reason is what the object last reported.
+	Reason string
+	// Waited is how long the deploy waited.
+	Waited time.Duration
+}
+
+func (e *SecretsNotDeliveredError) Error() string {
+	return fmt.Sprintf("secret store %q did not deliver the secrets of ExternalSecret %s/%s within %s: %s. No pod was replaced; deploy again",
+		e.Store, e.Namespace, e.ExternalSecret, e.Waited.Round(time.Second), e.Reason)
 }

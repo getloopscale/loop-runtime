@@ -1,7 +1,7 @@
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
-  name: loopzero-build
+  name: loop-runtime-build
 # Pin to match production DOKS 1.32.13 (Rule 10: local equals production).
 # end-to-end-deploy-validation-plan T0.2 — sized for ~2GB total memory
 # (1 server + 1 agent) so 3-cluster local topology fits in 16GB.
@@ -19,7 +19,7 @@ ports:
       - loadbalancer
   # B59 (end-to-end-deploy-validation-plan T1.1) — host ports 30093/30094
   # already mapped by mgmt cluster. Use 30193/30194 externally; internal
-  # NodePort remains 30093/30094 inside loopzero-build cluster.
+  # NodePort remains 30093/30094 inside loop-runtime-build cluster.
   # Argo Workflows server UI (cross-cluster reachability via host.k3d.internal)
   - port: 30193:30093
     nodeFilters:
@@ -28,29 +28,29 @@ ports:
   - port: 30194:30094
     nodeFilters:
       - loadbalancer
-  # loopzero-workspace#23 item 2 — the NodePort of the Loki cross-cluster bridge (Service
+  # loop-runtime-workspace#23 item 2 — the NodePort of the Loki cross-cluster bridge (Service
   # loki-cross-cluster, rendered by infra/helmfile/build.helmfile.yaml.gotmpl on
   # crossCluster.lokiNodePort) must be reachable from outside the cluster at a STABLE
   # address. Without this publication the only path was the IP of the
-  # `k3d-loopzero-build-server-0` container — assigned by DHCP, reshuffled on every
+  # `k3d-loop-runtime-build-server-0` container — assigned by DHCP, reshuffled on every
   # `docker restart` / `k3d cluster create`. When it reshuffled, a recorded LOKI_URL
-  # pointed at another cluster IN SILENCE, and the symptom (an empty `loopzero logs`) read
+  # pointed at another cluster IN SILENCE, and the symptom (an empty `loopscale logs`) read
   # as "Loki is down", never as "wrong cluster".
   #
   # Published, it is reachable through the network gateway (host.k3d.internal) plus
-  # this port, the stable pair the loopzero-api overlays render as LOKI_URL. Same port
+  # this port, the stable pair the loop-runtime-api overlays render as LOKI_URL. Same port
   # inside and out (30120:30120): measured across the five `infra/k3d/*.yaml`, the
   # host ports in use are 3000 3002 8090 8091 8200 8443 8444 9001 9090 13001 30081
   # 30082 30090 30091 30093 30094 30095 30191 30193 30194.
   - port: 30120:30120
     nodeFilters:
       - loadbalancer
-network: k3d-loopzero
+network: k3d-loop-runtime
 registries:
   use:
-    - k3d-loopzero-registry:5000
+    - k3d-loop-runtime-registry:5000
   # B6 fix (cleanroom iter 6, 2026-05-05): mirror docker.io via pull-through
-  # cache in k3d-loopzero-registry. See core-cluster.yaml for full rationale.
+  # cache in k3d-loop-runtime-registry. See core-cluster.yaml for full rationale.
   config: |
     mirrors:
       "docker.io":
@@ -66,7 +66,7 @@ registries:
 # `platformImages`; everywhere else the directory is empty and nothing changes.
 # ${HOME} is expanded by k3d (it expands environment variables in this file).
 volumes:
-  - volume: ${HOME}/.loopzero/credentialprovider:/var/lib/rancher/credentialprovider
+  - volume: ${HOME}/.loop-runtime/credentialprovider:/var/lib/rancher/credentialprovider
     nodeFilters:
       - server:*
       - agent:*

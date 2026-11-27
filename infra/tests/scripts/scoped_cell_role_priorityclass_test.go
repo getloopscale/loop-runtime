@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -20,7 +20,7 @@ type scopedRule struct {
 }
 
 // scopedCellRoleRules parses the ClusterRole scoped-kubeconfig.sh applies on a cell for
-// the loopzero-ctrl-runtime identity the operators use through ClusterCredential.
+// the loop-runtime-ctrl-runtime identity the operators use through ClusterCredential.
 func scopedCellRoleRules(t *testing.T) []scopedRule {
 	t.Helper()
 	raw, err := os.ReadFile("../../helmfile/scripts/lib/scoped-kubeconfig.sh")

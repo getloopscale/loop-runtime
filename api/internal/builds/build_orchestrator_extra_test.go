@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/release"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // --- Test doubles for BuildOrchestrator ---
@@ -67,7 +67,7 @@ func (f *fakeBuildStoreOrch) Create(_ context.Context, _ db.DBTX, b *db.Build) e
 func (f *fakeBuildStoreOrch) GetByID(_ context.Context, id string) (*db.Build, error) {
 	b, ok := f.builds[id]
 	if !ok {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	return b, nil
 }
@@ -96,7 +96,7 @@ func (f *fakeBuildStoreOrch) UpdateStatus(_ context.Context, _ db.DBTX, id, even
 		switch statemachine.Event(event) {
 		case statemachine.BuildStarted:
 			b.Status = string(statemachine.BuildRunning)
-		case statemachine.BuildFailedEvent:
+		case statemachine.BuildFailedEvent, statemachine.BuildReleaseFailedEvent:
 			b.Status = string(statemachine.BuildFailed)
 		case statemachine.BuildSucceededEvent:
 			b.Status = string(statemachine.BuildReleasing)
@@ -215,7 +215,7 @@ func TestBuildOrchestrator_SubmitBuild_DeployInProgress(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for concurrent build")
 	}
-	if err != loopzeroerrors.ErrDeployInProgress {
+	if err != loopruntimeerrors.ErrDeployInProgress {
 		t.Errorf("expected ErrDeployInProgress, got: %v", err)
 	}
 }
@@ -263,7 +263,7 @@ func TestBuildOrchestrator_CancelBuild_AlreadyTerminal(t *testing.T) {
 	})
 
 	err := orch.CancelBuild(context.Background(), "bld-done")
-	if err != loopzeroerrors.ErrBuildAlreadyCompleted {
+	if err != loopruntimeerrors.ErrBuildAlreadyCompleted {
 		t.Errorf("expected ErrBuildAlreadyCompleted, got: %v", err)
 	}
 }
@@ -379,16 +379,20 @@ func TestBuildOrchestrator_RetryReleaseActivation_WrongState(t *testing.T) {
 	}
 }
 
-func TestNewBuildOrchestrator_DefaultsRegistryURL(t *testing.T) {
+// The orchestrator keeps the configured registry as given: the local k3d default belongs to
+// config.Load in development, and nowhere else may a build silently push to it.
+func TestNewBuildOrchestrator_KeepsTheConfiguredRegistryURL(t *testing.T) {
+	const registry = "123456789012.dkr.ecr.us-east-1.amazonaws.com/loop-runtime-tenants"
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
 		BuildStore:   newFakeBuildStoreOrch(),
 		ReleaseStore: newFakeReleaseStoreContainer(),
 		Locker:       &fakeLockerContainer{},
 		Workflow:     &fakeWorkflowSubmitterOrch{},
 		EventStore:   &fakeEventStoreContainer{},
+		RegistryURL:  registry,
 	})
-	if orch.registryURL != "k3d-loopzero-registry:5000" {
-		t.Errorf("expected default registry URL, got: %s", orch.registryURL)
+	if orch.registryURL != registry {
+		t.Errorf("registryURL = %q, want %q", orch.registryURL, registry)
 	}
 }
 
@@ -461,108 +465,6 @@ func TestBuildOrchestrator_EmitActivationFailure(t *testing.T) {
 	if !found {
 		t.Error("expected deploy.sync_failed event")
 	}
-}
-
-func TestBuildOrchestrator_WriteStaticRoutingEntries_NilKVClient(t *testing.T) {
-	bs := newFakeBuildStoreOrch()
-
-	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
-		BuildStore: bs,
-		Locker:     &fakeLockerContainer{},
-		Workflow:   &fakeWorkflowSubmitterOrch{},
-		EventStore: &fakeEventStoreContainer{},
-		KVClient:   nil, // nil = disabled
-	})
-
-	// Should not panic when KVClient is nil
-	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := deploycontracts.BuildCallbackRequest{
-		Apps: []deploycontracts.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
-	}
-	orch.writeStaticRoutingEntries(context.Background(), build, result)
-}
-
-type fakeKVClient struct {
-	entries map[string]interface{}
-	putErr  error
-}
-
-func (f *fakeKVClient) Put(_ context.Context, key string, val interface{}) error {
-	if f.putErr != nil {
-		return f.putErr
-	}
-	if f.entries == nil {
-		f.entries = make(map[string]interface{})
-	}
-	f.entries[key] = val
-	return nil
-}
-
-func TestBuildOrchestrator_WriteStaticRoutingEntries_WritesKV(t *testing.T) {
-	bs := newFakeBuildStoreOrch()
-	kv := &fakeKVClient{}
-
-	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
-		BuildStore: bs,
-		Locker:     &fakeLockerContainer{},
-		Workflow:   &fakeWorkflowSubmitterOrch{},
-		EventStore: &fakeEventStoreContainer{},
-		KVClient:   kv,
-		BaseDomain: "dev.getloopscale.com",
-	})
-
-	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := deploycontracts.BuildCallbackRequest{
-		Apps: []deploycontracts.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
-	}
-	orch.writeStaticRoutingEntries(context.Background(), build, result)
-
-	if len(kv.entries) != 1 {
-		t.Errorf("expected 1 KV entry, got %d", len(kv.entries))
-	}
-}
-
-func TestBuildOrchestrator_WriteStaticRoutingEntries_SkipsNonStatic(t *testing.T) {
-	bs := newFakeBuildStoreOrch()
-	kv := &fakeKVClient{}
-
-	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
-		BuildStore: bs,
-		Locker:     &fakeLockerContainer{},
-		Workflow:   &fakeWorkflowSubmitterOrch{},
-		EventStore: &fakeEventStoreContainer{},
-		KVClient:   kv,
-	})
-
-	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := deploycontracts.BuildCallbackRequest{
-		Apps: []deploycontracts.AppRelease{{Name: "api", Type: "server", Rendering: ""}},
-	}
-	orch.writeStaticRoutingEntries(context.Background(), build, result)
-
-	if len(kv.entries) != 0 {
-		t.Errorf("expected 0 KV entries for non-static, got %d", len(kv.entries))
-	}
-}
-
-func TestBuildOrchestrator_WriteStaticRoutingEntries_KVError_NonFatal(t *testing.T) {
-	bs := newFakeBuildStoreOrch()
-	kv := &fakeKVClient{putErr: fmt.Errorf("KV unreachable")}
-
-	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
-		BuildStore: bs,
-		Locker:     &fakeLockerContainer{},
-		Workflow:   &fakeWorkflowSubmitterOrch{},
-		EventStore: &fakeEventStoreContainer{},
-		KVClient:   kv,
-	})
-
-	build := &db.Build{ID: "bld-1", TenantID: "tn-1", ProjectID: "proj-1", Environment: "production"}
-	result := deploycontracts.BuildCallbackRequest{
-		Apps: []deploycontracts.AppRelease{{Name: "web", Type: "frontend", Rendering: "static"}},
-	}
-	// Should not panic
-	orch.writeStaticRoutingEntries(context.Background(), build, result)
 }
 
 func TestBuildOrchestrator_OnBuildCompleted_SucceededBuild(t *testing.T) {
@@ -722,16 +624,16 @@ func TestBuildOrchestrator_SubmitBuild_WithProjectEnsurer(t *testing.T) {
 }
 
 // M5 review F2 (orchestrator half): when the deploy-path project-ensure returns
-// the per-Account cap rejection (*LoopZeroError PROJECTS_EXCEED_PLAN), SubmitBuild
+// the per-Account cap rejection (*LoopRuntimeError PROJECTS_EXCEED_PLAN), SubmitBuild
 // MUST propagate that typed error UNCHANGED — wrapSubmitBuildError's EC-3 guard
-// passes *LoopZeroError through instead of collapsing it into a generic
+// passes *LoopRuntimeError through instead of collapsing it into a generic
 // SubmitBuildError. This is what lets the route ladder map it to HTTP 422 rather
 // than a silent build-failure/500 (DoD #1: "typed rejection surfaced to the
-// deploy flow, not a silent 500"). A refactor that stopped passing *LoopZeroError
+// deploy flow, not a silent 500"). A refactor that stopped passing *LoopRuntimeError
 // through would fail here.
 func TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError(t *testing.T) {
 	bs := newFakeBuildStoreOrch()
-	capErr := loopzeroerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap")
+	capErr := loopruntimeerrors.NewProjectsExceedPlan("starter", 1, 1, "acct-cap")
 	pe := &fakeProjectEnsurer{ensureErr: capErr}
 
 	orch := NewBuildOrchestrator(BuildOrchestratorDeps{
@@ -752,7 +654,7 @@ func TestBuildOrchestrator_SubmitBuild_ProjectCapRejection_PropagatesTypedError(
 	if err == nil {
 		t.Fatal("expected a cap-rejection error, got nil")
 	}
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("SubmitBuild must propagate the typed PROJECTS_EXCEED_PLAN error unchanged; got %v", err)
 	}

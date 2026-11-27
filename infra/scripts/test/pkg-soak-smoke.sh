@@ -101,7 +101,7 @@ echo ""
 echo "=== Criterion (b) — Circuit breaker observability (T1.4 + T2.1) ==="
 # Look for CB-related log lines or metrics endpoints
 if curl -sf "$API_URL/metrics" -o /tmp/api-metrics.txt 2>/dev/null; then
-  if grep -qE "circuitbreaker|loopzero_jwks_circuit|breaker_state" /tmp/api-metrics.txt; then
+  if grep -qE "circuitbreaker|loop_runtime_jwks_circuit|breaker_state" /tmp/api-metrics.txt; then
     result PASS "circuit breaker metrics exposed via /metrics"
   else
     result SKIP "no CB-prefixed metrics on /metrics — observability likely via logs only (acceptable)"

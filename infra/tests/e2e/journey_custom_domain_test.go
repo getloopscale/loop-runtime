@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 07: Custom Domain Registration & Lifecycle
 //
@@ -19,7 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
 )
 
 var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() {
@@ -48,7 +48,7 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 
 	AfterAll(func() {
 		// Cleanup: remove domain and project.
-		runLoopZeroInDir(workDir, "domain", "remove", testDomain, "--yes", "--json")
+		runLoopRuntimeInDir(workDir, "domain", "remove", testDomain, "--yes", "--json")
 		ensureProjectDeleted(project)
 		if workDir != "" {
 			os.RemoveAll(workDir)
@@ -60,11 +60,11 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 	})
 
 	It("registers a custom domain", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "domain", "add", testDomain,
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "domain", "add", testDomain,
 			"--project", project, "--app", app, "--env", env, "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero domain add should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale domain add should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		// Verify response has expected fields.
 		result, err := parseJSON(stdout)
@@ -78,20 +78,20 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 	})
 
 	It("domain appears in list", func() {
-		stdout, _, exitCode := runLoopZeroInDir(workDir, "domain", "list", "--json")
+		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "domain", "list", "--json")
 		Expect(exitCode).To(Equal(0))
 		Expect(stdout).To(ContainSubstring(testDomain),
 			"domain list should contain the registered domain")
 	})
 
 	It("domain status returns details", func() {
-		stdout, _, exitCode := runLoopZeroInDir(workDir, "domain", "status", testDomain, "--json")
+		stdout, _, exitCode := runLoopRuntimeInDir(workDir, "domain", "status", testDomain, "--json")
 		Expect(exitCode).To(Equal(0))
 		Expect(stdout).To(ContainSubstring(testDomain))
 	})
 
 	It("rejects reserved domain", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "domain", "add", "api.example.test",
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "domain", "add", "api.example.test",
 			"--project", project, "--app", app, "--env", env, "--json")
 
 		combined := stdout + stderr
@@ -106,10 +106,10 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 	})
 
 	It("removes domain", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "domain", "remove", testDomain, "--yes", "--json")
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "domain", "remove", testDomain, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero domain remove should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale domain remove should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		assertNoForbiddenTermsInAll(map[string]string{
 			"domain remove stdout": stdout,
@@ -119,7 +119,7 @@ var _ = Describe("Journey 07: Custom Domain", Ordered, Label("journey"), func() 
 
 	It("domain gone from list after removal", func() {
 		Eventually(func() bool {
-			stdout, _, _ := runLoopZeroInDir(workDir, "domain", "list", "--json")
+			stdout, _, _ := runLoopRuntimeInDir(workDir, "domain", "list", "--json")
 			// Domain should no longer appear or be in removed/removing state.
 			result, err := parseJSON(stdout)
 			if err != nil {

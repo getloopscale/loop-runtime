@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -7,40 +7,27 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/builds/cfkv"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/backgroundloops"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/gitops"
+	"github.com/getloopscale/loop-runtime/api/internal/orchestrationbreaker"
 )
 
-// WorkflowDeps holds workflow submitter, sync client, gitops pusher, and KV client.
+// WorkflowDeps holds the workflow submitter, the sync client and the gitops pusher.
 type WorkflowDeps struct {
 	// WorkflowSubmitter is circuit-breaker-wrapped.
 	WorkflowSubmitter *orchestrationbreaker.CircuitBreakerWorkflowSubmitter
 	SyncClient        *orchestrationbreaker.CircuitBreakerSyncClient
 	GitOpsPusher      *gitops.GiteaGitOpsPusher
-	KVClient          builds.StaticRoutingClient
 }
 
 // setupWorkflows creates the Argo workflow submitter, the ArgoCD sync client
 // and the GitOps pusher through backgroundloops (the same constructors the
-// controller binary uses), plus the Cloudflare KV client static builds use.
+// controller binary uses).
 func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *slog.Logger) (*WorkflowDeps, error) {
 	workflowSubmitter, err := backgroundloops.NewWorkflowSubmitter(cfg, logger)
 	if err != nil {
 		return nil, err
-	}
-
-	// Cloudflare KV client for static frontend routing; nil when CF
-	// credentials are not configured (local dev). Assigned to the interface
-	// only when non-nil: a typed nil *cfkv.Client in a StaticRoutingClient is
-	// not nil and panics on first use.
-	var kvClient builds.StaticRoutingClient
-	if c := cfkv.NewClient(cfg.CFAccountID, cfg.CFKVNamespaceID, cfg.CFAPIToken); c != nil {
-		kvClient = c
-		logger.Info("cloudflare KV client configured for static frontend routing")
 	}
 
 	syncClient, err := backgroundloops.NewSyncClient(cfg, httpTransport, logger)
@@ -52,6 +39,5 @@ func setupWorkflows(cfg config.Config, httpTransport *http.Transport, logger *sl
 		WorkflowSubmitter: workflowSubmitter,
 		SyncClient:        syncClient,
 		GitOpsPusher:      backgroundloops.NewGitOpsPusher(cfg),
-		KVClient:          kvClient,
 	}, nil
 }

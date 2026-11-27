@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // ReleaseStatusRow is the source-side projection of api/internal/db
@@ -99,6 +99,9 @@ var ladderProjections = map[string]stateProjection{
 	"LIVE_COMPLETED":     {"live", "completed", true},
 	"BUILD_FAILED":       {"build", "failed", true},
 	"BUILD_CANCELLED":    {"build", "canceled", true},
+	// The sync of the release failed: the deploy phase ends as failed, with
+	// the reason of the failure on the row.
+	"DEPLOY_FAILED": {"deploy", "failed", true},
 }
 
 // releaseProjections covers every state of the release state machine, keyed
@@ -139,4 +142,12 @@ func releaseStateProjection(state string) (phase, status string, terminal bool) 
 		return "release", "degraded", false
 	}
 	return p.phase, p.status, p.terminal
+}
+
+// TimelineEventType names the event a state is written as:
+// "deploy_timeline.<phase>.<status>". It is how a reader tells which states a
+// stream already holds.
+func TimelineEventType(state string) string {
+	phase, status, _ := releaseStateProjection(state)
+	return "deploy_timeline." + phase + "." + status
 }

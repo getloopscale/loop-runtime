@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -15,24 +15,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
-	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
-	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
-	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/audit/audithttp"
+	"github.com/getloopscale/loop-runtime/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	mwaudit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/promotehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling/scalinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // TestAuditBaselineDumpIsReproducible — B-059 Phase 1 T1.1 (NFR-002 regression floor).

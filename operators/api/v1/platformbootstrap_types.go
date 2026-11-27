@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -32,7 +32,7 @@ const (
 
 	// PlatformBootstrapPhaseFailed indicates bootstrap failed after exhausting retries.
 	// Requires manual intervention: delete and recreate the CR, or set annotation
-	// platform.loopzero.io/force-retry: "true".
+	// platform.runtime.getloopscale.com/force-retry: "true".
 	PlatformBootstrapPhaseFailed PlatformBootstrapPhase = "Failed"
 )
 
@@ -93,7 +93,7 @@ type GiteaBootstrapSpec struct {
 
 	// InternalURL is the cluster-internal URL for Gitea HTTP API.
 	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
-	// +kubebuilder:default="http://gitea-http.loopzero-system.svc.cluster.local:3000"
+	// +kubebuilder:default="http://gitea-http.loop-runtime-system.svc.cluster.local:3000"
 	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	InternalURL string `json:"internalURL,omitempty"`
@@ -137,21 +137,21 @@ type ArgoCDRepoCredential struct {
 type APIBootstrapSpec struct {
 	// BootstrapEndpoint is the internal URL for the bootstrap endpoint.
 	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
-	// +kubebuilder:default="http://loopzero-api.loopzero-system.svc.cluster.local:8080/internal/bootstrap"
+	// +kubebuilder:default="http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/internal/bootstrap"
 	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	BootstrapEndpoint string `json:"bootstrapEndpoint,omitempty"`
 
 	// HealthEndpoint is the internal URL for the API health check.
 	// SEC-004: Validated to prevent SSRF via arbitrary URL redirection.
-	// +kubebuilder:default="http://loopzero-api.loopzero-system.svc.cluster.local:8080/api/v1/health"
+	// +kubebuilder:default="http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080/api/v1/health"
 	// +kubebuilder:validation:Pattern=`^https?://[a-zA-Z0-9][a-zA-Z0-9.\-]+(:[0-9]+)?(/.*)?$`
 	// +optional
 	HealthEndpoint string `json:"healthEndpoint,omitempty"`
 
 	// BootstrapSecretRef references the Secret containing the bootstrap auth token.
 	// The Secret must contain a key "bootstrap-secret" with the Bearer token value
-	// matching LOOPZERO_BOOTSTRAP_SECRET on the API side (SEC-003).
+	// matching LOOP_RUNTIME_BOOTSTRAP_SECRET on the API side (SEC-003).
 	// B1: Without this, callBootstrapEndpoint fails 401 when SEC-003 is enabled.
 	// +optional
 	BootstrapSecretRef *SecretKeyRef `json:"bootstrapSecretRef,omitempty"`

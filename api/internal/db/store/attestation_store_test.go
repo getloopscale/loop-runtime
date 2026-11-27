@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -24,14 +24,14 @@ package store
 //
 // Per matrix § Phase 2 reshape window: DB-roundtrip behavioral
 // subset moves to real-PG-gated tests when pgxmock or
-// LOOPZERO_E2E_DATABASE_URL harness is wired.
+// LOOP_RUNTIME_E2E_DATABASE_URL harness is wired.
 
 import (
 	"context"
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // TestAttestationStore_GetBuildAttestationForTenant_EmptyTenant —
@@ -40,7 +40,7 @@ import (
 func TestAttestationStore_GetBuildAttestationForTenant_EmptyTenant(t *testing.T) {
 	store := &PostgresAttestationStore{}
 	_, err := store.GetBuildAttestationForTenant(context.Background(), "", "bld-1")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+	if !errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 		t.Errorf("expected ErrBuildNotFound for empty tenantID, got: %v", err)
 	}
 }
@@ -50,7 +50,7 @@ func TestAttestationStore_GetBuildAttestationForTenant_EmptyTenant(t *testing.T)
 func TestAttestationStore_GetBuildAttestationForTenant_EmptyBuild(t *testing.T) {
 	store := &PostgresAttestationStore{}
 	_, err := store.GetBuildAttestationForTenant(context.Background(), "tn-1", "")
-	if !errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
+	if !errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
 		t.Errorf("expected ErrBuildNotFound for empty buildID, got: %v", err)
 	}
 }

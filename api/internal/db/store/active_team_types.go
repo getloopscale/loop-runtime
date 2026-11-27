@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package store holds the sqlc-backed status-mutation Store adapters (the only sanctioned build/release status path — MA-7). M9 Step 5.
 package store
 
-import "github.com/getloopscale/loopzero/api/internal/db"
+import "github.com/getloopscale/loop-runtime/api/internal/db"
 
 // active_team_types.go — public types for explicit user-driven
 // active-team selection (migration 000018, users.active_tenant_id

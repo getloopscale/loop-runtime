@@ -41,16 +41,16 @@ log() { printf '[chaos-full] %s\n' "$*" >&2; }
 # Scenario → target cluster mapping (manifest selector.namespaces determines)
 # ---------------------------------------------------------------------------
 declare -A SCENARIO_CTX
-SCENARIO_CTX["C01"]="k3d-loopzero-core"        # pod-kill-api-leader → loopzero-system
-SCENARIO_CTX["C02"]="k3d-loopzero-core"        # pod-kill-controller → loopzero-system
-SCENARIO_CTX["C03"]="k3d-loopzero-cell-0"    # random-tenant-pod-kill → tenant ns
-SCENARIO_CTX["C04"]="k3d-loopzero-build"       # node-unschedulable → argo ns
-SCENARIO_CTX["C05"]="k3d-loopzero-core"        # argocd-crash → loopzero-system
-SCENARIO_CTX["C06"]="k3d-loopzero-build"       # build-cluster-network-partition → argo
-SCENARIO_CTX["C07"]="k3d-loopzero-core"        # gitea-outage → loopzero-system
-SCENARIO_CTX["C08"]="k3d-loopzero-core"        # pg-network-latency → loopzero-system
-SCENARIO_CTX["C09"]="k3d-loopzero-core"        # pg-connection-storm → loopzero-system
-SCENARIO_CTX["C10"]="k3d-loopzero-build"       # buildkit-io-pressure → argo
+SCENARIO_CTX["C01"]="k3d-loop-runtime-core"        # pod-kill-api-leader → loop-runtime-system
+SCENARIO_CTX["C02"]="k3d-loop-runtime-core"        # pod-kill-controller → loop-runtime-system
+SCENARIO_CTX["C03"]="k3d-loop-runtime-cell-0"    # random-tenant-pod-kill → tenant ns
+SCENARIO_CTX["C04"]="k3d-loop-runtime-build"       # node-unschedulable → argo ns
+SCENARIO_CTX["C05"]="k3d-loop-runtime-core"        # argocd-crash → loop-runtime-system
+SCENARIO_CTX["C06"]="k3d-loop-runtime-build"       # build-cluster-network-partition → argo
+SCENARIO_CTX["C07"]="k3d-loop-runtime-core"        # gitea-outage → loop-runtime-system
+SCENARIO_CTX["C08"]="k3d-loop-runtime-core"        # pg-network-latency → loop-runtime-system
+SCENARIO_CTX["C09"]="k3d-loop-runtime-core"        # pg-connection-storm → loop-runtime-system
+SCENARIO_CTX["C10"]="k3d-loop-runtime-build"       # buildkit-io-pressure → argo
 
 declare -a RESULTS
 PASS_COUNT=0
@@ -71,7 +71,7 @@ cat > "$SUMMARY" <<EOF
 
 EOF
 
-for ctx in k3d-loopzero-core k3d-loopzero-build k3d-loopzero-cell-0 k3d-loopzero-cell-1; do
+for ctx in k3d-loop-runtime-core k3d-loop-runtime-build k3d-loop-runtime-cell-0 k3d-loop-runtime-cell-1; do
   pods=$(kubectl --context "$ctx" get pods -n chaos-mesh 2>/dev/null | grep -c "Running" || echo 0)
   echo "- $ctx chaos-mesh: $pods pods Running" >> "$SUMMARY"
 done

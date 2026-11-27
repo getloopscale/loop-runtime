@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 //go:build live
 
@@ -29,7 +29,7 @@ var _ = Describe("J-18 Status + Health — system status pages", Label("live", "
 
 	AfterEach(func() { cancel() })
 
-	Context("Scenario A — cloud /health/deep deep probe", func() {
+	Context("Scenario A — deep health probe", func() {
 		It("returns 200 with components map", func() {
 			Expect(HealthcheckCloud(ctx, env)).To(Succeed())
 		})
@@ -37,8 +37,12 @@ var _ = Describe("J-18 Status + Health — system status pages", Label("live", "
 
 	Context("Scenario B — engine /api/v1/health returns 200", func() {
 		It("engine basic health endpoint reachable", func() {
+			// loop-console authenticates every /engine path, the health one included,
+			// so the probe carries the seeded session; without it the answer is 401.
+			jwt, err := LoadJWT(env)
+			Expect(err).ToNot(HaveOccurred(), "JWT seed required")
 			status, _, err := CurlJSON(ctx, env, "GET",
-				env.CloudBaseURL+"/engine/api/v1/health", "", nil)
+				env.CloudBaseURL+"/engine/api/v1/health", jwt, nil)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(status).To(Equal(200))
 		})

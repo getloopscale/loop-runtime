@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
  * Topology types — declarative multi-cluster configuration.
@@ -90,6 +90,6 @@ export interface ClusterRegistryEntry {
 
 /**
  * The cluster registry — keyed by clusterId.
- * This is the primary contract between loopzero-infra and downstream consumers.
+ * This is the primary contract between loop-runtime-infra and downstream consumers.
  */
 export type ClusterRegistry = Record<string, ClusterRegistryEntry>;

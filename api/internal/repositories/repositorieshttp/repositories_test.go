@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package repositorieshttp
 
@@ -11,13 +11,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
-	"github.com/getloopscale/loopzero/api/internal/github"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // --- Fake RepositoryStore ---
@@ -27,21 +28,24 @@ type fakeRepoStore struct {
 	repoByName   *ProjectRepository
 	linkErr      error
 	unlinkErr    error
-	saveInstErr  error
 	getByRepoErr error
 	getByProjErr error
 	// Plan J-09 T3.2 — capture autoDeploy passed by handler so tests can assert
 	// the request → store mapping (otherwise we couldn't tell true-by-default
 	// from true-by-handler-default).
 	lastLinkAutoDeploy *bool
-	// installationTenant is the tenant the installation is bound to ("" =
-	// unclaimed or unknown); saveInstCalls counts binding writes.
-	installationTenant string
-	saveInstCalls      int
+	// installationNotVerified makes the installation one the caller's tenant
+	// may not use; verifiedErr fails the check. checkedInstallation and
+	// checkedTenant record what the handler asked about.
+	installationNotVerified bool
+	verifiedErr             error
+	checkedInstallation     int64
+	checkedTenant           string
 }
 
-func (f *fakeRepoStore) InstallationTenant(_ context.Context, _ int64) (string, error) {
-	return f.installationTenant, nil
+func (f *fakeRepoStore) InstallationVerifiedFor(_ context.Context, installationID int64, tenantID string) (bool, error) {
+	f.checkedInstallation, f.checkedTenant = installationID, tenantID
+	return !f.installationNotVerified, f.verifiedErr
 }
 
 func (f *fakeRepoStore) LinkRepository(_ context.Context, _, _, _ string, _ int64, _ string, autoDeploy bool) error {
@@ -62,18 +66,14 @@ func (f *fakeRepoStore) GetByRepo(_ context.Context, _ string) (*ProjectReposito
 	return f.repo, f.getByRepoErr
 }
 
-func (f *fakeRepoStore) SaveInstallation(_ context.Context, _ int64, _, _ string, _ *string) error {
-	f.saveInstCalls++
-	return f.saveInstErr
-}
-
-// An installation already bound to another tenant must not be rebound by a
-// Connect: the upsert COALESCEs the caller's tenant over the existing one,
-// so without this check any owner could take over another team's GitHub
-// installation and its repositories.
-func TestRepositories_Connect_RefusesAnInstallationBoundToAnotherTenant(t *testing.T) {
-	store := &fakeRepoStore{installationTenant: "tn-someone-else"}
-	h := NewRepositoryHandler(store)
+// A repository is connected only through an installation that GitHub confirmed
+// a user of the caller's tenant can access. The installation id comes from the
+// request, so every other installation is refused with the answer the
+// repository picker gives, and nothing is linked.
+func TestRepositories_Connect_RefusesAnInstallationNotVerifiedForTheCaller(t *testing.T) {
+	store := &fakeRepoStore{installationNotVerified: true}
+	deployer := recordingDeployer{ctxErr: make(chan error, 1)}
+	h := NewRepositoryHandler(store).WithAutoDeployer(deployer, context.Background()).WithIntrospector(&fakeIntrospector{})
 
 	body, _ := json.Marshal(map[string]any{"repo": "acme/web", "installation_id": 42})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/shop/connect", bytes.NewReader(body))
@@ -85,8 +85,38 @@ func TestRepositories_Connect_RefusesAnInstallationBoundToAnotherTenant(t *testi
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
 	}
-	if store.saveInstCalls != 0 {
-		t.Fatalf("the installation binding was rewritten (%d writes)", store.saveInstCalls)
+	want := `{"code":"FORBIDDEN","message":"You do not have access to this installation."}`
+	if got := strings.TrimSpace(w.Body.String()); got != want {
+		t.Errorf("body = %s\n want = %s", got, want)
+	}
+	if store.checkedInstallation != 42 || store.checkedTenant != routestest.DefaultUserContext().TenantID {
+		t.Errorf("checked installation %d for tenant %q, want 42 for the caller's tenant", store.checkedInstallation, store.checkedTenant)
+	}
+	if store.lastLinkAutoDeploy != nil {
+		t.Error("the repository was linked through an installation the caller may not use")
+	}
+	select {
+	case <-deployer.ctxErr:
+		t.Error("a deploy was started through an installation the caller may not use")
+	default:
+	}
+}
+
+func TestRepositories_Connect_AFailedOwnershipCheckLinksNothing(t *testing.T) {
+	store := &fakeRepoStore{verifiedErr: errors.New("db down")}
+	h := NewRepositoryHandler(store)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/shop/connect", bytes.NewBufferString(`{"repo":"acme/web","installation_id":42}`))
+	req = routestest.WithChiParam(routestest.WithAuth(req, routestest.DefaultUserContext()), "name", "shop")
+	w := httptest.NewRecorder()
+
+	h.Connect(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d body=%s", w.Code, w.Body.String())
+	}
+	if store.lastLinkAutoDeploy != nil {
+		t.Error("the repository was linked although the ownership check failed")
 	}
 }
 
@@ -161,6 +191,28 @@ func TestRepositories_Connect_MissingRepo(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// A caller that may not use the installation gets the same 403 whether or not
+// someone else connected the repository, so the answer does not say which
+// repositories are connected.
+func TestRepositories_Connect_RefusesAnUnverifiedInstallationBeforeSayingTheRepoIsLinked(t *testing.T) {
+	store := &fakeRepoStore{
+		installationNotVerified: true,
+		repo:                    &ProjectRepository{TenantID: "tn-other-tenant", ProjectName: "other-project"},
+	}
+	h := NewRepositoryHandler(store)
+
+	body := `{"repo":"owner/my-repo","installation_id":12345}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/connect", bytes.NewBufferString(body))
+	req = routestest.WithChiParam(routestest.WithAuth(req, routestest.DefaultUserContext()), "name", "my-api")
+	w := httptest.NewRecorder()
+
+	h.Connect(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("want 403, got %d body=%s", w.Code, w.Body.String())
 	}
 }
 
@@ -331,6 +383,8 @@ type fakeIntrospector struct {
 	branchErr error
 	fileBytes []byte
 	fileErr   error
+	// files, when set, answers by path and FileNotFoundError for the rest.
+	files map[string]string
 	// connect-then-deploy 2026-06-09: HEAD commit metadata for the
 	// Vercel-canonical immediate deploy on link. Nil head + nil headErr
 	// disables the deploy path silently — matches the production behavior
@@ -343,7 +397,14 @@ func (f *fakeIntrospector) BranchExists(_ context.Context, _ int64, _, _, _ stri
 	return f.branchErr
 }
 
-func (f *fakeIntrospector) GetFileContent(_ context.Context, _ int64, _, _, _, _ string) ([]byte, error) {
+func (f *fakeIntrospector) GetFileContent(_ context.Context, _ int64, _, _, _, path string) ([]byte, error) {
+	if f.files != nil {
+		content, ok := f.files[path]
+		if !ok {
+			return nil, &github.FileNotFoundError{Path: path}
+		}
+		return []byte(content), nil
+	}
 	if f.fileErr != nil {
 		return nil, f.fileErr
 	}
@@ -379,7 +440,7 @@ func TestRepositories_Connect_BranchNotFound_400(t *testing.T) {
 	}
 }
 
-func TestRepositories_Connect_MissingLoopZeroYaml_400(t *testing.T) {
+func TestRepositories_Connect_MissingLoopRuntimeYaml_400(t *testing.T) {
 	intro := &fakeIntrospector{fileErr: &github.FileNotFoundError{Path: "loopzero.yaml"}}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
@@ -389,12 +450,12 @@ func TestRepositories_Connect_MissingLoopZeroYaml_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_LOOPZERO_YAML")) {
-		t.Errorf("want MISSING_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("MISSING_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want MISSING_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
-func TestRepositories_Connect_EmptyLoopZeroYaml_400(t *testing.T) {
+func TestRepositories_Connect_EmptyLoopRuntimeYaml_400(t *testing.T) {
 	intro := &fakeIntrospector{fileBytes: []byte("   \n\t  ")}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
@@ -404,8 +465,8 @@ func TestRepositories_Connect_EmptyLoopZeroYaml_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d", w.Code)
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
-		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want INVALID_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
@@ -419,16 +480,16 @@ func TestRepositories_Connect_InvalidYaml_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
-		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want INVALID_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
-const deployableLoopZeroYaml = "project: my-app\napps:\n  api:\n    type: server\n"
+const deployableLoopRuntimeYaml = "project: my-app\napps:\n  api:\n    type: server\n    runtime: node\n    start: node server.js\n"
 
 // Connect refuses the descriptor a push could not deploy: a loopzero.yaml that
 // declares no app used to link fine and then build nothing on every push.
-func TestRepositories_Connect_LoopZeroYamlWithoutApps_400(t *testing.T) {
+func TestRepositories_Connect_LoopRuntimeYamlWithoutApps_400(t *testing.T) {
 	intro := &fakeIntrospector{fileBytes: []byte("name: my-app\nframework: node\n")}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
@@ -438,13 +499,13 @@ func TestRepositories_Connect_LoopZeroYamlWithoutApps_400(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d body=%s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_LOOPZERO_YAML")) {
-		t.Errorf("want INVALID_LOOPZERO_YAML, got %s", w.Body.String())
+	if !bytes.Contains(w.Body.Bytes(), []byte("INVALID_DEPLOY_DESCRIPTOR")) {
+		t.Errorf("want INVALID_DEPLOY_DESCRIPTOR, got %s", w.Body.String())
 	}
 }
 
-func TestRepositories_Connect_LoopZeroYamlExists_200(t *testing.T) {
-	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopZeroYaml)}
+func TestRepositories_Connect_LoopRuntimeYamlExists_200(t *testing.T) {
+	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopRuntimeYaml)}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
 
 	w := httptest.NewRecorder()
@@ -490,7 +551,7 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 	serverCtx, stopServer := context.WithCancel(context.Background())
 	stopServer() // the server is already shutting down
 	deployer := recordingDeployer{ctxErr: make(chan error, 1)}
-	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopZeroYaml), head: &github.HeadCommitInfo{SHA: "abc123"}}
+	intro := &fakeIntrospector{fileBytes: []byte(deployableLoopRuntimeYaml), head: &github.HeadCommitInfo{SHA: "abc123"}}
 	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro).WithAutoDeployer(deployer, serverCtx)
 
 	body := `{"repo":"owner/r","installation_id":42}`
@@ -506,5 +567,39 @@ func TestRepositories_Connect_DeployIsBoundToTheServerLifetime(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("connect did not trigger the deploy")
+	}
+}
+
+// A repository connected before the descriptor was renamed carries
+// loopzero.yaml. Connect accepts it and loopscale.yaml
+// (getloopscale/loop-runtime#89).
+func TestRepositories_Connect_AcceptsEveryDescriptorName(t *testing.T) {
+	for _, name := range []string{"loopscale.yaml", "loopzero.yaml"} {
+		t.Run(name, func(t *testing.T) {
+			intro := &fakeIntrospector{files: map[string]string{name: deployableLoopRuntimeYaml}}
+			h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
+
+			w := httptest.NewRecorder()
+			h.Connect(w, connectReq(`{"repo":"owner/r","installation_id":42}`))
+
+			if w.Code >= 400 {
+				t.Fatalf("%s: status %d body=%s", name, w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestRepositories_Connect_InvalidDescriptorNamesTheFileItRead(t *testing.T) {
+	intro := &fakeIntrospector{files: map[string]string{"loopzero.yaml": "project: hello\n"}}
+	h := NewRepositoryHandler(&fakeRepoStore{}).WithIntrospector(intro)
+
+	w := httptest.NewRecorder()
+	h.Connect(w, connectReq(`{"repo":"owner/r","installation_id":42}`))
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("loopzero.yaml declares no apps")) {
+		t.Errorf("want the refusal to name loopzero.yaml, got %s", w.Body.String())
 	}
 }

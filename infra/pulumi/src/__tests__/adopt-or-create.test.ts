@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Sprint 8 v3.2 / CHG-001 — regression tests for ADR-0015 adopt-or-create policy.
 //
@@ -57,9 +57,9 @@ describe("adopt-or-create — DigitalOcean", () => {
     it("returns vpc id when API returns matching name", () => {
       process.env.DIGITALOCEAN_TOKEN = "stub-token";
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ vpcs: [{ name: "loopzero-infra-dev-sfo3-net", id: "abc-123" }] }) as never,
+        JSON.stringify({ vpcs: [{ name: "loop-runtime-infra-dev-sfo3-net", id: "abc-123" }] }) as never,
       );
-      expect(lookupExistingVpc("loopzero-infra-dev-sfo3-net")).toBe("abc-123");
+      expect(lookupExistingVpc("loop-runtime-infra-dev-sfo3-net")).toBe("abc-123");
     });
 
     it("returns undefined when no VPC matches by name", () => {
@@ -67,7 +67,7 @@ describe("adopt-or-create — DigitalOcean", () => {
       mocks.execSync.mockReturnValueOnce(
         JSON.stringify({ vpcs: [{ name: "other-vpc", id: "xyz" }] }) as never,
       );
-      expect(lookupExistingVpc("loopzero-infra-dev-sfo3-net")).toBeUndefined();
+      expect(lookupExistingVpc("loop-runtime-infra-dev-sfo3-net")).toBeUndefined();
     });
 
     it("returns undefined when API call throws (network failure, 401, malformed JSON)", () => {
@@ -88,9 +88,9 @@ describe("adopt-or-create — DigitalOcean", () => {
     it("returns the registry name when DO has a registry provisioned", () => {
       process.env.DIGITALOCEAN_TOKEN = "stub-token";
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ registry: { name: "loopzero-system", region: "sfo3" } }) as never,
+        JSON.stringify({ registry: { name: "loop-runtime-system", region: "sfo3" } }) as never,
       );
-      expect(lookupExistingRegistry()).toBe("loopzero-system");
+      expect(lookupExistingRegistry()).toBe("loop-runtime-system");
     });
 
     it("returns undefined when DO account has NO registry yet (404 wrapped as undefined response)", () => {
@@ -124,7 +124,7 @@ describe("adopt-or-create — DigitalOcean", () => {
   describe("lookupExistingBucket", () => {
     it("returns name when bucket exists (200 OK)", () => {
       mocks.execSync.mockReturnValueOnce("200" as never);
-      expect(lookupExistingBucket("loopzero-builds", "sfo3")).toBe("loopzero-builds");
+      expect(lookupExistingBucket("loop-runtime-builds", "sfo3")).toBe("loop-runtime-builds");
     });
 
     it("returns name when bucket exists privately (403 Forbidden)", () => {
@@ -161,35 +161,35 @@ describe("adopt-or-create — Cloudflare", () => {
   describe("lookupExistingTunnel", () => {
     it("returns accountId/tunnelId when tunnel exists by name", () => {
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ result: [{ id: "tunnel-uuid-123", name: "loopzero-dev" }] }) as never,
+        JSON.stringify({ result: [{ id: "tunnel-uuid-123", name: "loop-runtime-dev" }] }) as never,
       );
-      expect(lookupExistingTunnel("loopzero-dev", "account-456")).toBe("account-456/tunnel-uuid-123");
+      expect(lookupExistingTunnel("loop-runtime-dev", "account-456")).toBe("account-456/tunnel-uuid-123");
     });
 
     it("returns undefined when tunnel does not exist", () => {
       mocks.execSync.mockReturnValueOnce(JSON.stringify({ result: [] }) as never);
-      expect(lookupExistingTunnel("loopzero-dev", "account-456")).toBeUndefined();
+      expect(lookupExistingTunnel("loop-runtime-dev", "account-456")).toBeUndefined();
     });
 
     it("returns undefined when CLOUDFLARE_API_TOKEN is unset", () => {
       delete process.env.CLOUDFLARE_API_TOKEN;
-      expect(lookupExistingTunnel("loopzero-dev", "account-456")).toBeUndefined();
+      expect(lookupExistingTunnel("loop-runtime-dev", "account-456")).toBeUndefined();
     });
   });
 
   describe("lookupExistingKvNamespace", () => {
     it("returns accountId/namespaceId when KV namespace exists by title", () => {
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ result: [{ id: "kv-uuid", title: "loopzero-routing-dev" }] }) as never,
+        JSON.stringify({ result: [{ id: "kv-uuid", title: "loop-runtime-routing-dev" }] }) as never,
       );
-      expect(lookupExistingKvNamespace("loopzero-routing-dev", "acc")).toBe("acc/kv-uuid");
+      expect(lookupExistingKvNamespace("loop-runtime-routing-dev", "acc")).toBe("acc/kv-uuid");
     });
 
     it("returns undefined when title does not match any namespace", () => {
       mocks.execSync.mockReturnValueOnce(
         JSON.stringify({ result: [{ id: "x", title: "different" }] }) as never,
       );
-      expect(lookupExistingKvNamespace("loopzero-routing-dev", "acc")).toBeUndefined();
+      expect(lookupExistingKvNamespace("loop-runtime-routing-dev", "acc")).toBeUndefined();
     });
   });
 
@@ -210,10 +210,10 @@ describe("adopt-or-create — Cloudflare", () => {
   describe("lookupExistingWorkerScript", () => {
     it("returns accountId/scriptName when script with matching id exists", () => {
       mocks.execSync.mockReturnValueOnce(
-        JSON.stringify({ result: [{ id: "loopzero-static-delivery-dev" }] }) as never,
+        JSON.stringify({ result: [{ id: "loop-runtime-static-delivery-dev" }] }) as never,
       );
-      expect(lookupExistingWorkerScript("loopzero-static-delivery-dev", "acc")).toBe(
-        "acc/loopzero-static-delivery-dev",
+      expect(lookupExistingWorkerScript("loop-runtime-static-delivery-dev", "acc")).toBe(
+        "acc/loop-runtime-static-delivery-dev",
       );
     });
 
@@ -221,7 +221,7 @@ describe("adopt-or-create — Cloudflare", () => {
       mocks.execSync.mockReturnValueOnce(
         JSON.stringify({ result: [{ id: "other-script" }] }) as never,
       );
-      expect(lookupExistingWorkerScript("loopzero-static-delivery-dev", "acc")).toBeUndefined();
+      expect(lookupExistingWorkerScript("loop-runtime-static-delivery-dev", "acc")).toBeUndefined();
     });
   });
 
@@ -258,20 +258,20 @@ describe("resolveOrphans — orchestrator (Sprint 8 v3.2 contract)", () => {
 
     // Each lookup hits a different upstream endpoint — return appropriate canonical shape per call.
     mocks.execSync
-      .mockReturnValueOnce(JSON.stringify({ vpcs: [{ name: "loopzero-infra-dev-sfo3-net", id: "vpc-id" }] }) as never)
-      .mockReturnValueOnce(JSON.stringify({ registry: { name: "loopzero-system" } }) as never)
-      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "tunnel-id", name: "loopzero-tunnel-dev" }] }) as never)
-      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "kv-id", title: "loopzero-routing-dev" }] }) as never)
+      .mockReturnValueOnce(JSON.stringify({ vpcs: [{ name: "loop-runtime-infra-dev-sfo3-net", id: "vpc-id" }] }) as never)
+      .mockReturnValueOnce(JSON.stringify({ registry: { name: "loop-runtime-system" } }) as never)
+      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "tunnel-id", name: "loop-runtime-tunnel-dev" }] }) as never)
+      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "kv-id", title: "loop-runtime-routing-dev" }] }) as never)
       .mockReturnValueOnce(JSON.stringify({ result: [{ id: "dns-id", name: "*.dev.getloopscale.com", type: "CNAME" }] }) as never)
-      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "loopzero-static-delivery-dev" }] }) as never)
+      .mockReturnValueOnce(JSON.stringify({ result: [{ id: "loop-runtime-static-delivery-dev" }] }) as never)
       .mockReturnValueOnce(JSON.stringify({ result: [{ id: "route-id", pattern: "*.dev.getloopscale.com/*" }] }) as never);
 
     const result: OrphanLookupResult = resolveOrphans({
-      vpcName: "loopzero-infra-dev-sfo3-net",
-      tunnelName: "loopzero-tunnel-dev",
-      kvTitle: "loopzero-routing-dev",
+      vpcName: "loop-runtime-infra-dev-sfo3-net",
+      tunnelName: "loop-runtime-tunnel-dev",
+      kvTitle: "loop-runtime-routing-dev",
       dnsWildcard: "*.dev.getloopscale.com",
-      workerScriptName: "loopzero-static-delivery-dev",
+      workerScriptName: "loop-runtime-static-delivery-dev",
       workerRoutePattern: "*.dev.getloopscale.com/*",
       cfAccountId: "acc",
       cfZoneId: "zone",
@@ -279,11 +279,11 @@ describe("resolveOrphans — orchestrator (Sprint 8 v3.2 contract)", () => {
 
     // Every key must be populated for adopt-or-create to be useful.
     expect(result.vpcId).toBe("vpc-id");
-    expect(result.registryImportId).toBe("loopzero-system"); // Sprint 8 v3.2 contract
+    expect(result.registryImportId).toBe("loop-runtime-system"); // Sprint 8 v3.2 contract
     expect(result.tunnelImportId).toBe("acc/tunnel-id");
     expect(result.kvNamespaceImportId).toBe("acc/kv-id");
     expect(result.dnsRecordImportId).toBe("zone/dns-id");
-    expect(result.workerScriptImportId).toBe("acc/loopzero-static-delivery-dev");
+    expect(result.workerScriptImportId).toBe("acc/loop-runtime-static-delivery-dev");
     expect(result.workerRouteImportId).toBe("zone/route-id");
   });
 

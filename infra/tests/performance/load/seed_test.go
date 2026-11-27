@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package load provides load testing utilities for the LoopZero platform.
+// Package load provides load testing utilities for the LoopRuntime platform.
 //
 // This file contains the seed script that creates synthetic tenants,
 // users, projects, and memberships for load testing.
@@ -14,8 +14,8 @@
 //
 // Usage:
 //
-//	LOOPZERO_LOAD_TEST=1 LOOPZERO_DB_URL=<pg-url> LOOPZERO_API_URL=<api-url> \
-//	  LOOPZERO_SERVICE_AUTH=<secret> go test ./infra/tests/load/ -v -run TestSeed -timeout 30m
+//	LOOP_RUNTIME_LOAD_TEST=1 LOOP_RUNTIME_DB_URL=<pg-url> LOOP_RUNTIME_API_URL=<api-url> \
+//	  LOOP_RUNTIME_SERVICE_AUTH=<secret> go test ./infra/tests/load/ -v -run TestSeed -timeout 30m
 package load
 
 import (
@@ -35,7 +35,7 @@ type SeedConfig struct {
 	TenantCount       int    // Number of synthetic tenants
 	ProjectsPerTenant int    // Projects per tenant
 	DBUrl             string // PostgreSQL connection string
-	APIURL            string // LoopZero API endpoint
+	APIURL            string // LoopRuntime API endpoint
 	ServiceAuthSecret string // X-Service-Auth shared secret
 }
 
@@ -53,7 +53,7 @@ type SeedResult struct {
 //
 // Schema:
 //
-//	users:          loadtest-user-{i}  / loadtest-{i}@loadtest.loopzero.dev / github_id=9000000+i
+//	users:          loadtest-user-{i}  / loadtest-{i}@loadtest.loop-runtime.dev / github_id=9000000+i
 //	tenants:        loadtest-tn-{i}    / plan=starter / owner=loadtest-user-{i}
 //	tenant_members: (loadtest-tn-{i}, loadtest-user-{i}) / role=owner
 //	projects:       loadtest-proj-{i}-{j} / tenant=loadtest-tn-{i}
@@ -75,7 +75,7 @@ func Seed(ctx context.Context, cfg SeedConfig) (*SeedResult, error) {
 
 	for i := 0; i < cfg.TenantCount; i++ {
 		userID := fmt.Sprintf("loadtest-user-%d", i)
-		email := fmt.Sprintf("loadtest-%d@loadtest.loopzero.dev", i)
+		email := fmt.Sprintf("loadtest-%d@loadtest.loop-runtime.dev", i)
 		githubID := 9000000 + i
 		tenantID := fmt.Sprintf("loadtest-tn-%d", i)
 		displayName := fmt.Sprintf("Load Test Tenant %d", i)
@@ -201,9 +201,9 @@ func (c *ServiceAuthClient) Do(ctx context.Context, method, path string, body *h
 		req.Header.Set("Content-Type", body.Header.Get("Content-Type"))
 	}
 	req.Header.Set("X-Service-Auth", c.secret)
-	req.Header.Set("X-LoopZero-User-ID", userID)
-	req.Header.Set("X-LoopZero-Tenant", tenantID)
-	req.Header.Set("X-LoopZero-Email", email)
+	req.Header.Set("X-Loop-Runtime-User-ID", userID)
+	req.Header.Set("X-Loop-Runtime-Tenant", tenantID)
+	req.Header.Set("X-Loop-Runtime-Email", email)
 	return c.client.Do(req)
 }
 
@@ -213,27 +213,27 @@ func (c *ServiceAuthClient) Do(ctx context.Context, method, path string, body *h
 
 func requireSeedEnv(t *testing.T) SeedConfig {
 	t.Helper()
-	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
-		t.Skip("skipping: set LOOPZERO_LOAD_TEST=1")
+	if os.Getenv("LOOP_RUNTIME_LOAD_TEST") != "1" {
+		t.Skip("skipping: set LOOP_RUNTIME_LOAD_TEST=1")
 	}
 
-	dbURL := os.Getenv("LOOPZERO_DB_URL")
+	dbURL := os.Getenv("LOOP_RUNTIME_DB_URL")
 	if dbURL == "" {
-		t.Fatal("LOOPZERO_DB_URL required (PostgreSQL connection string)")
+		t.Fatal("LOOP_RUNTIME_DB_URL required (PostgreSQL connection string)")
 	}
 
-	apiURL := os.Getenv("LOOPZERO_API_URL")
+	apiURL := os.Getenv("LOOP_RUNTIME_API_URL")
 	if apiURL == "" {
 		apiURL = "https://api.dev.getloopscale.com"
 	}
 
-	serviceAuth := os.Getenv("LOOPZERO_SERVICE_AUTH")
+	serviceAuth := os.Getenv("LOOP_RUNTIME_SERVICE_AUTH")
 	if serviceAuth == "" {
-		t.Fatal("LOOPZERO_SERVICE_AUTH required (X-Service-Auth shared secret)")
+		t.Fatal("LOOP_RUNTIME_SERVICE_AUTH required (X-Service-Auth shared secret)")
 	}
 
 	tenants := 10 // default
-	if v := os.Getenv("LOOPZERO_LOAD_TENANTS"); v != "" {
+	if v := os.Getenv("LOOP_RUNTIME_LOAD_TENANTS"); v != "" {
 		fmt.Sscanf(v, "%d", &tenants)
 	}
 
@@ -280,13 +280,13 @@ func TestSeed_CreateTenants(t *testing.T) {
 
 // TestSeed_Cleanup removes all load test data.
 func TestSeed_Cleanup(t *testing.T) {
-	if os.Getenv("LOOPZERO_LOAD_TEST") != "1" {
-		t.Skip("skipping: set LOOPZERO_LOAD_TEST=1")
+	if os.Getenv("LOOP_RUNTIME_LOAD_TEST") != "1" {
+		t.Skip("skipping: set LOOP_RUNTIME_LOAD_TEST=1")
 	}
 
-	dbURL := os.Getenv("LOOPZERO_DB_URL")
+	dbURL := os.Getenv("LOOP_RUNTIME_DB_URL")
 	if dbURL == "" {
-		t.Fatal("LOOPZERO_DB_URL required")
+		t.Fatal("LOOP_RUNTIME_DB_URL required")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
@@ -316,7 +316,7 @@ func TestSeed_VerifyServiceAuth(t *testing.T) {
 	// Try API call with service auth
 	client := NewServiceAuthClient(cfg.APIURL, cfg.ServiceAuthSecret)
 	resp, err := client.Do(ctx, "GET", "/api/v1/projects",
-		nil, "loadtest-user-0", "loadtest-tn-0", "loadtest-0@loadtest.loopzero.dev")
+		nil, "loadtest-user-0", "loadtest-tn-0", "loadtest-0@loadtest.loop-runtime.dev")
 	if err != nil {
 		t.Fatalf("Service auth request failed: %v", err)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -32,7 +32,7 @@ func (f fakeTenantCells) GetCell(_ context.Context, tenantID string) (string, er
 }
 
 const (
-	internalDomain = "loopzero.local"
+	internalDomain = "loop-runtime.local"
 	prodDomain     = "prod-dev.getloopscale.app"
 	previewDomain  = "preview-dev.getloopscale.app"
 )
@@ -51,8 +51,8 @@ func newTestEdgeRouter(src *fakeEdgeRoutes, cells fakeTenantCells) *EdgeRouter {
 // is tenants.cell_id. This is the lookup the edge makes before forwarding (#447).
 func TestEdgeRouterResolvesAPublicHostToTheTenantsCell(t *testing.T) {
 	src := &fakeEdgeRoutes{routes: []EdgeRoute{
-		{Hostname: "tn-admin-sample-app-production.loopzero.local", TenantID: "tn-admin"},
-		{Hostname: "tn-e2e-web-api-production.loopzero.local", TenantID: "tn-e2e"},
+		{Hostname: "tn-admin-sample-app-production.loop-runtime.local", TenantID: "tn-admin"},
+		{Hostname: "tn-e2e-web-api-production.loop-runtime.local", TenantID: "tn-e2e"},
 	}}
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-admin": "cell-1", "tn-e2e": "cell-0"})
 
@@ -73,7 +73,7 @@ func TestEdgeRouterResolvesAPublicHostToTheTenantsCell(t *testing.T) {
 func TestEdgeRouterResolvesACustomDomainByItsFullName(t *testing.T) {
 	src := &fakeEdgeRoutes{routes: []EdgeRoute{
 		{Hostname: "www.customer.example", TenantID: "tn-cust"},
-		{Hostname: "www.loopzero.local", TenantID: "tn-other"},
+		{Hostname: "www.loop-runtime.local", TenantID: "tn-other"},
 	}}
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-cust": "cell-1", "tn-other": "cell-0"})
 
@@ -99,8 +99,8 @@ func TestEdgeRouterRefusesAnUnknownHost(t *testing.T) {
 // other's cell: the label is refused rather than guessed.
 func TestEdgeRouterRefusesALabelTwoTenantsPublish(t *testing.T) {
 	src := &fakeEdgeRoutes{routes: []EdgeRoute{
-		{Hostname: "dup-app-production.loopzero.local", TenantID: "tn-a"},
-		{Hostname: "dup-app-production.loopzero.local", TenantID: "tn-b"},
+		{Hostname: "dup-app-production.loop-runtime.local", TenantID: "tn-a"},
+		{Hostname: "dup-app-production.loop-runtime.local", TenantID: "tn-b"},
 	}}
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-a": "cell-0", "tn-b": "cell-1"})
 	if _, err := r.Resolve(context.Background(), "dup-app-production.prod-dev.getloopscale.app"); !errors.Is(err, ErrEdgeRouteNotFound) {
@@ -119,7 +119,7 @@ func TestEdgeRouterRefreshesOnAMissAtMostOncePerGap(t *testing.T) {
 	if err := r.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	src.routes = []EdgeRoute{{Hostname: "tn-new-p-app-production.loopzero.local", TenantID: "tn-new"}}
+	src.routes = []EdgeRoute{{Hostname: "tn-new-p-app-production.loop-runtime.local", TenantID: "tn-new"}}
 
 	// The gap has not elapsed since the refresh above: a miss does not refresh yet.
 	if _, err := r.Resolve(context.Background(), "tn-new-p-app-production.prod-dev.getloopscale.app"); !errors.Is(err, ErrEdgeRouteNotFound) {
@@ -151,8 +151,8 @@ func TestEdgeRouterReportsNotLoadedWhenTheSourceNeverAnswered(t *testing.T) {
 // route: one bad row does not take the edge down.
 func TestEdgeRouterSkipsATenantWhoseCellCannotBeRead(t *testing.T) {
 	src := &fakeEdgeRoutes{routes: []EdgeRoute{
-		{Hostname: "tn-gone-p-app-production.loopzero.local", TenantID: "tn-gone"},
-		{Hostname: "tn-ok-p-app-production.loopzero.local", TenantID: "tn-ok"},
+		{Hostname: "tn-gone-p-app-production.loop-runtime.local", TenantID: "tn-gone"},
+		{Hostname: "tn-ok-p-app-production.loop-runtime.local", TenantID: "tn-ok"},
 	}}
 	r := newTestEdgeRouter(src, fakeTenantCells{"tn-ok": "cell-0"})
 	if got, err := r.Resolve(context.Background(), "tn-ok-p-app-production.prod-dev.getloopscale.app"); err != nil || got != "cell-0" {
@@ -180,8 +180,8 @@ func (r *recordingPublisher) Publish(_ context.Context, index map[string]string,
 // the publisher keeps that tenant's routes instead of deleting them (#448).
 func TestEdgeRouterPublishesEachRefreshAndFlagsAnIncompleteOne(t *testing.T) {
 	src := &fakeEdgeRoutes{routes: []EdgeRoute{
-		{Hostname: "tn-ok-p-app-production.loopzero.local", TenantID: "tn-ok"},
-		{Hostname: "tn-gone-p-app-production.loopzero.local", TenantID: "tn-gone"},
+		{Hostname: "tn-ok-p-app-production.loop-runtime.local", TenantID: "tn-ok"},
+		{Hostname: "tn-gone-p-app-production.loop-runtime.local", TenantID: "tn-gone"},
 	}}
 	pub := &recordingPublisher{}
 	r := NewEdgeRouter(src, fakeTenantCells{"tn-ok": "cell-0"}, EdgeRouterConfig{
@@ -203,5 +203,43 @@ func TestEdgeRouterPublishesEachRefreshAndFlagsAnIncompleteOne(t *testing.T) {
 	_ = r.Refresh(context.Background())
 	if !pub.complete {
 		t.Error("a round where every tenant resolved was reported incomplete")
+	}
+}
+
+// A custom domain has no ExposedRoute: the app operator publishes one route per
+// application, under the platform host. The domain store is a second source, and a
+// host from it resolves to its tenant's cell by its full name.
+func TestEdgeRouterResolvesACustomDomainFromASecondSource(t *testing.T) {
+	platform := &fakeEdgeRoutes{routes: []EdgeRoute{
+		{Hostname: "tn-admin-sample-app-production.loop-runtime.local", TenantID: "tn-admin"},
+	}}
+	custom := &fakeEdgeRoutes{routes: []EdgeRoute{
+		{Hostname: "Shop.Customer.com", TenantID: "tn-e2e"},
+	}}
+	r := newTestEdgeRouter(nil, fakeTenantCells{"tn-admin": "cell-1", "tn-e2e": "cell-0"})
+	r.source = EdgeRouteSources{platform, custom}
+
+	for host, want := range map[string]string{
+		"shop.customer.com": "cell-0",
+		"tn-admin-sample-app-production.prod-dev.getloopscale.app": "cell-1",
+	} {
+		got, err := r.Resolve(context.Background(), host)
+		if err != nil || got != want {
+			t.Errorf("Resolve(%q) = %q, %v; want %q", host, got, err, want)
+		}
+	}
+}
+
+// One source that cannot be read fails the whole listing: the router then keeps the
+// index it had, where a partial listing would drop every host of the failed source.
+func TestEdgeRouteSourcesFailWhenOneSourceFails(t *testing.T) {
+	failing := errors.New("database unreachable")
+	sources := EdgeRouteSources{
+		&fakeEdgeRoutes{routes: []EdgeRoute{{Hostname: "a.loop-runtime.local", TenantID: "tn-a"}}},
+		&fakeEdgeRoutes{err: failing},
+	}
+	routes, err := sources.ListEdgeRoutes(context.Background())
+	if !errors.Is(err, failing) || routes != nil {
+		t.Fatalf("ListEdgeRoutes = %v, %v; want no routes and the source's error", routes, err)
 	}
 }

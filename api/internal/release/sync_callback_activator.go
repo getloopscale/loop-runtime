@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -10,14 +10,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/pkg/domain"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // SyncCallbackActivator processes ArgoCD sync completion callbacks.
@@ -39,14 +39,14 @@ type SyncCallbackActivator struct {
 	deployEventStore store.DeployEventStore
 	baseDomain       string
 	// publicDomain is the operator-configured wildcard root mirrored from
-	// LOOPZERO_PUBLIC_DOMAIN (e.g. `prod-dev.getloopscale.app`). When set, the
+	// LOOP_RUNTIME_PUBLIC_DOMAIN (e.g. `prod-dev.getloopscale.app`). When set, the
 	// deploy.completed SSE event URL uses this domain instead of the legacy
-	// baseDomain (`loopzero.local`) — closes loopzero-cloud#61 so the URL `loopzero deploy`
-	// announces is the SAME publicly-resolvable URL `loopzero status` returns.
+	// baseDomain (`loop-runtime.local`) — closes loop-console#61 so the URL `loopscale deploy`
+	// announces is the SAME publicly-resolvable URL `loopscale status` returns.
 	publicDomain string
 	logger       *slog.Logger
-	// appLabelReader resolves tenant and environment from the loopzero.io/tenant
-	// and loopzero.io/environment labels on the ArgoCD Application CR — the only
+	// appLabelReader resolves tenant and environment from the runtime.getloopscale.com/tenant
+	// and runtime.getloopscale.com/environment labels on the ArgoCD Application CR — the only
 	// decoder of an Application's identity (see lookupTenantEnv).
 	appLabelReader ArgoAppLabelReader
 }
@@ -63,7 +63,7 @@ func (a *SyncCallbackActivator) WithAppLabelReader(r ArgoAppLabelReader) *SyncCa
 // errAppIdentityUnresolved is returned when the Application's tenant and
 // environment cannot be read from its labels. The callback is the fast path;
 // the convergence loop still activates the release.
-var errAppIdentityUnresolved = &loopzeroerrors.LoopZeroError{
+var errAppIdentityUnresolved = &loopruntimeerrors.LoopRuntimeError{
 	Code:    "APP_IDENTITY_UNRESOLVED",
 	Message: "sync callback: application identity not resolvable from its labels",
 }
@@ -97,9 +97,9 @@ func (a *SyncCallbackActivator) lookupTenantEnv(ctx context.Context, appName str
 // NewSyncCallbackActivator creates a new SyncCallbackActivator.
 //
 // release-blockers-2026-06-25-set v1.1 #61: publicDomain is the
-// canonical public wildcard (LOOPZERO_PUBLIC_DOMAIN) used to compose the
+// canonical public wildcard (LOOP_RUNTIME_PUBLIC_DOMAIN) used to compose the
 // URL announced in the deploy.completed SSE event. Empty publicDomain
-// falls back to baseDomain (legacy default `loopzero.local`) so test fixtures
+// falls back to baseDomain (legacy default `loop-runtime.local`) so test fixtures
 // + envs without a public wildcard preserve pre-#61 behavior.
 func NewSyncCallbackActivator(
 	releaseStore ReleaseConvergenceStore,
@@ -137,7 +137,7 @@ type PendingReleaseByTenantEnvFinder interface {
 }
 
 // OnSyncCompleted is called when ArgoCD reports an Application as Synced + Healthy.
-// The appName is in format "{tenantID}-{environment}" (e.g., "tn-loopzero-production").
+// The appName is in format "{tenantID}-{environment}" (e.g., "tn-loop-runtime-production").
 // It finds all PENDING releases matching that tenant+environment and activates them.
 func (a *SyncCallbackActivator) OnSyncCompleted(appName, revision string) error {
 	// T6.6 of deep-review-remediation-plan (closes find_code_007 / CODE-007 LOW):

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package observability
 
 import (
 	"net/http"
 
-	"github.com/getloopscale/loopzero/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
 )
 
 // CorrelationID is an HTTP middleware that ensures every request has a Correlation-ID.

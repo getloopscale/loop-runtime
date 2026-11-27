@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package environment holds the Environment reconciler and the resources it
 // owns per environment — namespace, quota, network policy and RBAC.
@@ -25,14 +25,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/cellrouting"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/correlation"
-	"github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/cellrouting"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/correlation"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 const environmentFinalizer = constants.FinalizerEnvironment
@@ -59,11 +59,11 @@ var environmentSM = statemachine.NewEnvironmentTypedMachine()
 // (mgmt cluster) RBAC. Cross-cluster RBAC for runtime cluster
 // (namespaces/RBAC/NetworkPolicies in tenant envs) is hand-maintained.
 //
-// +kubebuilder:rbac:groups=loopzero.io,resources=environments,verbs=get;list;watch;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=environments/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=loopzero.io,resources=environments/finalizers,verbs=update
-// +kubebuilder:rbac:groups=loopzero.io,resources=tenants,verbs=get;list;watch;patch
-// +kubebuilder:rbac:groups="",namespace=loopzero-system,resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=environments/finalizers,verbs=update
+// +kubebuilder:rbac:groups=runtime.getloopscale.com,resources=tenants,verbs=get;list;watch;patch
+// +kubebuilder:rbac:groups="",namespace=loop-runtime-system,resources=secrets,verbs=get;list;watch
 type EnvironmentReconciler struct {
 	client.Client
 	RuntimeFactory   cellrouting.RuntimeClientFactory
@@ -74,8 +74,8 @@ type EnvironmentReconciler struct {
 // tenantCell returns the cell the parent Tenant is placed in. The Tenant is the
 // canonical record of placement (tenants.cell_id mirrors into Spec.CellID), so
 // an unreadable Tenant is an unknown cell, never a default one.
-func (r *EnvironmentReconciler) tenantCell(ctx context.Context, env *loopzerov1.Environment) (string, error) {
-	var tenant loopzerov1.Tenant
+func (r *EnvironmentReconciler) tenantCell(ctx context.Context, env *loopruntimev1.Environment) (string, error) {
+	var tenant loopruntimev1.Tenant
 	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
 	if err := r.Get(ctx, key, &tenant); err != nil {
 		return "", fmt.Errorf("environment %s: read tenant %s to resolve its cell: %w",
@@ -85,7 +85,7 @@ func (r *EnvironmentReconciler) tenantCell(ctx context.Context, env *loopzerov1.
 }
 
 // runtimeClientForCell resolves the runtime cluster client of a cell.
-func (r *EnvironmentReconciler) runtimeClientForCell(ctx context.Context, env *loopzerov1.Environment, cellID string) (client.Client, error) {
+func (r *EnvironmentReconciler) runtimeClientForCell(ctx context.Context, env *loopruntimev1.Environment, cellID string) (client.Client, error) {
 	c, err := r.RuntimeFactory.For(ctx, cellID)
 	if err != nil {
 		return nil, fmt.Errorf("environment %s (cellID=%q): runtime cluster client: %w", env.Name, cellID, err)
@@ -120,7 +120,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	logger := log.FromContext(ctx)
 
-	var env loopzerov1.Environment
+	var env loopruntimev1.Environment
 	if err := r.Get(ctx, req.NamespacedName, &env); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -130,7 +130,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// T1.1 of plan 2026-05-26-maturity-3-62-to-4-0-roadmap: propagate
 	// correlation-id from CR annotation into reconcile context (no-op when absent).
-	ctx = correlation.WithID(ctx, env.GetAnnotations()["loopzero.io/correlation-id"])
+	ctx = correlation.WithID(ctx, env.GetAnnotations()["runtime.getloopscale.com/correlation-id"])
 
 	// Handle deletion with verify-then-remove finalizer pattern
 	if !env.DeletionTimestamp.IsZero() {
@@ -162,7 +162,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	// Transition from empty to Pending via state machine (Rule 8).
 	if env.Status.Phase == "" {
-		env.Status.Phase = loopzerov1.EnvironmentPhase(
+		env.Status.Phase = loopruntimev1.EnvironmentPhase(
 			environmentSM.Transition(statemachine.EPhEmpty, statemachine.EPEventCreate),
 		)
 	}
@@ -282,13 +282,13 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// All conditions True -> transition to Active via state machine (Rule 8).
-	if env.Status.Phase != loopzerov1.EnvironmentPhaseActive {
+	if env.Status.Phase != loopruntimev1.EnvironmentPhaseActive {
 		next, err := environmentSM.TryTransition(statemachine.EnvironmentPhase(env.Status.Phase), statemachine.EPEventProvisioned)
 		if err != nil {
 			logger.Error(err, "invalid state transition", "phase", env.Status.Phase)
 			return ctrl.Result{}, err
 		}
-		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
+		env.Status.Phase = loopruntimev1.EnvironmentPhase(next)
 	}
 	env.Status.Namespace = nsName
 	env.Status.CellID = cellID
@@ -307,7 +307,7 @@ func (r *EnvironmentReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 }
 
 // reconcileDelete handles the verify-then-remove finalizer pattern for Environment deletion.
-func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopzerov1.Environment) (ctrl.Result, error) {
+func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopruntimev1.Environment) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
 	if !controllerutil.ContainsFinalizer(env, environmentFinalizer) {
@@ -326,13 +326,13 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 	base := env.DeepCopy()
 
 	// Transition to Deleting via state machine (Rule 8).
-	if env.Status.Phase != loopzerov1.EnvironmentPhaseDeleting {
+	if env.Status.Phase != loopruntimev1.EnvironmentPhaseDeleting {
 		next, err := environmentSM.TryTransition(statemachine.EnvironmentPhase(env.Status.Phase), statemachine.EPEventDeleteRequested)
 		if err != nil {
 			logger.Error(err, "invalid state transition for delete", "phase", env.Status.Phase)
 			return ctrl.Result{}, err
 		}
-		env.Status.Phase = loopzerov1.EnvironmentPhase(next)
+		env.Status.Phase = loopruntimev1.EnvironmentPhase(next)
 		if err := r.patchStatus(ctx, env, base); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -385,10 +385,10 @@ func (r *EnvironmentReconciler) reconcileDelete(ctx context.Context, env *loopze
 //
 // T2 record:
 // knowledge-base/decisions/MEET-ASYNC-AMENDMENT-2026-08-19-environment-delete-orphans-application.md
-func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context, env *loopzerov1.Environment) error {
+func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context, env *loopruntimev1.Environment) error {
 	logger := log.FromContext(ctx)
 
-	var tenant loopzerov1.Tenant
+	var tenant loopruntimev1.Tenant
 	key := client.ObjectKey{Name: env.Spec.TenantRef.Name, Namespace: env.Namespace}
 	if err := r.Get(ctx, key, &tenant); err != nil {
 		if errors.IsNotFound(err) {
@@ -400,7 +400,7 @@ func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context,
 	}
 
 	base := tenant.DeepCopy()
-	kept := make([]loopzerov1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
+	kept := make([]loopruntimev1.TenantEnvironmentEntry, 0, len(tenant.Spec.Environments))
 	for _, e := range tenant.Spec.Environments {
 		if e.Project == env.Spec.Project && e.Name == env.Spec.Environment {
 			continue
@@ -430,7 +430,7 @@ func (r *EnvironmentReconciler) pruneTenantEnvironmentEntry(ctx context.Context,
 //
 // ok is false when nothing was ever provisioned (no recorded namespace) and the
 // cell is unknowable — the only case where there is nothing to delete.
-func (r *EnvironmentReconciler) deletionCell(ctx context.Context, env *loopzerov1.Environment) (cellID string, ok bool, err error) {
+func (r *EnvironmentReconciler) deletionCell(ctx context.Context, env *loopruntimev1.Environment) (cellID string, ok bool, err error) {
 	if env.Status.CellID != "" {
 		return env.Status.CellID, true, nil
 	}
@@ -449,7 +449,7 @@ func (r *EnvironmentReconciler) deletionCell(ctx context.Context, env *loopzerov
 // and reports whether it is gone. Any lookup failure other than NotFound is
 // returned: "could not see it" is not "it is gone", and releasing the finalizer
 // on that confusion leaks the namespace and its workloads.
-func (r *EnvironmentReconciler) deleteNamespace(ctx context.Context, env *loopzerov1.Environment, nsName string) (bool, error) {
+func (r *EnvironmentReconciler) deleteNamespace(ctx context.Context, env *loopruntimev1.Environment, nsName string) (bool, error) {
 	cellID, ok, err := r.deletionCell(ctx, env)
 	if err != nil {
 		return false, err
@@ -491,7 +491,7 @@ func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, factory cellrouting
 	}
 	ingressNS := os.Getenv("INGRESS_NAMESPACE")
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&loopzerov1.Environment{}, reconcileloop.ForOption()).
+		For(&loopruntimev1.Environment{}, reconcileloop.ForOption()).
 		Named("environment").
 		Complete(&EnvironmentReconciler{
 			Client:           mgr.GetClient(),
@@ -505,7 +505,7 @@ func SetupEnvironmentControllerWithFactory(mgr ctrl.Manager, factory cellrouting
 // kstatus readiness summary in as the last mutation (ADR-0025 D3) and persists
 // with a merge patch off base, so every write carries a Ready condition that
 // agrees with the conditions written beside it.
-func (r *EnvironmentReconciler) patchStatus(ctx context.Context, env, base *loopzerov1.Environment) error {
+func (r *EnvironmentReconciler) patchStatus(ctx context.Context, env, base *loopruntimev1.Environment) error {
 	conditions.SetReadinessSummaryViaPkg(&env.Status.Conditions, env.Generation, environmentDetailTypes)
 	return r.Status().Patch(ctx, env, client.MergeFrom(base))
 }

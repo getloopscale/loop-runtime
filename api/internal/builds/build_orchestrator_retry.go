@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // RetryReleaseActivation retries Phase 2 (release activation) for a build stuck
@@ -31,6 +31,9 @@ func (o *BuildOrchestrator) RetryReleaseActivation(ctx context.Context, build *d
 
 	activationErr := o.activate(ctx, build, result)
 	if activationErr != nil {
+		if o.failOnUndeliveredSecrets(ctx, build, activationErr) {
+			return activationErr
+		}
 		slog.Warn("retry release activation: Phase 2 failed, will retry on next tick",
 			"build_id", build.ID, "error", activationErr)
 		o.emitActivationFailure(ctx, build.ID, activationErr)

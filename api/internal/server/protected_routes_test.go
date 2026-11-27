@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
@@ -11,31 +11,31 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
-	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
-	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
-	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
-	"github.com/getloopscale/loopzero/api/internal/source"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
-	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
-	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
-	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/audit/audithttp"
+	"github.com/getloopscale/loop-runtime/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/preview/previewhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/promotehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling/scalinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/timelinehttp"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // Registration-only stubs: each embeds its interface, so it satisfies it
@@ -141,7 +141,7 @@ var protectedFamilies = []protectedFamily{
 	{surfaces.BuildAttestation, func(c *Config) { c.BuildAttestationHandler = nil }, []string{
 		"GET /api/v1/builds/{id}/attestation"}},
 	{surfaces.BuildSBOM, func(c *Config) { c.BuildSBOMHandler = nil }, []string{
-		"GET /api/v1/builds/{id}/sbom"}},
+		"GET /api/v1/builds/{id}/sbom", "GET /api/v1/builds/{id}/sbom/{app}/download"}},
 	{surfaces.BuildLogs, func(c *Config) { c.LogsHandler = nil }, []string{
 		"GET /api/v1/builds/{id}/logs"}},
 	{surfaces.LogStream, func(c *Config) { c.LogStreamHandler = nil }, []string{
@@ -159,7 +159,7 @@ var protectedFamilies = []protectedFamily{
 	{surfaces.BuildStats, func(c *Config) { c.BuildStatsHandler = nil }, []string{
 		"GET /api/v1/builds/stats"}},
 	{surfaces.Rollback, func(c *Config) { c.RollbackHandler = nil }, []string{
-		"POST /api/v1/projects/{name}/rollback"}},
+		"POST /api/v1/projects/{name}/rollback", "GET /api/v1/projects/{name}/rollbacks"}},
 	{surfaces.Promote, func(c *Config) { c.PromoteHandler = nil }, []string{
 		"POST /api/v1/projects/{name}/promote"}},
 	{surfaces.Teams, func(c *Config) { c.TeamHandler = nil }, []string{
@@ -179,7 +179,9 @@ var protectedFamilies = []protectedFamily{
 		"POST /api/v1/projects/{name}/connect", "DELETE /api/v1/projects/{name}/connect",
 		"GET /api/v1/projects/{name}/connect"}},
 	{surfaces.IntegrationsGitHub, func(c *Config) { c.IntegrationsGitHubHandler = nil }, []string{
-		"GET /api/v1/integrations/github/installations/{id}/repositories"}},
+		"GET /api/v1/integrations/github/installations/{id}/repositories",
+		"GET /api/v1/integrations/github/installations",
+		"POST /api/v1/integrations/github/installations/claim"}},
 	{surfaces.Previews, func(c *Config) { c.PreviewHandler = nil }, []string{
 		"GET /api/v1/projects/{project}/previews", "GET /api/v1/projects/{project}/previews/{id}",
 		"DELETE /api/v1/projects/{project}/previews/{id}", "POST /api/v1/projects/{project}/previews"}},

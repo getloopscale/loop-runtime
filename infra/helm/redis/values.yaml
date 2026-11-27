@@ -13,7 +13,7 @@
 #
 # Install:
 #   helm install redis oci://registry-1.docker.io/bitnamicharts/redis \
-#     -n loopzero-system -f values.yaml
+#     -n loop-runtime-system -f values.yaml
 #
 # Cost: ~0 (runs as a pod on existing mgmt cluster node, <128Mi RAM)
 

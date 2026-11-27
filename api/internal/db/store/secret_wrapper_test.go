@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -30,7 +30,7 @@ package store
 //
 // Per D6 ADR of the plan, this is an integration test against a real
 // PostgreSQL instance via DATABASE_URL (default
-// postgres://postgres:postgres@localhost:5432/loopzero_test). Skips
+// postgres://postgres:postgres@localhost:5432/loop_runtime_test). Skips
 // gracefully when PG is unreachable so the wider unit suite is not
 // blocked by infra availability.
 
@@ -41,7 +41,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

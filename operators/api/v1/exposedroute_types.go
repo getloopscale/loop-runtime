@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -19,7 +19,7 @@ const (
 )
 
 // ExposedRoute is the Schema for the exposedroutes API.
-// An ExposedRoute represents DNS/TLS exposure for a LoopZeroApplication,
+// An ExposedRoute represents DNS/TLS exposure for a LoopRuntimeApplication,
 // managing certificate status and reachability probes.
 //
 // +kubebuilder:object:root=true
@@ -37,7 +37,7 @@ type ExposedRoute struct {
 
 // ExposedRouteSpec defines the desired state of an ExposedRoute.
 type ExposedRouteSpec struct {
-	// ApplicationRef is the name of the parent LoopZeroApplication CR.
+	// ApplicationRef is the name of the parent LoopRuntimeApplication CR.
 	// +kubebuilder:validation:MinLength=1
 	ApplicationRef string `json:"applicationRef"`
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // ---------------------------------------------------------------------------
@@ -219,6 +219,7 @@ type fakeCompletionHandlerRL struct {
 	onBuildCompletedCalls int
 	retryErr              error
 	retryCalls            int
+	retryResult           deploycontracts.BuildCallbackRequest
 	findReleaseResult     *db.Release
 	findReleaseErr        error
 	// findReleaseScope is the database scope the loop handed the orchestrator.
@@ -232,10 +233,11 @@ func (f *fakeCompletionHandlerRL) OnBuildCompleted(_ context.Context, _ string, 
 	return f.onBuildCompletedErr
 }
 
-func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *db.Build, _ deploycontracts.BuildCallbackRequest) error {
+func (f *fakeCompletionHandlerRL) RetryReleaseActivation(_ context.Context, _ *db.Build, result deploycontracts.BuildCallbackRequest) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.retryCalls++
+	f.retryResult = result
 	return f.retryErr
 }
 
@@ -272,7 +274,7 @@ type fakeAppCRMgr struct {
 	calls []ApplicationCRInput
 }
 
-func (f *fakeAppCRMgr) EnsureLoopZeroApplication(_ context.Context, input ApplicationCRInput) error {
+func (f *fakeAppCRMgr) EnsureLoopRuntimeApplication(_ context.Context, input ApplicationCRInput) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, input)
@@ -384,7 +386,7 @@ func defaultBuild(id, status string) *db.Build {
 
 // succeededStatusWithDigests builds a WorkflowStatus that mimics what the
 // Argo Workflow CR reports after a successful cosign signing step. The
-// supply-chain VAP (loopzero-require-image-signature) requires manifests to
+// supply-chain VAP (loop-runtime-require-image-signature) requires manifests to
 // reference images by digest, so reconcile tests MUST surface a digest in
 // the workflow outputs — otherwise BuildManifestApps fails-loud and
 // downstream calls (OnBuildCompleted/RetryReleaseActivation) never fire.
@@ -910,12 +912,12 @@ func TestEnsureApplicationCRs_NonFatal(t *testing.T) {
 	// Act: should NOT panic or return error
 	loop.ensureApplicationCRs(context.Background(), b, apps)
 
-	// Assert: EnsureLoopZeroApplication was called for each app despite errors
+	// Assert: EnsureLoopRuntimeApplication was called for each app despite errors
 	fakes.appCRMgr.mu.Lock()
 	callCount := len(fakes.appCRMgr.calls)
 	fakes.appCRMgr.mu.Unlock()
 	if callCount != 2 {
-		t.Errorf("expected 2 EnsureLoopZeroApplication calls (non-fatal), got %d", callCount)
+		t.Errorf("expected 2 EnsureLoopRuntimeApplication calls (non-fatal), got %d", callCount)
 	}
 }
 

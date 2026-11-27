@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package enforcement
 
@@ -13,7 +13,7 @@ import (
 // The gate has to say WHY it allowed.
 //
 // B-033, measured on app-dev 2026-08-11: the aggregator that fills `cost_counters` is off
-// (`LOOPZERO_PROMETHEUS_URL` missing from the Deployment), the table has **0 rows**, and the
+// (`LOOP_RUNTIME_PROMETHEUS_URL` missing from the Deployment), the table has **0 rows**, and the
 // `Check` contract treats a missing row as zero usage — so **every** cost cap allows, and
 // nothing tells that apart from "the tenant really used nothing".
 //

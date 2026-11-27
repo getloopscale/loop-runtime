@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -7,7 +7,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ApplicationPhase represents the lifecycle phase of a LoopZeroApplication.
+// ApplicationPhase represents the lifecycle phase of a LoopRuntimeApplication.
 // +kubebuilder:validation:Enum=Progressing;Serving;Reachable;Degraded;Down;Cleaned
 type ApplicationPhase string
 
@@ -24,11 +24,11 @@ const (
 	ApplicationPhaseCleaned ApplicationPhase = "Cleaned"
 )
 
-// LoopZeroApplication is the Schema for the loopzeroapplications API.
-// A LoopZeroApplication represents a tenant's deployed application, managing
+// LoopRuntimeApplication is the Schema for the loopruntimeapplications API.
+// A LoopRuntimeApplication represents a tenant's deployed application, managing
 // hostname assignment, ExposedRoute creation, and health tracking.
 //
-// Named LoopZeroApplication (not Application) to avoid collision with ArgoCD's
+// Named LoopRuntimeApplication (not Application) to avoid collision with ArgoCD's
 // Application type.
 //
 // +kubebuilder:object:root=true
@@ -36,16 +36,16 @@ const (
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.status.url`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-type LoopZeroApplication struct {
+type LoopRuntimeApplication struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   LoopZeroApplicationSpec   `json:"spec,omitempty"`
-	Status LoopZeroApplicationStatus `json:"status,omitempty"`
+	Spec   LoopRuntimeApplicationSpec   `json:"spec,omitempty"`
+	Status LoopRuntimeApplicationStatus `json:"status,omitempty"`
 }
 
-// LoopZeroApplicationSpec defines the desired state of a LoopZeroApplication.
-type LoopZeroApplicationSpec struct {
+// LoopRuntimeApplicationSpec defines the desired state of a LoopRuntimeApplication.
+type LoopRuntimeApplicationSpec struct {
 	// TenantRef is the name of the parent Tenant CR.
 	// +kubebuilder:validation:MinLength=1
 	TenantRef string `json:"tenantRef"`
@@ -66,7 +66,7 @@ type LoopZeroApplicationSpec struct {
 	// in loopzero.yaml). Together with TenantRef, Project and Environment it
 	// composes the routed hostname through pkg/naming.AppHostname, the formula
 	// the IngressRoute renderer uses. Optional so CRs written before the field
-	// existed stay valid: for those the controller reads the loopzero.io/app label
+	// existed stay valid: for those the controller reads the runtime.getloopscale.com/app label
 	// the api has always set on the CR.
 	// +optional
 	AppName string `json:"appName,omitempty"`
@@ -90,8 +90,8 @@ type LoopZeroApplicationSpec struct {
 	ServicePort int32 `json:"servicePort,omitempty"`
 }
 
-// LoopZeroApplicationStatus defines the observed state of a LoopZeroApplication.
-type LoopZeroApplicationStatus struct {
+// LoopRuntimeApplicationStatus defines the observed state of a LoopRuntimeApplication.
+type LoopRuntimeApplicationStatus struct {
 	// Phase represents the overall application lifecycle phase.
 	Phase ApplicationPhase `json:"phase,omitempty"`
 
@@ -112,11 +112,11 @@ type LoopZeroApplicationStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
-// LoopZeroApplicationList contains a list of LoopZeroApplication resources.
+// LoopRuntimeApplicationList contains a list of LoopRuntimeApplication resources.
 //
 // +kubebuilder:object:root=true
-type LoopZeroApplicationList struct {
+type LoopRuntimeApplicationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []LoopZeroApplication `json:"items"`
+	Items           []LoopRuntimeApplication `json:"items"`
 }

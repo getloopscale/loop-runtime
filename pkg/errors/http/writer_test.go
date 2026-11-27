@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package http
 
@@ -11,13 +11,13 @@ import (
 	"strings"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 func TestWriteJSON_EmitsRFC9457Shape(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/projects/foo/deploys", nil)
-	WriteJSON(rr, req, loopzeroerrors.ErrLockTimeout)
+	WriteJSON(rr, req, loopruntimeerrors.ErrLockTimeout)
 
 	if got := rr.Code; got != http.StatusConflict {
 		t.Errorf("status = %d, want 409", got)
@@ -46,12 +46,12 @@ func TestWriteJSON_EmitsRFC9457Shape(t *testing.T) {
 	}
 }
 
-func TestWriteJSON_NonLoopZeroErrorEmitsInternalError(t *testing.T) {
+func TestWriteJSON_NonLoopRuntimeErrorEmitsInternalError(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 	WriteJSON(rr, req, stderrors.New("oops"))
 	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("non-LoopZeroError must produce 500; got %d", rr.Code)
+		t.Errorf("non-LoopRuntimeError must produce 500; got %d", rr.Code)
 	}
 	var pd map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &pd); err != nil {
@@ -64,7 +64,7 @@ func TestWriteJSON_NonLoopZeroErrorEmitsInternalError(t *testing.T) {
 
 func TestWriteJSON_OmitsInstanceWhenRequestNil(t *testing.T) {
 	rr := httptest.NewRecorder()
-	WriteJSON(rr, nil, loopzeroerrors.ErrUnauthorized)
+	WriteJSON(rr, nil, loopruntimeerrors.ErrUnauthorized)
 	var pd map[string]any
 	_ = json.Unmarshal(rr.Body.Bytes(), &pd)
 	if _, ok := pd["instance"]; ok {

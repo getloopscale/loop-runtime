@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Envtest regression specs for Op B (live CA fetch from kube-root-ca.crt).
 // Plan: docs/plans/completed/2026-05-25-live-ca-fetch-clustercredential-plan.md T3.1
@@ -36,8 +36,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/platform"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/platform"
 )
 
 // distinctFakeCAPEM is a syntactically valid PEM that differs from any
@@ -121,20 +121,20 @@ var _ = Describe("Op B: Live CA fetch (issue #67 follow-up)", Ordered, func() {
 		}
 	})
 
-	mkOpBCRAndSecret := func(name string) (*loopzerov1.ClusterCredential, *corev1.Secret, []byte) {
+	mkOpBCRAndSecret := func(name string) (*loopruntimev1.ClusterCredential, *corev1.Secret, []byte) {
 		secretName := fmt.Sprintf("%s-secret", name)
 		kubeconfigData := buildOpBKubeconfig(cfg.Host, "test-token", snapshotCA)
 		sec := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: secretName, Namespace: "default"},
 			Data:       map[string][]byte{"kubeconfig": kubeconfigData},
 		}
-		cr := &loopzerov1.ClusterCredential{
+		cr := &loopruntimev1.ClusterCredential{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
-			Spec: loopzerov1.ClusterCredentialSpec{
+			Spec: loopruntimev1.ClusterCredentialSpec{
 				ClusterName: name,
 				APIServer:   cfg.Host,
-				SecretRef:   loopzerov1.SecretReference{Name: secretName, Namespace: "default"},
-				Scope:       loopzerov1.CredentialScope{ArgoCD: true},
+				SecretRef:   loopruntimev1.SecretReference{Name: secretName, Namespace: "default"},
+				Scope:       loopruntimev1.CredentialScope{ArgoCD: true},
 			},
 		}
 		return cr, sec, kubeconfigData

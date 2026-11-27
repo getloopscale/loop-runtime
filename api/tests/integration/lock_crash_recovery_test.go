@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package integration tests advisory lock crash recovery behavior.
 //
@@ -24,14 +24,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
 )
 
 // dbURL returns the PostgreSQL connection string for tests.
 func dbURL() string {
 	url := os.Getenv("DATABASE_URL")
 	if url == "" {
-		url = "postgres://postgres:postgres@localhost:5432/loopzero_test?sslmode=disable"
+		url = "postgres://postgres:postgres@localhost:5432/loop_runtime_test?sslmode=disable"
 	}
 	return url
 }

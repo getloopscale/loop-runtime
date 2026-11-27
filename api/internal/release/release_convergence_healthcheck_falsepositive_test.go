@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
@@ -12,13 +12,13 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // TestReleaseConvergenceLoop_HealthCheck_ConvergingNotFlagged locks the fix for
-// loopzero-cloud#242 follow-up (the promote-to-production "sem sucesso" false alarm).  // english-only: verbatim dashboard label, meaning without success
+// loop-console#242 follow-up (the promote-to-production "sem sucesso" false alarm).  // english-only: verbatim dashboard label, meaning without success
 //
 // Root cause: healthCheckActiveReleases discarded the `synced` return of
 // GetAppStatus and flagged FalseSuccessTotal whenever `!healthy`. But during

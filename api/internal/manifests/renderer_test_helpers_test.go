@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // Plan v1.2 T3.1 — shared test helper. Render now returns (string, error);
 // tests that previously passed the result inline (e.g.

@@ -1,13 +1,13 @@
 apiVersion: v2
 name: opencost
 description: |
-  LoopZero wrapper around upstream OpenCost — Kubernetes cost monitoring.
+  LoopRuntime wrapper around upstream OpenCost — Kubernetes cost monitoring.
   Materializes Anti-Pattern #8 of plan 2026-05-22-shell-script-strategic-plan.md v1.3
   (T7.2): adopts external OpenCost tool instead of reimplementing as
   pkg/quality/costattribution/ Go gate.
 
   Installed in mgmt cluster, integrated with existing Prometheus federation.
-  Cost attribution per tenant via namespace label `loopzero.io/tenant`.
+  Cost attribution per tenant via namespace label `runtime.getloopscale.com/tenant`.
   Cost source: DigitalOcean on-demand pricing (public, free).
 type: application
 version: 1.0.0

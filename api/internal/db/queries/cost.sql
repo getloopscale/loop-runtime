@@ -169,7 +169,7 @@ ON CONFLICT (tenant_id, metric, period_start) DO UPDATE SET quantity = usage_rec
 
 -- name: GetPlanTierForTenant :one
 -- EC-4: plan_tier from the subscriptions BILLING status (NOT tenant lifecycle).
--- Missing/none → caller defaults to 'starter' + loopzero_metering_missing_plan_total WARN.
+-- Missing/none → caller defaults to 'starter' + loop_runtime_metering_missing_plan_total WARN.
 SELECT COALESCE(plan, 'starter')::text AS plan_tier
 FROM subscriptions
 WHERE tenant_id = @tenant_id::text AND status = 'active';

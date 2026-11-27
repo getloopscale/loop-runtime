@@ -1,4 +1,4 @@
-# AM6 — loopzero artifact pipeline, dual-channel + low-cost.
+# AM6 — loop-runtime artifact pipeline, dual-channel + low-cost.
 #   develop push  → DEV channel: build only CHANGED services (paths-filter), tags :develop/:develop-<sha>, NO sign (cheap/fast)
 #   tag v*        → RELEASE channel: build ALL 9 images + ALL charts, SBOM + provenance + keyless cosign
 #   workflow_dispatch → build ALL (unsigned), manual
@@ -68,15 +68,16 @@ jobs:
         uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3 (SHA-pin; issue #233)
         with:
           filters: |
-            loopzero-api: ['api/**', 'pkg/**']
-            loopzero-app-operator: ['operators/**', 'pkg/**']
-            loopzero-platform-operator: ['operators/**', 'pkg/**']
-            loopzero-tenant-operator: ['operators/**', 'pkg/**']
-            loopzero-preview-operator: ['operators/**', 'pkg/**']
-            loopzero-minio: ['infra/images/minio/**']
-            loopzero-clone-runner: ['infra/images/clone-runner/**']
-            loopzero-syft-scanner: ['infra/images/syft-scanner/**']
-            loopzero-cosign-signer: ['infra/images/cosign-signer/**']
+            loop-runtime-api: ['api/**', 'pkg/**']
+            loop-runtime-app-operator: ['operators/**', 'pkg/**']
+            loop-runtime-platform-operator: ['operators/**', 'pkg/**']
+            loop-runtime-tenant-operator: ['operators/**', 'pkg/**']
+            loop-runtime-preview-operator: ['operators/**', 'pkg/**']
+            loop-runtime-minio: ['infra/images/minio/**']
+            loop-runtime-clone-runner: ['infra/images/clone-runner/**']
+            loop-runtime-syft-scanner: ['infra/images/syft-scanner/**']
+            loop-runtime-cosign-signer: ['infra/images/cosign-signer/**']
+            loop-edge: ['infra/images/loop-edge/**']
             charts: ['charts/**']
       - id: set
         env:
@@ -85,7 +86,7 @@ jobs:
           CHANGES: ${{ steps.filter.outputs.changes }}
         run: |
           set -euo pipefail
-          ALL='[{"image":"loopzero-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loopzero-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loopzero-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loopzero-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loopzero-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."},{"image":"loopzero-minio","dockerfile":"infra/images/minio/Dockerfile","context":"infra/images/minio"},{"image":"loopzero-clone-runner","dockerfile":"infra/images/clone-runner/Dockerfile","context":"infra/images/clone-runner"},{"image":"loopzero-syft-scanner","dockerfile":"infra/images/syft-scanner/Dockerfile","context":"infra/images/syft-scanner"},{"image":"loopzero-cosign-signer","dockerfile":"infra/images/cosign-signer/Dockerfile","context":"infra/images/cosign-signer"}]'
+          ALL='[{"image":"loop-runtime-api","dockerfile":"api/Dockerfile","context":"."},{"image":"loop-runtime-app-operator","dockerfile":"operators/Dockerfile.app-operator","context":"."},{"image":"loop-runtime-platform-operator","dockerfile":"operators/Dockerfile.platform-operator","context":"."},{"image":"loop-runtime-tenant-operator","dockerfile":"operators/Dockerfile.tenant-operator","context":"."},{"image":"loop-runtime-preview-operator","dockerfile":"operators/Dockerfile.preview-operator","context":"."},{"image":"loop-runtime-minio","dockerfile":"infra/images/minio/Dockerfile","context":"infra/images/minio"},{"image":"loop-runtime-clone-runner","dockerfile":"infra/images/clone-runner/Dockerfile","context":"infra/images/clone-runner"},{"image":"loop-runtime-syft-scanner","dockerfile":"infra/images/syft-scanner/Dockerfile","context":"infra/images/syft-scanner"},{"image":"loop-runtime-cosign-signer","dockerfile":"infra/images/cosign-signer/Dockerfile","context":"infra/images/cosign-signer"},{"image":"loop-edge","dockerfile":"infra/images/loop-edge/Dockerfile","context":"infra/images/loop-edge"}]'
           # A grouped block instead of three `>>` (SC2129): one redirect opens the file
           # once. Beyond style, it avoids the class of bug where one of the redirects is
           # written `>` by mistake and truncates what the earlier ones wrote — in
@@ -128,7 +129,7 @@ jobs:
       context: ${{ matrix.context }}
       sign: ${{ needs.plan.outputs.sign == 'true' }}
       # The CRITICAL+HIGH gate (fixed only) the control plane's images already pass. Off,
-      # images built on Go 1.26.1 reached ECR with 53 HIGH findings in loopzero-api.
+      # images built on Go 1.26.1 reached ECR with 53 HIGH findings in loop-runtime-api.
       trivy: true
       # Amazon ECR, the registry production pulls from. Both are repository variables:
       # unset, the reusable skips ECR entirely instead of failing the GHCR channel.
@@ -144,11 +145,11 @@ jobs:
       # that would break on the day the operators gained the same endpoint.
       #
       # `ref_name` is the CHANNEL (develop / vX.Y.Z) — what the dashboard's reader
-      # recognises; the exact sha goes in LOOPZERO_COMMIT, beside it.
+      # recognises; the exact sha goes in LOOP_RUNTIME_COMMIT, beside it.
       build_args: |
-        LOOPZERO_VERSION=${{ needs.plan.outputs.version }}
-        LOOPZERO_COMMIT=${{ github.sha }}
-        LOOPZERO_BUILD_DATE=${{ needs.plan.outputs.built_at }}
+        LOOP_RUNTIME_VERSION=${{ needs.plan.outputs.version }}
+        LOOP_RUNTIME_COMMIT=${{ github.sha }}
+        LOOP_RUNTIME_BUILD_DATE=${{ needs.plan.outputs.built_at }}
     # NAMED, not `inherit`. `inherit` hands EVERY repository secret to the called workflow,
     # including the ones it does not declare and the ones created later. These four are the
     # ones `build-publish.yml` declares in `workflow_call.secrets`; a fifth created tomorrow
@@ -197,13 +198,22 @@ jobs:
           # lowercase: account names preserve case, OCI references do not.
           NS="$(printf '%s' "$OWNER" | tr '[:upper:]' '[:lower:]')"
           mkdir -p /tmp/charts
-          # loopzero-common is a library chart that image-backed charts depend on; resolve
+          # loop-runtime-common is a library chart that image-backed charts depend on; resolve
           # local (file://) deps into charts/<chart>/charts/ before packaging.
           for c in charts/*/; do
             [ -f "$c/Chart.yaml" ] || continue
             helm dependency update "$c"
             helm package "$c" -d /tmp/charts
           done
+          # Every merge pushes every chart, so a transient GHCR error (run 45447262098: `failed
+          # to perform "Tag" on destination: ...: not found`) is retried before the run fails.
           for tgz in /tmp/charts/*.tgz; do
-            helm push "$tgz" "oci://ghcr.io/${NS}/charts"
+            for attempt in 1 2 3; do
+              helm push "$tgz" "oci://ghcr.io/${NS}/charts" && break
+              if [ "$attempt" = 3 ]; then
+                echo "::error::pushing $(basename "$tgz") failed 3 times"
+                exit 1
+              fi
+              sleep $((attempt * 10))
+            done
           done

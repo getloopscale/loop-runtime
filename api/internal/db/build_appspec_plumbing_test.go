@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
@@ -9,7 +9,7 @@ import (
 )
 
 // T0.2 (plan simplify-deploy-loopzerokit-only v2.0) — start/path/build plumbing.
-// Removing loopzero-packs (which auto-detected start/build at build time) means
+// Removing loop-runtime-packs (which auto-detected start/build at build time) means
 // the build pipeline must PERSIST the declared services.json start command,
 // app path (monorepo), and build mode. build_adapter.go:160-164 documents the
 // pre-existing gap ("schema does not persist them"). This test locks the

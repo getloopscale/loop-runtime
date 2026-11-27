@@ -97,7 +97,7 @@ func (c *prometheusClient) QueryRange(ctx context.Context, promQL string, startU
 		if err != nil {
 			continue
 		}
-		// loopzero#180: Prometheus serializes NaN/Inf as "NaN"/"+Inf"/"-Inf", which
+		// loop-runtime#180: Prometheus serializes NaN/Inf as "NaN"/"+Inf"/"-Inf", which
 		// ParseFloat accepts WITHOUT error. A non-finite sample (e.g. error_rate
 		// 0/0 for an idle-but-has-history tenant) is never a displayable metric
 		// value — drop it so an all-non-finite series collapses to empty and the

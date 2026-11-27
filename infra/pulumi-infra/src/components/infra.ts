@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 import * as pulumi from "@pulumi/pulumi";
 import { resourceName, bucketName } from "../core/naming";
@@ -62,7 +62,7 @@ export interface InfraOutputs {
  *
  * DigitalOcean is the only provider this stack has or will have: it is AS-IS
  * legacy retired at AM10, and the AWS re-platform lives in Terraform
- * (../loopzero-infra-live), not here. Any other name is a configuration error.
+ * (../loop-runtime-infra-live), not here. Any other name is a configuration error.
  */
 export function resolveProvider(provider: CloudProvider): CloudProviderFactory {
   switch (provider) {

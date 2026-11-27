@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform_test
 
@@ -15,33 +15,33 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
 // newPlatformBootstrap creates a PlatformBootstrap CR for testing.
 // giteaURL, argoCDURL, and apiURL point to httptest servers simulating real services.
-func newPlatformBootstrap(name, namespace, giteaURL, argoCDURL, apiURL string) *loopzerov1.PlatformBootstrap {
-	return &loopzerov1.PlatformBootstrap{
+func newPlatformBootstrap(name, namespace, giteaURL, argoCDURL, apiURL string) *loopruntimev1.PlatformBootstrap {
+	return &loopruntimev1.PlatformBootstrap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: loopzerov1.PlatformBootstrapSpec{
-			Gitea: loopzerov1.GiteaBootstrapSpec{
-				AdminSecretRef: loopzerov1.SecretKeyRef{
+		Spec: loopruntimev1.PlatformBootstrapSpec{
+			Gitea: loopruntimev1.GiteaBootstrapSpec{
+				AdminSecretRef: loopruntimev1.SecretKeyRef{
 					Name: "gitea-admin",
 				},
-				Organizations: []string{"loopzero"},
+				Organizations: []string{"loop-runtime"},
 				TokenName:     "platform-bootstrap-token",
 				InternalURL:   giteaURL,
 			},
-			ArgoCD: loopzerov1.ArgoCDBootstrapSpec{
+			ArgoCD: loopruntimev1.ArgoCDBootstrapSpec{
 				Namespace:       "argocd",
 				AdminSecretName: "argocd-initial-admin-secret",
 				InternalURL:     argoCDURL,
 			},
-			API: loopzerov1.APIBootstrapSpec{
+			API: loopruntimev1.APIBootstrapSpec{
 				BootstrapEndpoint: apiURL + "/internal/bootstrap",
 				HealthEndpoint:    apiURL + "/api/v1/health",
 			},
@@ -104,14 +104,14 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					w.WriteHeader(http.StatusCreated)
 					_, _ = fmt.Fprint(w, `{"id":1,"name":"platform-bootstrap-token","sha1":"test-token-value-12345"}`)
 
-				case r.URL.Path == "/api/v1/orgs/loopzero" && r.Method == http.MethodGet:
+				case r.URL.Path == "/api/v1/orgs/loop-runtime" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loop-runtime"}`)
 
 				case r.URL.Path == "/api/v1/orgs" && r.Method == http.MethodPost:
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusCreated)
-					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loop-runtime"}`)
 
 				default:
 					http.Error(w, fmt.Sprintf("unexpected gitea request: %s %s", r.Method, r.URL.Path), http.StatusNotFound)
@@ -129,7 +129,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `{"Version":"v2.10.0"}`)
 
-				case r.URL.Path == "/api/v1/account/loopzero-api/token" && r.Method == http.MethodPost:
+				case r.URL.Path == "/api/v1/account/loop-runtime-api/token" && r.Method == http.MethodPost:
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `{"token":"argocd-api-key-token-67890"}`)
 
@@ -187,7 +187,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 			// Create platform-tokens secret namespace-local for token storage
 			platformTokensSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "loopzero-platform-tokens",
+					Name:      "loop-runtime-platform-tokens",
 					Namespace: pbNamespace,
 				},
 				StringData: map[string]string{},
@@ -207,17 +207,17 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 		It("should transition through all phases to BootstrapComplete", func() {
 			Eventually(func(g Gomega) {
-				var pb loopzerov1.PlatformBootstrap
+				var pb loopruntimev1.PlatformBootstrap
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name:      pbName,
 					Namespace: pbNamespace,
 				}, &pb)).To(Succeed())
-				g.Expect(pb.Status.Phase).To(Equal(loopzerov1.PlatformBootstrapPhaseComplete))
+				g.Expect(pb.Status.Phase).To(Equal(loopruntimev1.PlatformBootstrapPhaseComplete))
 			}, timeout, interval).Should(Succeed())
 		})
 
 		It("should set GiteaReady condition to True", func() {
-			var pb loopzerov1.PlatformBootstrap
+			var pb loopruntimev1.PlatformBootstrap
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      pbName,
 				Namespace: pbNamespace,
@@ -226,7 +226,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 		})
 
 		It("should set ArgoCDReady condition to True", func() {
-			var pb loopzerov1.PlatformBootstrap
+			var pb loopruntimev1.PlatformBootstrap
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      pbName,
 				Namespace: pbNamespace,
@@ -235,7 +235,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 		})
 
 		It("should set DatabaseSeeded condition to True", func() {
-			var pb loopzerov1.PlatformBootstrap
+			var pb loopruntimev1.PlatformBootstrap
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name:      pbName,
 				Namespace: pbNamespace,
@@ -246,7 +246,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 		It("should store tokens in the platform-tokens Secret", func() {
 			var secret corev1.Secret
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
-				Name:      "loopzero-platform-tokens",
+				Name:      "loop-runtime-platform-tokens",
 				Namespace: pbNamespace,
 			}, &secret)).To(Succeed())
 			Expect(secret.Data).To(HaveKey("GITEA_TOKEN"))
@@ -280,7 +280,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 			// Platform tokens secret for this test
 			platformTokensSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "loopzero-platform-tokens-fail",
+					Name:      "loop-runtime-platform-tokens-fail",
 					Namespace: pbNamespace,
 				},
 				StringData: map[string]string{},
@@ -296,14 +296,14 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 		It("should stay in ConfiguringGitea phase and increment retryCount", func() {
 			Eventually(func(g Gomega) {
-				var pb loopzerov1.PlatformBootstrap
+				var pb loopruntimev1.PlatformBootstrap
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name:      pbName,
 					Namespace: pbNamespace,
 				}, &pb)).To(Succeed())
 				g.Expect(pb.Status.Phase).To(SatisfyAny(
-					Equal(loopzerov1.PlatformBootstrapPhaseConfiguringGitea),
-					Equal(loopzerov1.PlatformBootstrapPhaseFailed),
+					Equal(loopruntimev1.PlatformBootstrapPhaseConfiguringGitea),
+					Equal(loopruntimev1.PlatformBootstrapPhaseFailed),
 				))
 				g.Expect(pb.Status.RetryCount).To(BeNumerically(">", 0))
 			}, timeout, interval).Should(Succeed())
@@ -311,12 +311,12 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 		It("should transition to Failed after max retries", func() {
 			Eventually(func(g Gomega) {
-				var pb loopzerov1.PlatformBootstrap
+				var pb loopruntimev1.PlatformBootstrap
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name:      pbName,
 					Namespace: pbNamespace,
 				}, &pb)).To(Succeed())
-				g.Expect(pb.Status.Phase).To(Equal(loopzerov1.PlatformBootstrapPhaseFailed))
+				g.Expect(pb.Status.Phase).To(Equal(loopruntimev1.PlatformBootstrapPhaseFailed))
 			}, timeout, interval).Should(Succeed())
 		})
 	})
@@ -353,9 +353,9 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 				case r.URL.Path == "/api/v1/users/gitea_admin/tokens" && r.Method == http.MethodGet:
 					w.Header().Set("Content-Type", "application/json")
 					_, _ = fmt.Fprint(w, `[{"id":1,"name":"platform-bootstrap-token"}]`)
-				case r.URL.Path == "/api/v1/orgs/loopzero":
+				case r.URL.Path == "/api/v1/orgs/loop-runtime":
 					w.Header().Set("Content-Type", "application/json")
-					_, _ = fmt.Fprint(w, `{"id":1,"name":"loopzero"}`)
+					_, _ = fmt.Fprint(w, `{"id":1,"name":"loop-runtime"}`)
 				default:
 					w.WriteHeader(http.StatusOK)
 				}
@@ -388,7 +388,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 			platformTokensSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "loopzero-platform-tokens-terminal",
+					Name:      "loop-runtime-platform-tokens-terminal",
 					Namespace: pbNamespace,
 				},
 				StringData: map[string]string{
@@ -404,12 +404,12 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 			// Wait for it to reach BootstrapComplete
 			Eventually(func(g Gomega) {
-				var pb loopzerov1.PlatformBootstrap
+				var pb loopruntimev1.PlatformBootstrap
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name:      pbName,
 					Namespace: pbNamespace,
 				}, &pb)).To(Succeed())
-				g.Expect(pb.Status.Phase).To(Equal(loopzerov1.PlatformBootstrapPhaseComplete))
+				g.Expect(pb.Status.Phase).To(Equal(loopruntimev1.PlatformBootstrapPhaseComplete))
 			}, timeout, interval).Should(Succeed())
 
 			// Record API call count at this point
@@ -435,7 +435,7 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 			// First verify the happy path CR exists from earlier ordered test.
 			// If running standalone, this test is a no-op — the Ordered container
 			// ensures the happy-path test ran first within this suite.
-			var pb loopzerov1.PlatformBootstrap
+			var pb loopruntimev1.PlatformBootstrap
 			key := types.NamespacedName{Name: "bootstrap-happy", Namespace: "default"}
 			if err := k8sClient.Get(ctx, key, &pb); err != nil {
 				// CR not found — this is expected when running this Context in isolation.
@@ -445,9 +445,9 @@ var _ = Describe("PlatformBootstrapController", Ordered, func() {
 
 			// Phase should still be BootstrapComplete after multiple reconcile cycles
 			Consistently(func(g Gomega) {
-				var current loopzerov1.PlatformBootstrap
+				var current loopruntimev1.PlatformBootstrap
 				g.Expect(k8sClient.Get(ctx, key, &current)).To(Succeed())
-				g.Expect(current.Status.Phase).To(Equal(loopzerov1.PlatformBootstrapPhaseComplete))
+				g.Expect(current.Status.Phase).To(Equal(loopruntimev1.PlatformBootstrapPhaseComplete))
 			}, "2s", interval).Should(Succeed())
 		})
 	})

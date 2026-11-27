@@ -5,10 +5,10 @@
 # Reusable for runtime, runtime-2, ..., runtime-N via KUBECONFIG override.
 #
 # Invocation:
-#   KUBECONFIG=~/.kube/loopzero-cell-0.yaml \
-#     LOOPZERO_CF_TUNNEL_TOKEN="$(pulumi stack output cfTunnelToken --show-secrets)" \
+#   KUBECONFIG=~/.kube/loop-runtime-cell-0.yaml \
+#     LOOP_RUNTIME_CF_TUNNEL_TOKEN="$(pulumi stack output cfTunnelToken --show-secrets)" \
 #     helmfile -f infra/helmfile/cell.helmfile.yaml -e dev sync
-#   # repeat with KUBECONFIG=~/.kube/loopzero-cell-1.yaml for cell-1
+#   # repeat with KUBECONFIG=~/.kube/loop-runtime-cell-1.yaml for cell-1
 
 # The environments are declared once, in environments.yaml.
 bases:
@@ -28,17 +28,17 @@ helmDefaults:
   # `helmfile-context-parity` gate, not helmfile. See ADR D1 of slice slice-3.
   #
   # HERE the context is a PARAMETER, not a literal as in the other three planes: this
-  # helmfile serves N cells. Pinning `k3d-loopzero-cell-0` would recreate exactly the
+  # helmfile serves N cells. Pinning `k3d-loop-runtime-cell-0` would recreate exactly the
   # defect the comments in taskfiles/infra.yml describe — the task
   # installing the 28 releases ALWAYS on the first cell, measured on 2026-08-10.
   # `requiredEnv` fails LOUD when nobody exports it; an `env ... | default`
   # would pick a cell silently, which is the shape of the defect, not the fix.
   #
-  # The caller MUST export LOOPZERO_CELL_CONTEXT. A Task var is NOT an environment
+  # The caller MUST export LOOP_RUNTIME_CELL_CONTEXT. A Task var is NOT an environment
   # variable: `taskfiles/infra.yml` passed the context only as a flag, and pinning
   # it here broke `task infra:install:cell` until the task exported the variable
   # from the same CELL_CTX. The gate fails that omission (ErrRequiredEnvNotSet).
-  kubeContext: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" }}
+  kubeContext: {{ requiredEnv "LOOP_RUNTIME_CELL_CONTEXT" }}
   wait: true
   waitForJobs: true
   timeout: 600
@@ -67,11 +67,14 @@ repositories:
   # already used by mgmt helmfile for Argo Workflows.
   - name: argo
     url: https://argoproj.github.io/argo-helm
+  # The AWS Load Balancer Controller (profile.awsLoadBalancerController).
+  - name: eks
+    url: https://aws.github.io/eks-charts
 
 # Pre-sync setup (called by the CLI orchestrator BEFORE this helmfile runs):
 #   bash infra/helmfile/scripts/generate-runtime-secrets.sh <env> <cluster-id>
-#     - cloudflared-tunnel-token in loopzero-system (ADR D9)
-#     - loopzero-eso-source for ExternalSecrets
+#     - cloudflared-tunnel-token in loop-runtime-system (ADR D9)
+#     - loop-runtime-eso-source for ExternalSecrets
 # Hooks moved out of helmfile so list/lint/diff work without cluster access.
 
 # ---------------------------------------------------------------------------
@@ -107,8 +110,16 @@ releases:
     version: 28.3.0
     needs:
       - cert-manager/cert-manager
+{{- if .Values.profile.awsLoadBalancerController }}
+      # values-alb renders an Ingress. The controller's webhook refuses every
+      # Ingress until its pod serves, so Traefik goes after it.
+      - kube-system/aws-load-balancer-controller
+{{- end }}
     values:
       - ../helm/traefik/values.yaml
+{{- if .Values.profile.awsLoadBalancerController }}
+      - ../helm/traefik/values-alb.yaml.gotmpl
+{{- end }}
 
   # Wave -1: Secrets and metrics
   - name: external-secrets
@@ -117,38 +128,120 @@ releases:
     version: 0.14.3
     values:
       - ../helm/external-secrets/values.yaml
+{{- if or .Values.profile.awsSecretsManager .Values.profile.awsLoadBalancerController }}
+{{- /* The cell this sync targets, as infra-live names its IRSA roles (`<namePrefix>-cell-<N>-<workload>`). */}}
+{{- $cell := requiredEnv "LOOP_RUNTIME_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOP_RUNTIME_CELL_CONTEXT must end in cell-<N> to name the cell's IRSA roles" }}
+{{- $rolePrefix := printf "arn:aws:iam::%s:role/%s-%s" .Values.aws.accountId .Values.aws.namePrefix $cell }}
+{{- if .Values.profile.awsSecretsManager }}
+      # IRSA: infra-live's `identity/<cell>-external-secrets` trusts external-secrets:external-secrets.
+      - serviceAccount:
+          name: external-secrets
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "%s-external-secrets" $rolePrefix | quote }}
+{{- with .Values | get "emulator.endpoint" "" }}
+        # Staging only (environments/staging.yaml `emulator:`): aws-sdk-go v1 ignores
+        # AWS_ENDPOINT_URL and reads one endpoint variable per service.
+        extraEnv:
+          - name: AWS_SECRETSMANAGER_ENDPOINT
+            value: {{ . | quote }}
+          - name: AWS_STS_ENDPOINT
+            value: {{ . | quote }}
+{{- end }}
+
+  # The store tenant and platform ExternalSecrets on this cell read through.
+  - name: aws-secrets-manager
+    namespace: external-secrets
+    chart: ../helm/aws-secrets-manager
+    needs:
+      - external-secrets/external-secrets
+    values:
+      - region: {{ .Values.aws.region | quote }}
+{{- end }}
+{{- if .Values.profile.awsLoadBalancerController }}
+
+  # The AWS Load Balancer Controller, with infra-live's `identity/<cell>-lb-controller` role.
+  - name: aws-load-balancer-controller
+    namespace: kube-system
+    chart: eks/aws-load-balancer-controller
+    version: 3.6.3
+    needs:
+      - cert-manager/cert-manager
+    values:
+      - ../helm/aws-load-balancer-controller/values.yaml.gotmpl
+      - clusterName: {{ printf "%s-%s" .Values.aws.namePrefix $cell | quote }}
+        serviceAccount:
+          annotations:
+            eks.amazonaws.com/role-arn: {{ printf "%s-lb-controller" $rolePrefix | quote }}
+
+  # This cell's metrics for the core Prometheus, which federates them through the
+  # internal ALB of ../helm/monitoring/values-prometheus-federation.yaml. The cell's own
+  # kube-state-metrics release below is scraped through its prometheus.io/scrape Service.
+  - name: prometheus-federation
+    namespace: monitoring
+    chart: prometheus-community/prometheus
+    version: 25.27.0
+    needs:
+      - kube-system/aws-load-balancer-controller
+    values:
+      - ../helm/monitoring/values-prometheus-federation.yaml
+      # Ready replicas and request rate per tenant app, which core federates and
+      # loop-runtime-api reads for the project Status tab.
+      - ../helm/monitoring/values-tenant-app-recording-rules.yaml
+      - kube-state-metrics:
+          enabled: false
+{{- end }}
+{{- end }}
 
   # The ESO secret-fetch broker: a webhook ClusterSecretStore through which ExternalSecrets
-  # in tenant namespaces ask loopzero-api for a tenant secret, sending the bearer token the
-  # `loopzero-ops seed broker` writes into Secret external-secrets/loopzero-broker-token and the
-  # cell id loopzero-api binds the fetch to.
+  # in tenant namespaces ask loop-runtime-api for a tenant secret, sending the bearer token the
+  # `loop-runtime-ops seed broker` writes into Secret external-secrets/loop-runtime-broker-token and the
+  # cell id loop-runtime-api binds the fetch to.
   #
-  # This release used to be a `helm upgrade --install loopzero-broker` run by that seed, out
+  # This release used to be a `helm upgrade --install loop-runtime-broker` run by that seed, out
   # of Helmfile's sight (principle_violations#67), with the core server-0 container IP as
   # the API address and envName forced to dev-public so the chart's plaintext-bearer
   # guard would pass in any environment. Here envName is the real environment, so the
   # guard decides — and the environment opts in through profile.secretFetchBroker.
   #
   # The platform ExternalSecrets the chart also carries are for the core and build
-  # clusters (one targets loopzero-build, a namespace a cell does not have): a cell installs
+  # clusters (one targets loop-runtime-build, a namespace a cell does not have): a cell installs
   # the broker store only.
-  - name: loopzero-broker
+  - name: loop-runtime-broker
     namespace: external-secrets
-    chart: ../helm/loopzero-external-secrets
+    chart: ../helm/loop-runtime-external-secrets
     installed: {{ .Values.profile.secretFetchBroker }}
     needs:
       - external-secrets/external-secrets
 {{- if .Values.profile.secretFetchBroker }}
+{{- /* Where the cells reach core's secret-fetch broker. dev-public names it
+       (crossCluster.coreApi, the k3d host). On AWS it is core's internal ALB, which
+       forwards /internal/v1/secret-fetch alone (charts/loop-runtime-api,
+       secretFetchLoadBalancer):
+         - on the emulator (`emulator.endpoint`) the ALB is reached at the emulator's HTTPS
+           endpoint with its DNSName in the path, which `task staging:platform` reads from
+           core's Ingress after the core sync (LOOP_RUNTIME_CORE_API_ALB_DNS_NAME,
+           infra/staging/monitoring-addresses.sh core-api);
+         - elsewhere it is the https:// name the ALB's ACM certificate carries, which the
+           environment exports as LOOP_RUNTIME_CORE_API_INTERNAL_URL.
+       Either missing fails the render: a store with no address serves no secret. */}}
+{{- $coreApi := .Values | getOrNil "crossCluster.coreApi" }}
+{{- if not $coreApi }}
+{{- with .Values | getOrNil "emulator.endpoint" }}
+{{- $coreApi = printf "%s/_aws/elasticloadbalancing/%s" . (env "LOOP_RUNTIME_CORE_API_ALB_DNS_NAME" | required "LOOP_RUNTIME_CORE_API_ALB_DNS_NAME is not set: the DNSName of core's secret-fetch ALB (Ingress loop-runtime-system/loop-runtime-api-secret-fetch), which the cells' broker store calls") }}
+{{- else }}
+{{- $coreApi = env "LOOP_RUNTIME_CORE_API_INTERNAL_URL" | required "LOOP_RUNTIME_CORE_API_INTERNAL_URL is not set: the https:// address of core's internal secret-fetch ALB, under the name its ACM certificate carries, which the cells' broker store calls" }}
+{{- end }}
+{{- end }}
     values:
       - envName: {{ .Environment.Name }}
         externalSecrets: []
         broker:
           enabled: true
-          apiURL: {{ .Values.crossCluster.coreApi | quote }}
-          # The cell this sync targets, from the same LOOPZERO_CELL_CONTEXT that pins the
-          # context above (k3d-loopzero-cell-<N> -> cell-<N>). A context that does not end in
+          apiURL: {{ $coreApi | quote }}
+          # The cell this sync targets, from the same LOOP_RUNTIME_CELL_CONTEXT that pins the
+          # context above (k3d-loop-runtime-cell-<N> -> cell-<N>). A context that does not end in
           # a cell id fails the render instead of binding every cell to cell-0.
-          cellID: {{ requiredEnv "LOOPZERO_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOPZERO_CELL_CONTEXT must end in cell-<N> to derive the broker's cell id" }}
+          cellID: {{ requiredEnv "LOOP_RUNTIME_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOP_RUNTIME_CELL_CONTEXT must end in cell-<N> to derive the broker's cell id" }}
 {{- end }}
 
   - name: kube-state-metrics
@@ -212,35 +305,41 @@ releases:
     values:
       - ../helm/policy-controller/values.yaml
 
-  # B16 — ClusterImagePolicy (loopzero-images-warn) shipped as Helm chart per T0.1.
+  # B16 — ClusterImagePolicy (loop-runtime-images-warn) shipped as Helm chart per T0.1.
   #
   # The published chart, installed directly: there is one admission-policies chart
   # (docs/decisions.md, "One chart per bootstrap/published pair").
   - name: admission-policies
     namespace: cosign-system
-    chart: ../../charts/loopzero-admission-policies
+    chart: ../../charts/loop-runtime-admission-policies
     needs:
       - cosign-system/policy-controller
     values:
-      - ../../charts/loopzero-admission-policies/values.yaml
+      - ../../charts/loop-runtime-admission-policies/values.yaml
 {{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
       # B64 (end-to-end-deploy-validation-plan T2.3) — standalone-multi uses
       # prometheus-community/prometheus (no Operator CRDs). Disable PrometheusRule.
       - alerts:
           enabled: false
 {{- end }}
+{{- with .Values | get "tenantRegistry" dict }}
+      # Tenant pods run what the builds pushed, and only that: the tenant registry prefix is
+      # the one accepted registry.
+      - registries:
+          docrPrefix: {{ printf "%s/%s/" .host .repositoryPrefix | quote }}
+{{- end }}
     set:
       - name: clusterImagePolicy.mode
         value: "{{ .Values.policyMode }}"
 {{- if .Values.profile.localRegistry }}
       # Plan 2026-06-04 dev-public-domain-canonicalization — local envs run
-      # BuildKit pipelines that push to k3d-loopzero-registry:5000. Without this
+      # BuildKit pipelines that push to k3d-loop-runtime-registry:5000. Without this
       # allowlist entry the tenant pods are rejected by VAP
-      # loopzero-restrict-image-registries on admission. Production envs (drill/prod)
+      # loop-runtime-restrict-image-registries on admission. Production envs (drill/prod)
       # leave it empty so the chart's registry prefix is the only accepted source
       # (defense-in-depth supply-chain).
       - name: registries.additionalPrefixes[0]
-        value: "k3d-loopzero-registry:5000/"
+        value: "k3d-loop-runtime-registry:5000/"
 {{- end }}
 
   # T2.2 Sigstore Scaffolding REMOVED from Helmfile per ADR-2026-05-27-T2.2-OFFLINE-TUF
@@ -262,15 +361,20 @@ releases:
     namespace: monitoring
     chart: grafana/promtail
     version: 6.16.6
+{{- if .Values.profile.awsLoadBalancerController }}
+    # Read by ../helm/promtail/values.yaml.gotmpl: the cluster every stream is labelled with.
+    labels:
+      cluster: {{ requiredEnv "LOOP_RUNTIME_CELL_CONTEXT" | regexFind "cell-[0-9]+$" | required "LOOP_RUNTIME_CELL_CONTEXT must end in cell-<N> to label the cell's logs" }}
+{{- end }}
     values:
       - ../helm/promtail/values.yaml.gotmpl
 
   # ADR D9 — cloudflared Deployment migrated from Pulumi tunnel.ts to Helmfile.
-  # Token comes via env var LOOPZERO_CF_TUNNEL_TOKEN (from `pulumi stack output`).
+  # Token comes via env var LOOP_RUNTIME_CF_TUNNEL_TOKEN (from `pulumi stack output`).
   # B61 (end-to-end-deploy-validation-plan T2.2) — standalone-multi has no
   # real CF Tunnel; cloudflared scaled to 0 replicas to avoid CrashLoop.
   - name: cloudflared
-    namespace: loopzero-system
+    namespace: loop-runtime-system
     chart: ../helm/cloudflared
     values:
       - ../helm/cloudflared/values.yaml
@@ -287,20 +391,23 @@ releases:
       - traefik/traefik
     values:
       - ../helm/cluster-issuer/values.yaml
+      # An environment without ACME (certIssuer.selfSigned) gets its issuer name as a
+      # self-signed issuer, so the Certificates of tenant apps are issued (#122).
+      - selfSignedAliases: {{ if (.Values | get "certIssuer.selfSigned" false) }}[{{ .Values.certIssuer.name | quote }}]{{ else }}[]{{ end }}
 
   - name: rbac
-    namespace: loopzero-system
+    namespace: loop-runtime-system
     chart: ../helm/network-policies
     values:
       - ../helm/network-policies/values.yaml
 
   # B82 (end-to-end-deploy-validation-plan iter 12) — Service `static-assets`
-  # in loopzero-system is the in-cluster S3 gateway used by static-frontend
+  # in loop-runtime-system is the in-cluster S3 gateway used by static-frontend
   # IngressRoutes generated by api/internal/manifests/renderer_static.go.
   # In standalone-multi we point at core-cluster MinIO via docker bridge IP.
   # In dev/prod we point at DO Spaces (override s3.server / s3.proto).
   - name: static-assets
-    namespace: loopzero-system
+    namespace: loop-runtime-system
     chart: ../helm/static-assets
     # Bug #32 LIVE fix (2026-05-17 iter 24): static-assets readiness times
     # out at 15m on DOKS. Drill L2 harness doesn't deploy static apps —
@@ -308,18 +415,18 @@ releases:
     # unblock Phase 4a runtime sync.
     installed: {{ .Values.profile.staticAssets }}
     needs:
-      - loopzero-system/rbac
+      - loop-runtime-system/rbac
     values:
       - ../helm/static-assets/values.yaml
 {{- if eq (.Values | get "clusterTopology" "single-cluster") "multi-cluster" }}
       # In standalone-multi the workload cluster cannot resolve the core-cluster
       # service DNS, so we use the docker-bridge mgmt IP + NodePort
       # exposed by minio (32000 → 9000). This mirrors the build cluster pattern.
-      # LOOPZERO_MGMT_BRIDGE_IP is resolved by wire-clusters.sh or defaults to
+      # LOOP_RUNTIME_MGMT_BRIDGE_IP is resolved by wire-clusters.sh or defaults to
       # the k3d mgmt server container IP.
       - s3:
-          bucket: loopzero-static-assets
-          server: {{ env "LOOPZERO_MGMT_BRIDGE_IP" | default "172.18.0.3" }}
+          bucket: loop-runtime-static-assets
+          server: {{ env "LOOP_RUNTIME_MGMT_BRIDGE_IP" | default "172.18.0.3" }}
           port: 32000
           proto: http
 {{- end }}

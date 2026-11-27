@@ -18,18 +18,19 @@ type Account struct {
 }
 
 type AppScalingConfig struct {
-	ID           pgtype.UUID        `json:"id"`
-	TenantID     string             `json:"tenant_id"`
-	ProjectID    string             `json:"project_id"`
-	Environment  string             `json:"environment"`
-	AppName      string             `json:"app_name"`
-	MinReplicas  int32              `json:"min_replicas"`
-	MaxReplicas  int32              `json:"max_replicas"`
-	TargetCpuPct *int32             `json:"target_cpu_pct"`
-	ScaleToZero  bool               `json:"scale_to_zero"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	UpdatedBy    string             `json:"updated_by"`
-	ConfigHash   string             `json:"config_hash"`
+	ID              pgtype.UUID        `json:"id"`
+	TenantID        string             `json:"tenant_id"`
+	ProjectID       string             `json:"project_id"`
+	Environment     string             `json:"environment"`
+	AppName         string             `json:"app_name"`
+	MinReplicas     int32              `json:"min_replicas"`
+	MaxReplicas     int32              `json:"max_replicas"`
+	TargetCpuPct    *int32             `json:"target_cpu_pct"`
+	ScaleToZero     bool               `json:"scale_to_zero"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	UpdatedBy       string             `json:"updated_by"`
+	ConfigHash      string             `json:"config_hash"`
+	TargetMemoryPct *int32             `json:"target_memory_pct"`
 }
 
 type AuditLog struct {
@@ -168,6 +169,8 @@ type GithubInstallation struct {
 	TenantID     *string            `json:"tenant_id"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	VerifiedAt   pgtype.Timestamptz `json:"verified_at"`
+	VerifiedBy   *string            `json:"verified_by"`
 }
 
 type GithubWebhookDelivery struct {
@@ -247,6 +250,23 @@ type LensSavedView struct {
 	Name        string             `json:"name"`
 	QueryString string             `json:"query_string"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type LoopruntimeApiKey struct {
+	ID          string             `json:"id"`
+	Subject     string             `json:"subject"`
+	TenantID    string             `json:"tenant_id"`
+	KeyName     string             `json:"key_name"`
+	KeyHash     string             `json:"key_hash"`
+	KeyPrefix   string             `json:"key_prefix"`
+	Scopes      []byte             `json:"scopes"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
+	BffMinted   bool               `json:"bff_minted"`
+	RotatedFrom *string            `json:"rotated_from"`
+	AccountID   string             `json:"account_id"`
 }
 
 type MemoryExport struct {
@@ -400,6 +420,23 @@ type ReleaseAppAttestation struct {
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
+type Rollback struct {
+	ID            string             `json:"id"`
+	TenantID      string             `json:"tenant_id"`
+	ProjectID     string             `json:"project_id"`
+	Environment   string             `json:"environment"`
+	FromReleaseID string             `json:"from_release_id"`
+	FromBuildID   string             `json:"from_build_id"`
+	ToReleaseID   string             `json:"to_release_id"`
+	ToBuildID     string             `json:"to_build_id"`
+	Status        string             `json:"status"`
+	FailureReason string             `json:"failure_reason"`
+	CreatedBy     string             `json:"created_by"`
+	CorrelationID string             `json:"correlation_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	FinishedAt    pgtype.Timestamptz `json:"finished_at"`
+}
+
 type SchemaMigration struct {
 	Version int64 `json:"version"`
 	Dirty   bool  `json:"dirty"`
@@ -493,23 +530,6 @@ type TenantsPendingDeletion struct {
 	AttemptCount int32              `json:"attempt_count"`
 	LastError    *string            `json:"last_error"`
 	LastErrorAt  pgtype.Timestamptz `json:"last_error_at"`
-}
-
-type LoopZeroApiKey struct {
-	ID          string             `json:"id"`
-	Subject     string             `json:"subject"`
-	TenantID    string             `json:"tenant_id"`
-	KeyName     string             `json:"key_name"`
-	KeyHash     string             `json:"key_hash"`
-	KeyPrefix   string             `json:"key_prefix"`
-	Scopes      []byte             `json:"scopes"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	RevokedAt   pgtype.Timestamptz `json:"revoked_at"`
-	BffMinted   bool               `json:"bff_minted"`
-	RotatedFrom *string            `json:"rotated_from"`
-	AccountID   string             `json:"account_id"`
 }
 
 type UsageRecord struct {

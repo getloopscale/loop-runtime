@@ -25,7 +25,7 @@ RETURNING created_at;
 -- Idempotent upsert used by the deploy flow to guarantee the project
 -- is registered in the projects table. ON CONFLICT (tenant_id, name)
 -- DO NOTHING preserves the original row when a redeploy fires after
--- the project was deleted via `loopzero project delete` and then
+-- the project was deleted via `loopscale project delete` and then
 -- recreated.
 INSERT INTO projects (id, tenant_id, name, created_by)
 VALUES ($1, $2, $3, $4)
@@ -33,7 +33,7 @@ ON CONFLICT (tenant_id, name) DO NOTHING;
 
 -- name: ListProjectsByTenant :many
 -- Returns all projects for a tenant, ordered by name (consistent
--- output for `loopzero project list`).
+-- output for `loopscale project list`).
 SELECT id, name, tenant_id, created_by, created_at
 FROM projects
 WHERE tenant_id = $1
@@ -90,7 +90,7 @@ SELECT
   p.created_by,
   p.created_at,
   COALESCE(env_count.cnt, 0)::bigint AS environment_count,
-  -- Red Team loopzero-cloud#41 absorption (2026-06-27): the legacy
+  -- Red Team loop-console#41 absorption (2026-06-27): the legacy
   -- `environment_count` collapses preview + production envs into one
   -- count. The dashboard's "Live envs" label was misleading — a project
   -- with preview-only deploys still rendered `Live envs: 1` AND
@@ -98,7 +98,7 @@ SELECT
   -- canonical truth: how many PRODUCTION environments are wired vs
   -- how many PREVIEW environments exist as separate fields.
   COALESCE(prod_env_count.cnt, 0)::bigint AS production_env_count,
-  -- Red Team loopzero-cloud#134 absorption (2026-07-02): the dashboard
+  -- Red Team loop-console#134 absorption (2026-07-02): the dashboard
   -- "LIVE ENVS" counter must reflect the number of envs CURRENTLY
   -- SERVING (a live URL). The legacy `production_env_count` counts
   -- ALL kind='permanent' envs regardless of release state; it says 0
@@ -121,7 +121,7 @@ SELECT
   COALESCE(latest_build.environment, '')::text AS latest_build_environment,
   COALESCE(active_release.status, '')::text AS active_release_status_raw,
   -- T3.1 of plan dashboard-badge-data-plane-poller — closes Red Team
-  -- loopzero-cloud#128. Surfaces the most recent data-plane readiness
+  -- loop-console#128. Surfaces the most recent data-plane readiness
   -- snapshot persisted by the api's readiness poller
   -- (environments.ReadinessPoller) into the dashboard /projects list so the badge
   -- can distinguish control-plane ACTIVE + data-plane-serving from
@@ -139,7 +139,7 @@ LEFT JOIN LATERAL (
   WHERE et.tenant_id = p.tenant_id AND et.project_id = p.name
 ) env_count ON true
 LEFT JOIN LATERAL (
-  -- Red Team loopzero-cloud#41 absorption (2026-06-27): production-only
+  -- Red Team loop-console#41 absorption (2026-06-27): production-only
   -- env count. A `kind = 'permanent'` env_target is a production-like
   -- (non-preview) env; a project with zero permanent envs is by
   -- definition preview-only at the env_targets layer. Combined with
@@ -153,7 +153,7 @@ LEFT JOIN LATERAL (
     AND et.kind = 'permanent'
 ) prod_env_count ON true
 LEFT JOIN LATERAL (
-  -- Red Team loopzero-cloud#134 absorption (2026-07-02): count env_targets
+  -- Red Team loop-console#134 absorption (2026-07-02): count env_targets
   -- with a currently-serving ACTIVE release. The releases table is
   -- the SoT for "is env X currently live?" — matches the SAME predicate
   -- the aggregate status mapper uses (r.status='ACTIVE' is the live band).

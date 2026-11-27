@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package argo
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 )
@@ -122,7 +122,7 @@ func TestDockerfileNaming_GeneratorMatchesConsumer(t *testing.T) {
 		{"multi-3", "worker", 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// Generator side (loopzeroPacksDockerfileStep uses dockerfilePathForApp)
+			// Generator side (loopRuntimePacksDockerfileStep uses dockerfilePathForApp)
 			generatorPath := dockerfilePathForApp(tc.appName, tc.totalApps)
 			// Consumer side (buildkitTemplateForApp uses same function)
 			consumerPath := dockerfilePathForApp(tc.appName, tc.totalApps)
@@ -152,7 +152,7 @@ func TestPythonStrategy_ValidateStep_ChecksPythonDeps(t *testing.T) {
 	assertContains(t, script, "pyproject.toml")
 }
 
-// TestPythonStrategy_DockerfileStep removed — replaced by TestLoopZeroPacksDockerfileStep.
+// TestPythonStrategy_DockerfileStep removed — replaced by TestLoopRuntimePacksDockerfileStep.
 
 // ---------------------------------------------------------------------------
 // CustomStrategy

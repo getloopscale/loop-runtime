@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scripts
 
@@ -46,16 +46,16 @@ func pod(ns, name, ownerKind, owner, phase string) string {
 // that owns it.
 func TestTheRuntimeLayerIsTheSameAcrossARebuild(t *testing.T) {
 	before := `{"items":[` + strings.Join([]string{
-		pod("loopzero-system", "loopzero-api-5f76bcc7c7-7jzrm", "ReplicaSet", "loopzero-api-5f76bcc7c7", "Running"),
-		pod("loopzero-system", "loopzero-api-5f76bcc7c7-chx8w", "ReplicaSet", "loopzero-api-5f76bcc7c7", "Running"),
+		pod("loop-runtime-system", "loop-runtime-api-5f76bcc7c7-7jzrm", "ReplicaSet", "loop-runtime-api-5f76bcc7c7", "Running"),
+		pod("loop-runtime-system", "loop-runtime-api-5f76bcc7c7-chx8w", "ReplicaSet", "loop-runtime-api-5f76bcc7c7", "Running"),
 		pod("kube-system", "svclb-traefik-f821ae41-768x2", "DaemonSet", "svclb-traefik-f821ae41", "Running"),
-		pod("loopzero-system", "postgresql-0", "StatefulSet", "postgresql", "Running"),
+		pod("loop-runtime-system", "postgresql-0", "StatefulSet", "postgresql", "Running"),
 	}, ",") + `]}`
 	after := `{"items":[` + strings.Join([]string{
-		pod("loopzero-system", "loopzero-api-74f97b6844-fmk2g", "ReplicaSet", "loopzero-api-74f97b6844", "Running"),
-		pod("loopzero-system", "loopzero-api-74f97b6844-wkjfp", "ReplicaSet", "loopzero-api-74f97b6844", "Running"),
+		pod("loop-runtime-system", "loop-runtime-api-74f97b6844-fmk2g", "ReplicaSet", "loop-runtime-api-74f97b6844", "Running"),
+		pod("loop-runtime-system", "loop-runtime-api-74f97b6844-wkjfp", "ReplicaSet", "loop-runtime-api-74f97b6844", "Running"),
 		pod("kube-system", "svclb-traefik-f821ae41-p74qg", "DaemonSet", "svclb-traefik-f821ae41", "Running"),
-		pod("loopzero-system", "postgresql-0", "StatefulSet", "postgresql", "Running"),
+		pod("loop-runtime-system", "postgresql-0", "StatefulSet", "postgresql", "Running"),
 	}, ",") + `]}`
 
 	if a, b := runtimeLayer(t, before), runtimeLayer(t, after); a != b {
@@ -65,10 +65,10 @@ func TestTheRuntimeLayerIsTheSameAcrossARebuild(t *testing.T) {
 
 // A workload that lost a running pod is still a difference.
 func TestTheRuntimeLayerSeesAWorkloadLoseAPod(t *testing.T) {
-	two := `{"items":[` + pod("loopzero-system", "loopzero-api-a-1", "ReplicaSet", "loopzero-api-a", "Running") + `,` +
-		pod("loopzero-system", "loopzero-api-a-2", "ReplicaSet", "loopzero-api-a", "Running") + `]}`
-	one := `{"items":[` + pod("loopzero-system", "loopzero-api-b-1", "ReplicaSet", "loopzero-api-b", "Running") + `,` +
-		pod("loopzero-system", "loopzero-api-b-2", "ReplicaSet", "loopzero-api-b", "CrashLoopBackOff") + `]}`
+	two := `{"items":[` + pod("loop-runtime-system", "loop-runtime-api-a-1", "ReplicaSet", "loop-runtime-api-a", "Running") + `,` +
+		pod("loop-runtime-system", "loop-runtime-api-a-2", "ReplicaSet", "loop-runtime-api-a", "Running") + `]}`
+	one := `{"items":[` + pod("loop-runtime-system", "loop-runtime-api-b-1", "ReplicaSet", "loop-runtime-api-b", "Running") + `,` +
+		pod("loop-runtime-system", "loop-runtime-api-b-2", "ReplicaSet", "loop-runtime-api-b", "CrashLoopBackOff") + `]}`
 
 	if runtimeLayer(t, two) == runtimeLayer(t, one) {
 		t.Error("a Deployment with one pod no longer Running reads the same as one with both Running")

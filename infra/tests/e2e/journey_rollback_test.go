@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Journey 06: Rollback
 //
@@ -16,7 +16,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/getloopscale/loopzero/infra/scripts/seed"
+	"github.com/getloopscale/loop-runtime/infra/scripts/seed"
 )
 
 var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
@@ -113,11 +113,11 @@ var _ = Describe("Journey 06: Rollback", Ordered, Label("journey"), func() {
 	})
 
 	It("rollback to previous release", func() {
-		stdout, stderr, exitCode := runLoopZeroInDir(workDir, "rollback",
+		stdout, stderr, exitCode := runLoopRuntimeInDir(workDir, "rollback",
 			"--env", env, "--yes", "--json")
 
 		Expect(exitCode).To(Equal(0),
-			"loopzero rollback should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+			"loopscale rollback should exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 
 		Expect(stdout).To(SatisfyAny(
 			ContainSubstring("rolled_back_release"),

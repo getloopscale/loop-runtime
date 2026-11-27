@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant_test
 
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 var _ = Describe("Cell routing", Ordered, func() {
@@ -17,7 +17,7 @@ var _ = Describe("Cell routing", Ordered, func() {
 	)
 
 	BeforeAll(func() {
-		tenant := newTenant(tenantName, loopzerov1.PlanStarter, []string{"production"})
+		tenant := newTenant(tenantName, loopruntimev1.PlanStarter, []string{"production"})
 		tenant.Spec.CellID = cellID
 		Expect(k8sClient.Create(ctx, tenant)).To(Succeed())
 	})

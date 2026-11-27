@@ -11,13 +11,13 @@
 # T8.4 of plan 2026-06-02-openbao-adoption v1.3 — 4 P1 alerts per Q14.
 #
 # Vault audit + auth + uptime alerting. These are intentionally tight
-# because Vault is now the cryptographic root for LoopZero: any auth failure
+# because Vault is now the cryptographic root for LoopRuntime: any auth failure
 # spike, policy denial spike, or audit log silence is a potential
 # compromise indicator.
 #
 # Routing:
 #   severity=critical → P1 oncall (immediate page)
-#   severity=warning  → triage queue (Slack #loopzero-alerts)
+#   severity=warning  → triage queue (Slack #loop-runtime-alerts)
 #
 # These rules expect Prometheus to scrape OpenBao's /v1/sys/metrics endpoint
 # (Prometheus-format; configured via openbao server { telemetry { prometheus_retention_time } })
@@ -29,10 +29,10 @@ metadata:
   namespace: monitoring
   labels:
     app.kubernetes.io/managed-by: helm
-    app.kubernetes.io/part-of: loopzero-platform
-    loopzero.io/related-plan: "openbao-adoption-v1.4-T8.4"
+    app.kubernetes.io/part-of: loop-runtime-platform
+    runtime.getloopscale.com/related-plan: "openbao-adoption-v1.4-T8.4"
   annotations:
-    loopzero.io/related-plan-full: "2026-06-02-openbao-adoption v1.4 T8.4"
+    runtime.getloopscale.com/related-plan-full: "2026-06-02-openbao-adoption v1.4 T8.4"
 spec:
   groups:
     - name: vault-audit-p1
@@ -51,7 +51,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultauthfailureratehigh"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultauthfailureratehigh"
             summary: "Vault auth failure rate > 10/min on {{ $labels.path }}"
             description: |
               The Vault auth method at path `{{ $labels.path }}` is rejecting
@@ -75,7 +75,7 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultpolicydenialratehigh"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultpolicydenialratehigh"
             summary: "Vault policy denial rate > 5/min for {{ $labels.request_path }}"
             description: |
               Policy denials at `{{ $labels.request_path }}` exceed 5/min over
@@ -84,7 +84,7 @@ spec:
               Triage: identify workload via audit log accessor; verify policy
               attached to its role; check for recent role changes.
 
-        # Alert 3: Vault sealed (engine down) — emergency. All loopzero-api
+        # Alert 3: Vault sealed (engine down) — emergency. All loop-runtime-api
         # workloads using K8s auth login will fail; cached secrets continue
         # serving but no rotation possible.
         - alert: VaultSealedOrDown
@@ -98,12 +98,12 @@ spec:
             team: platform-security
             domain: vault
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultsealedordown"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultsealedordown"
             summary: "OpenBao Vault is sealed OR scrape down"
             description: |
               vault_core_unsealed=0 (sealed) OR the metrics scrape itself is
               absent (Vault pod down / network partition). Either way, all
-              new Vault operations fail. loopzero-api keeps no cached copy of
+              new Vault operations fail. loop-runtime-api keeps no cached copy of
               secret values: every secret encrypt/decrypt through Transit
               fails until Vault is back.
               Triage: `kubectl -n secrets-system get pods openbao-0` + check
@@ -129,7 +129,7 @@ spec:
             domain: vault
             invariant: "audit-log-must-flow"
           annotations:
-            runbook_url: "https://github.com/getloopscale/loopzero/blob/develop/docs/runbooks.md#vaultauditlogstalled"
+            runbook_url: "https://github.com/getloopscale/loop-runtime/blob/develop/docs/runbooks.md#vaultauditlogstalled"
             summary: "OpenBao audit log silent > 10min despite active traffic"
             description: |
               Vault is processing requests (vault_audit_log_request_count > 0)

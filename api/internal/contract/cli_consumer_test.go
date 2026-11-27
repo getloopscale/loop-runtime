@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package contract
 
@@ -15,7 +15,7 @@ import (
 
 // M1.4 T2.1 — consumer-driven contract (cli ↔ engine).
 //
-// The TS CLI (loopzero/cli/src) is the consumer; the engine is the producer. These
+// The TS CLI (loop-runtime/cli/src) is the consumer; the engine is the producer. These
 // tests assert the engine's published spec (engine.yaml) covers every path the
 // CLI depends on, so a producer change that drops/renames a consumer route fails
 // here BEFORE the CLI breaks at runtime (ROADMAP low-coupling guarantee #1).
@@ -116,8 +116,8 @@ func specPathSetNormalized(t *testing.T) map[string]bool {
 }
 
 // cliSrcPresent reports whether the CLI source tree is co-located in this repo.
-// M2 (F-4 / D4): after `loopzero-cli` is extracted and `cli/` removed from the
-// monorepo, the live re-grep tests SKIP (the drift guard moves to loopzero-cli's own
+// M2 (F-4 / D4): after `loop-runtime-cli` is extracted and `cli/` removed from the
+// monorepo, the live re-grep tests SKIP (the drift guard moves to loop-runtime-cli's own
 // CI). The static presence check (TestCLIConsumer_AllPathsInSpec, which reads the
 // checked-in cli-consumed-paths.txt) keeps running regardless — so the engine
 // retains its consumer contract even after the split.
@@ -188,7 +188,7 @@ func TestCLIConsumer_AllPathsInSpec(t *testing.T) {
 // (2) the known consumer/producer gap is real + documented (CLI references it; spec does not).
 func TestCLIConsumer_KnownGapsAreReal(t *testing.T) {
 	if !cliSrcPresent() {
-		t.Skip("cli/ extracted — live known-gap check moved to loopzero-cli (M2 D4)")
+		t.Skip("cli/ extracted — live known-gap check moved to loop-runtime-cli (M2 D4)")
 	}
 	live := liveCLIPaths(t)
 	spec := specPathSetNormalized(t)
@@ -205,7 +205,7 @@ func TestCLIConsumer_KnownGapsAreReal(t *testing.T) {
 // (3) drift guard: the checked-in list stays in sync with cli/src (minus known gaps).
 func TestCLIConsumer_ListMatchesSource(t *testing.T) {
 	if !cliSrcPresent() {
-		t.Skip("cli/ extracted — live drift guard moved to loopzero-cli (M2 D4)")
+		t.Skip("cli/ extracted — live drift guard moved to loop-runtime-cli (M2 D4)")
 	}
 	want := readCLIPathList(t)
 	live := liveCLIPaths(t)

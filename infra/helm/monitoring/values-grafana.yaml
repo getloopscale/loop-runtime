@@ -13,20 +13,39 @@ resources:
 service:
   type: ClusterIP
   port: 3000
+# The dashboards (infra/helm/monitoring/dashboards) name their datasources by these uids.
 datasources:
   datasources.yaml:
     apiVersion: 1
     datasources:
       - name: Prometheus
         type: prometheus
+        uid: prometheus
         url: http://prometheus-server.monitoring.svc.cluster.local:80
         access: proxy
         isDefault: true
       - name: Loki
         type: loki
+        uid: loki
         url: http://loki.monitoring.svc.cluster.local:3100
         access: proxy
       - name: Tempo
         type: tempo
+        uid: tempo
         url: http://tempo.monitoring.svc.cluster.local:3200
         access: proxy
+# Loads every ConfigMap in this namespace labelled grafana_dashboard=1: the core helmfile's
+# loop-runtime-monitoring release renders one per infra/helm/monitoring/dashboards file.
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    labelValue: "1"
+    folder: /var/lib/grafana/dashboards/sidecar
+    provider:
+      name: sidecar
+      orgId: 1
+      folder: LoopRuntime
+      type: file
+      disableDeletion: false
+      allowUiUpdates: true

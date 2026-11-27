@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secrets
 
@@ -14,17 +14,17 @@ import (
 // deletes the user's memberships in every OTHER tenant — cross-tenant work by
 // definition. Since 000064 dropped the owner's maintenance policies, the table
 // owner is refused by FORCE ROW LEVEL SECURITY; cross-tenant writes go through
-// `loopzero_worker` and its named *_worker_cross_tenant policies (000062). Connecting
+// `loop_runtime_worker` and its named *_worker_cross_tenant policies (000062). Connecting
 // as the owner stopped a cold setup:
 //
 //	ERROR:  new row violates row-level security policy for table "tenants"
 //
-// These run seed-local-user.sh with faked kubectl and loopzero-ops, and record the
+// These run seed-local-user.sh with faked kubectl and loop-runtime-ops, and record the
 // role psql connected as and the Secret key its password came from.
 
 const seedLocalUserProfile = "seed-local-user-role"
 
-const seedRecordEnv = "LOOPZERO_FAKE_SEED_RECORD"
+const seedRecordEnv = "LOOP_RUNTIME_FAKE_SEED_RECORD"
 
 func init() {
 	registerFakes(seedLocalUserProfile, map[string]fakeTool{
@@ -43,7 +43,7 @@ func init() {
 			switch {
 			case strings.Contains(joined, "get pod"):
 				os.Stdout.WriteString("postgresql-0")
-			case strings.Contains(joined, "get secret loopzero-db-credentials"):
+			case strings.Contains(joined, "get secret loop-runtime-db-credentials"):
 				for _, a := range args {
 					if key, ok := strings.CutPrefix(a, "jsonpath={.data."); ok {
 						key = strings.TrimSuffix(key, "}")
@@ -63,7 +63,7 @@ func init() {
 			}
 			return 0
 		},
-		"loopzero-ops": func(args []string) int {
+		"loop-runtime-ops": func(args []string) int {
 			os.Stdout.WriteString("SELECT 1;\n")
 			return 0
 		},
@@ -94,8 +94,8 @@ func TestTheBootstrapUserSeedConnectsAsTheWorkerRole(t *testing.T) {
 		t.Fatalf("the seed never ran psql; recorded: %v", lines)
 	}
 	for _, u := range users {
-		if u != "loopzero_worker" {
-			t.Errorf("the seed ran psql as %q; the owner is refused by FORCE RLS since 000064 — cross-tenant writes use loopzero_worker", u)
+		if u != "loop_runtime_worker" {
+			t.Errorf("the seed ran psql as %q; the owner is refused by FORCE RLS since 000064 — cross-tenant writes use loop_runtime_worker", u)
 		}
 	}
 }

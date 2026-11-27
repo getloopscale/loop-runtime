@@ -30,7 +30,7 @@
       "title": "← Home",
       "tooltip": "Back to System Home",
       "type": "link",
-      "url": "/d/loopzero-home/loopzero-system-home"
+      "url": "/d/loop-runtime-home/loop-runtime-system-home"
     }
   ],
   "panels": [
@@ -103,7 +103,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_builds_total{status=\"succeeded\"}[1h])) / (sum(rate(loopzero_builds_total[1h])) > 0) or vector(1)",
+          "expr": "sum(rate(loop_runtime_builds_total{status=\"succeeded\"}[1h])) / (sum(rate(loop_runtime_builds_total[1h])) > 0) or vector(1)",
           "legendFormat": "Success Rate",
           "refId": "A"
         }
@@ -162,7 +162,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket[5m])) by (le)) or vector(0)",
           "legendFormat": "p95",
           "refId": "A"
         }
@@ -220,7 +220,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "max(loopzero_releasing_builds) or vector(0)",
+          "expr": "max(loop_runtime_releasing_builds) or vector(0)",
           "legendFormat": "Active",
           "refId": "A"
         }
@@ -278,7 +278,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "max(loopzero_build_queue_depth) or vector(0)",
+          "expr": "max(loop_runtime_build_queue_depth) or vector(0)",
           "legendFormat": "Queued",
           "refId": "A"
         }
@@ -333,7 +333,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=~\"5..\"}[5m])) / (sum(rate(loopzero_api_requests_total[5m])) > 0) or vector(0)",
+          "expr": "sum(rate(loop_runtime_api_requests_total{status=~\"5..\"}[5m])) / (sum(rate(loop_runtime_api_requests_total[5m])) > 0) or vector(0)",
           "legendFormat": "5xx Rate",
           "refId": "A"
         }
@@ -395,17 +395,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=~\"2..\"}[5m]))",
+          "expr": "sum(rate(loop_runtime_api_requests_total{status=~\"2..\"}[5m]))",
           "legendFormat": "2xx",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=~\"4..\"}[5m]))",
+          "expr": "sum(rate(loop_runtime_api_requests_total{status=~\"4..\"}[5m]))",
           "legendFormat": "4xx",
           "refId": "B"
         },
         {
-          "expr": "sum(rate(loopzero_api_requests_total{status=~\"5..\"}[5m]))",
+          "expr": "sum(rate(loop_runtime_api_requests_total{status=~\"5..\"}[5m]))",
           "legendFormat": "5xx",
           "refId": "C"
         }
@@ -449,17 +449,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -518,17 +518,17 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(loopzero_postgres_connections_active)",
+          "expr": "sum(loop_runtime_postgres_connections_active)",
           "legendFormat": "Active",
           "refId": "A"
         },
         {
-          "expr": "sum(loopzero_postgres_connections_idle)",
+          "expr": "sum(loop_runtime_postgres_connections_idle)",
           "legendFormat": "Idle",
           "refId": "B"
         },
         {
-          "expr": "sum(loopzero_postgres_connections_total)",
+          "expr": "sum(loop_runtime_postgres_connections_total)",
           "legendFormat": "Total",
           "refId": "C"
         }
@@ -571,7 +571,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(loopzero_sse_connections_active)",
+          "expr": "sum(loop_runtime_sse_connections_active)",
           "legendFormat": "Active Streams",
           "refId": "A"
         }
@@ -614,7 +614,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "sum(loopzero_api_requests_in_flight)",
+          "expr": "sum(loop_runtime_api_requests_in_flight)",
           "legendFormat": "In-Flight",
           "refId": "A"
         }
@@ -790,7 +790,7 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": [
-    "loopzero",
+    "loop-runtime",
     "platform"
   ],
   "templating": {
@@ -817,7 +817,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "LoopZero — Platform Overview",
-  "uid": "loopzero-platform-overview",
+  "title": "LoopRuntime — Platform Overview",
+  "uid": "loop-runtime-platform-overview",
   "version": 1
 }

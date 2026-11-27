@@ -41,7 +41,7 @@ describe("ADR-0020 (infra-parity) verification matrix D1-D7", () => {
   });
 
   it("D3 — VAP no-runtime-image-mutations + drift detection", () => {
-    expect(fileExists("charts/loopzero-admission-policies/templates/vap-no-runtime-image-mutations.yaml")).toBe(true);
+    expect(fileExists("charts/loop-runtime-admission-policies/templates/vap-no-runtime-image-mutations.yaml")).toBe(true);
     expect(fileExists("cli/tests/unit/platform-status-drift.test.ts")).toBe(true);
   });
 
@@ -79,16 +79,16 @@ describe("ADR-0021 (infra-normalize) verification matrix D1-D10", () => {
   });
 
   it("D1 — 4 split charts present (forward-only operator topology)", () => {
-    for (const c of ["loopzero-tenant-operator", "loopzero-app-operator", "loopzero-preview-operator", "loopzero-platform-operator"]) {
+    for (const c of ["loop-runtime-tenant-operator", "loop-runtime-app-operator", "loop-runtime-preview-operator", "loop-runtime-platform-operator"]) {
       expect(fileExists(`charts/${c}/Chart.yaml`), `${c} Chart.yaml missing`).toBe(true);
     }
   });
 
   it("D2 — T3.x archive tooling shipped (single Pulumi project)", () => {
-    // pulumi-archive.sh migrated to pure-Go (cmd/loopzero-ops/internal/pulumi/archive) per T1.1 of
+    // pulumi-archive.sh migrated to pure-Go (cmd/loop-runtime-ops/internal/pulumi/archive) per T1.1 of
     // plan 2026-05-23-incremental-bash-to-go-migration; wired via
-    // `loopzero-ops pulumi archive` in pulumi-archive.yml.
-    expect(fileExists("cmd/loopzero-ops/internal/pulumi/archive/check.go")).toBe(true);
+    // `loop-runtime-ops pulumi archive` in pulumi-archive.yml.
+    expect(fileExists("cmd/loop-runtime-ops/internal/pulumi/archive/check.go")).toBe(true);
     // pulumi-orphan-rm.sh deleted 2026-05-22 (unwired standalone tool — recreate
     // ad-hoc if pulumi orphan cleanup is needed).
   });

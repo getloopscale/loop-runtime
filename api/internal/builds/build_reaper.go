@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -10,10 +10,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // BuildReaperConfig configures the build reaper thresholds.
@@ -163,11 +163,11 @@ func (r *BuildReaper) ReapOnce(ctx context.Context) int {
 // reaperStuckPodReason returns the actionable operator message for a build
 // that was reaped because its workflow pods were wedged in ImagePullBackOff
 // / ErrImagePull / CreateContainerError past the RunningTimeout window.
-// Red Team loopzero-cloud#133. The message MUST name the container image and
+// Red Team loop-console#133. The message MUST name the container image and
 // point at the fix path (registry auth / image existence) rather than the
 // generic RUNNING-timeout copy which mis-blames slow builds.
 func reaperStuckPodReason(stuckPodReason string) string {
-	return fmt.Sprintf("Build was stuck at container image pull for more than 30 minutes (%s). Likely cause: the container image does not exist OR the workflow does not have credentials to pull it (private registry auth). Next: check the workflow overlay `LOOPZERO_COSIGN_IMAGE` / `LOOPZERO_SYFT_IMAGE` / build-image tags point at a real, pullable image; verify the build cluster has registry credentials.", stuckPodReason)
+	return fmt.Sprintf("Build was stuck at container image pull for more than 30 minutes (%s). Likely cause: the container image does not exist OR the workflow does not have credentials to pull it (private registry auth). Next: check the workflow overlay `LOOP_RUNTIME_COSIGN_IMAGE` / `LOOP_RUNTIME_SYFT_IMAGE` / build-image tags point at a real, pullable image; verify the build cluster has registry credentials.", stuckPodReason)
 }
 
 // reaperReason returns a human-readable reason for a reaper timeout event.
@@ -183,15 +183,15 @@ func reaperStuckPodReason(stuckPodReason string) string {
 func reaperReason(event statemachine.BuildPhaseEvent, cfg BuildReaperConfig) string {
 	switch event {
 	case statemachine.BPEventQueueTimeout:
-		return "Build was QUEUED for more than " + humanBudget(cfg.QueueTimeout) + ". Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopzero status` to see pending builds; consider canceling a stuck build with `loopzero cancel`."
+		return "Build was QUEUED for more than " + humanBudget(cfg.QueueTimeout) + ". Likely cause: build cluster is at capacity OR a previous build is still using the per-tenant concurrency slot. Next: run `loopscale status` to see pending builds; consider canceling a stuck build with `loop-runtime cancel`."
 	case statemachine.BPEventTimeout:
-		return "Build was RUNNING for more than " + humanBudget(cfg.RunningTimeout) + ". Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopzero logs --build <id>` and check the LAST log line — that's the step where the build stalled."
+		return "Build was RUNNING for more than " + humanBudget(cfg.RunningTimeout) + ". Likely cause: image build step is slow (large layers, npm install resolving many packages) OR the build container is hung on a network call. Next: run `loopscale logs --build <id>` and check the LAST log line — that's the step where the build stalled."
 	case statemachine.BPEventReleaseTimeout:
-		return "Build was RELEASING (image built, release activation in flight) for more than " + humanBudget(cfg.ReleasingTimeout) + ". Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopzero status` to see if the release became active; if not, retry with `loopzero deploy`."
+		return "Build was RELEASING (image built, release activation in flight) for more than " + humanBudget(cfg.ReleasingTimeout) + ". Likely cause: deployment sync is slow OR the workload cluster is unhealthy. Next: run `loopscale status` to see if the release became active; if not, retry with `loopscale deploy`."
 	case statemachine.BPEventCancelTimeout:
-		return "Cancellation did not complete within " + humanBudget(cfg.CancelTimeout) + ". The build pod may need manual cleanup. Next: run `loopzero status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
+		return "Cancellation did not complete within " + humanBudget(cfg.CancelTimeout) + ". The build pod may need manual cleanup. Next: run `loopscale status` to confirm the build moved to CANCELLED; if still CANCELLING, contact support."
 	default:
-		return "Build reaped due to timeout. Run `loopzero logs --build <id>` for context."
+		return "Build reaped due to timeout. Run `loopscale logs --build <id>` for context."
 	}
 }
 
@@ -240,7 +240,7 @@ func (r *BuildReaper) reap(ctx context.Context) int {
 		// legitimately slow, not stuck. Only reap when the workflow is gone,
 		// failed, or we can't determine its state.
 		//
-		// Red Team loopzero-cloud#133 override: when the workflow reports Phase=Running
+		// Red Team loop-console#133 override: when the workflow reports Phase=Running
 		// but the underlying pod is wedged in ImagePullBackOff / ErrImagePull /
 		// CreateContainerError past the RunningTimeout window, the workflow will
 		// never make progress. Reap with a stuck-pod-shaped reason so the operator

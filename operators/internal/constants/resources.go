@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package constants
 
-import "github.com/getloopscale/loopzero/pkg/gitearepo"
+import "github.com/getloopscale/loop-runtime/pkg/gitearepo"
 
 // --- Secret Names ---
 // These are the well-known names of Kubernetes Secrets created by controllers.
@@ -12,17 +12,17 @@ import "github.com/getloopscale/loopzero/pkg/gitearepo"
 const (
 	// SecretMinIOCredentials is the per-tenant Secret with S3/MinIO credentials.
 	// CWTs reference this via envFrom in Argo Workflow templates.
-	SecretMinIOCredentials = "loopzero-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
+	SecretMinIOCredentials = "loop-runtime-minio-credentials" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretBuildKitRegistryConfig is the Docker config.json for BuildKit registry auth.
 	SecretBuildKitRegistryConfig = "buildkit-registry-config" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
 
 	// SecretPlatformTokens is the platform-wide Secret storing Gitea/ArgoCD tokens.
-	SecretPlatformTokens = "loopzero-platform-tokens"
+	SecretPlatformTokens = "loop-runtime-platform-tokens"
 
 	// SecretRegistryPull is the registry pull secret kept in
 	// NamespacePlatformSystem and copied into every environment namespace.
-	SecretRegistryPull = "loopzero-system"
+	SecretRegistryPull = "loop-runtime-system"
 
 	// SecretArgoCDInitialAdmin is the default ArgoCD admin password Secret.
 	SecretArgoCDInitialAdmin = "argocd-initial-admin-secret" //nolint:gosec // G101 false positive: Secret resource NAME, not credential value
@@ -47,14 +47,14 @@ const (
 
 const (
 	// SABuildWorkflow is the ServiceAccount used by Argo Workflow pods in build namespaces.
-	SABuildWorkflow = "loopzero-build-sa"
+	SABuildWorkflow = "loop-runtime-build-sa"
 
 	// SADeployer is the ServiceAccount for ArgoCD-managed deployments in environment namespaces.
-	SADeployer = "loopzero-deployer"
+	SADeployer = "loop-runtime-deployer"
 
 	// SAApp is the ServiceAccount tenant workloads run as in environment and
 	// preview namespaces; it carries the registry pull secret.
-	SAApp = "loopzero-app"
+	SAApp = "loop-runtime-app"
 )
 
 // --- ResourceQuota and Role Names ---
@@ -69,13 +69,13 @@ const (
 	RoleBindingArgoExecutor = "argo-workflow-executor"
 	// RoleWorkflowSubmitter allows the workflow-submitter SA (in argo ns) to create/manage
 	// workflows in tenant build namespaces.
-	RoleWorkflowSubmitter        = "loopzero-workflow-submitter"
-	RoleBindingWorkflowSubmitter = "loopzero-workflow-submitter"
+	RoleWorkflowSubmitter        = "loop-runtime-workflow-submitter"
+	RoleBindingWorkflowSubmitter = "loop-runtime-workflow-submitter"
 	// SAWorkflowSubmitter is the ServiceAccount name used by the API to submit workflows.
-	SAWorkflowSubmitter = "loopzero-workflow-submitter"
+	SAWorkflowSubmitter = "loop-runtime-workflow-submitter"
 	NSArgoWorkflows     = "argo"
-	RoleDeployer        = "loopzero-deployer"
-	RoleBindingDeployer = "loopzero-deployer"
+	RoleDeployer        = "loop-runtime-deployer"
+	RoleBindingDeployer = "loop-runtime-deployer"
 )
 
 // --- NetworkPolicy Names ---
@@ -99,7 +99,7 @@ func ArgoCDClusterSecretName(clusterName string) string {
 	return "cluster-" + clusterName
 }
 
-// ExposedRouteName returns the deterministic name for a LoopZeroApplication's ExposedRoute CR.
+// ExposedRouteName returns the deterministic name for a LoopRuntimeApplication's ExposedRoute CR.
 func ExposedRouteName(appName string) string {
 	return appName + "-route"
 }
@@ -109,11 +109,11 @@ func ExposedRouteName(appName string) string {
 const (
 	DefaultGiteaTokenName     = "platform-bootstrap-token"
 	DefaultArgoCDUsername     = "admin"
-	DefaultArgoCDRepoUsername = "loopzero-platform"
-	// ArgoCDAPIAccount is the dedicated ArgoCD service account for the LoopZero API.
+	DefaultArgoCDRepoUsername = "loop-runtime-platform"
+	// ArgoCDAPIAccount is the dedicated ArgoCD service account for the LoopRuntime API.
 	// Configured in Helm values with capability: apiKey.
 	// RBAC: sync + get on applications (least privilege).
-	ArgoCDAPIAccount = "loopzero-api"
+	ArgoCDAPIAccount = "loop-runtime-api"
 )
 
 // --- Probe Thresholds ---
@@ -129,9 +129,9 @@ const (
 // Higher values = higher priority. Only Enterprise can preempt others.
 
 const (
-	PriorityClassStarter    = "loopzero-tenant-starter"
-	PriorityClassGrowth     = "loopzero-tenant-growth"
-	PriorityClassEnterprise = "loopzero-tenant-enterprise"
+	PriorityClassStarter    = "loop-runtime-tenant-starter"
+	PriorityClassGrowth     = "loop-runtime-tenant-growth"
+	PriorityClassEnterprise = "loop-runtime-tenant-enterprise"
 
 	PriorityValueStarter    int32 = 100
 	PriorityValueGrowth     int32 = 500
@@ -173,7 +173,7 @@ const (
 	// imported by all four operator binaries -- so writing it that way made three
 	// binaries that never touch the variable appear to read it. That blind spot is
 	// B-190; this comment simply stays out of its way.
-	DefaultGiteaOrg = "loopzero"
+	DefaultGiteaOrg = "loop-runtime"
 
 	// DefaultArgoCDNamespace is the default namespace where ArgoCD is installed.
 	DefaultArgoCDNamespace = "argocd"

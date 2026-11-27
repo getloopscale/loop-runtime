@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package manifests — Argo Rollouts (canary progressive delivery).
 //
@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // buildRollout creates an Argo Rollouts Rollout resource for an app.
@@ -37,9 +37,9 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":                 resName,
-		"loopzero.io/tenant":  ri.TenantID,
-		"loopzero.io/project": ri.ProjectID,
+		"app":                              resName,
+		"runtime.getloopscale.com/tenant":  ri.TenantID,
+		"runtime.getloopscale.com/project": ri.ProjectID,
 	}
 
 	container := buildAppContainer(ri, app, port)
@@ -47,11 +47,11 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 
 	// #61 — how long the OLD ReplicaSet survives promotion.
 	//
-	// DECISION: LoopZero promises a long-lived connection GRACEFUL RECONNECTION,
+	// DECISION: LoopRuntime promises a long-lived connection GRACEFUL RECONNECTION,
 	// not SURVIVAL.
 	//
 	// Survival would mean a connection outlives the process that owns it, which
-	// requires handing session state between pods. LoopZero does not do that, and
+	// requires handing session state between pods. LoopRuntime does not do that, and
 	// building it is an architecture change, not a config value. Promising
 	// survival and delivering a severed socket is worse than promising
 	// reconnection and delivering it.
@@ -66,7 +66,7 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 	// ReplicaSet is never removed while its pods are still draining. It is
 	// deliberately NOT minutes: the old ReplicaSet holds quota and delays the
 	// NEXT rollout — including the rollback reached for when a canary is
-	// actively serving errors. Buying a guarantee LoopZero does not make, at cost
+	// actively serving errors. Buying a guarantee LoopRuntime does not make, at cost
 	// on the incident path, is the wrong trade.
 	//
 	// Stated explicitly rather than left to the controller default: an unstated
@@ -109,7 +109,7 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 
 	// #61 — the OLD ReplicaSet must outlive the promotion.
 	//
-	// DECISION (2026-07-30): LoopZero promises a WebSocket GRACEFUL RECONNECTION,
+	// DECISION (2026-07-30): LoopRuntime promises a WebSocket GRACEFUL RECONNECTION,
 	// not SURVIVAL. Survival would mean a connection outliving the process that
 	// owns it, which needs session handoff between pods — an architecture
 	// change, not a config value. Promising survival and delivering a severed
@@ -124,7 +124,7 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 	// 60s covers the 35s teardown with margin while staying short enough that
 	// the NEXT rollout is not delayed. That matters most on the path nobody
 	// plans for: the rollback reached for while a canary is serving errors. A
-	// multi-minute window would buy a guarantee LoopZero does not make, and charge
+	// multi-minute window would buy a guarantee LoopRuntime does not make, and charge
 	// for it during an incident.
 	//
 	// Applied to BOTH shapes — a worker has no traffic to weight, but it can
@@ -139,8 +139,8 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 			Namespace: ns,
 			Labels:    labels,
 			Annotations: map[string]string{
-				"loopzero.io/build-id":   ri.BuildID,
-				"loopzero.io/release-id": ri.ReleaseID,
+				"runtime.getloopscale.com/build-id":   ri.BuildID,
+				"runtime.getloopscale.com/release-id": ri.ReleaseID,
 				// F-15 (2026-05-07 dogfood gate): sync-wave -1 was originally
 				// added per EC-4 migration to make Rollout creation precede
 				// legacy Deployment prune. In practice it broke fresh installs:
@@ -157,7 +157,7 @@ func buildRollout(ri renderScope, app AppManifestInput, port int) k8sRollout {
 			RevisionHistoryLimit: 5,
 			Selector:             k8sLabelSelector{MatchLabels: selectorLabels},
 			Template: k8sPodTemplateSpec{
-				Metadata: k8sPodMeta{Labels: labels},
+				Metadata: podTemplateMeta(ri, labels),
 				Spec:     podSpec,
 			},
 			Strategy: k8sRolloutStrategy{Canary: canary},
@@ -242,7 +242,7 @@ func analysisOrPause(withAnalysis bool, fallbackPause string) []k8sCanaryStep {
 // canaryAnalysisTemplateName is the AnalysisTemplate name referenced by
 // Rollout canary steps. Per D3, the template is per-namespace, so this
 // name is constant within each tenant env namespace.
-const canaryAnalysisTemplateName = "loopzero-canary-analysis"
+const canaryAnalysisTemplateName = "loop-runtime-canary-analysis"
 
 // buildStableService creates the stable Service for canary traffic split.
 // Argo Rollouts manages spec.selector.rollouts-pod-template-hash to mark
@@ -266,9 +266,9 @@ func buildRolloutService(ri renderScope, app AppManifestInput, svcName string, p
 	labels := commonLabels(ri, app)
 	resName := resourceName(ri.ProjectID, app.Name)
 	selectorLabels := map[string]string{
-		"app":                 resName,
-		"loopzero.io/tenant":  ri.TenantID,
-		"loopzero.io/project": ri.ProjectID,
+		"app":                              resName,
+		"runtime.getloopscale.com/tenant":  ri.TenantID,
+		"runtime.getloopscale.com/project": ri.ProjectID,
 	}
 	if port == 0 {
 		port = 3000
@@ -401,7 +401,7 @@ func buildAppContainer(ri renderScope, app AppManifestInput, port int) k8sContai
 			{ContainerPort: port, Protocol: "TCP"},
 		}
 		container.Env = append(container.Env, k8sEnvVar{
-			Name: "PORT", Value: fmt.Sprintf("%d", port),
+			Name: PortEnvName, Value: fmt.Sprintf("%d", port),
 		})
 		container.StartupProbe = &k8sProbe{
 			HTTPGet:          k8sHTTPGet{Path: "/health", Port: port},
@@ -436,11 +436,21 @@ func buildAppContainer(ri renderScope, app AppManifestInput, port int) k8sContai
 		}
 	}
 
-	if len(app.Secrets) > 0 {
-		secretRefName := naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, app.Name)
-		container.EnvFrom = []k8sEnvFromSource{
-			{SecretRef: k8sSecretRef{Name: secretRefName}},
-		}
+	// The Secrets secret sync writes from `loopscale secret set`: the environment's,
+	// for a secret set without an app, then the app's, so the app's value wins on a
+	// shared key. Both are mounted whether or not the app's configuration declares a
+	// secret, because a secret set for the app is delivered either way; mounting only
+	// declared ones left every undeclared secret out of the process. An app that
+	// declares secrets requires its Secret, and the pod waits for it; otherwise both
+	// are optional, so an app with no secret starts.
+	optional := true
+	appSecretOptional := len(app.Secrets) == 0
+	container.EnvFrom = []k8sEnvFromSource{
+		{SecretRef: k8sSecretRef{Name: naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, ""), Optional: &optional}},
+		{SecretRef: k8sSecretRef{Name: naming.UserSecretName(ri.TenantID, ri.ProjectID, ri.Environment, app.Name)}},
+	}
+	if appSecretOptional {
+		container.EnvFrom[1].SecretRef.Optional = &optional
 	}
 
 	return container
@@ -472,7 +482,7 @@ func buildAppPodSpec(container k8sContainer) k8sPodSpec {
 	//
 	// This is the half of #61 that is NOT a product decision: the race harms
 	// every rollout, WebSocket or not. How long a WebSocket should be allowed to
-	// outlive a deploy — whether LoopZero promises survival or reconnection —
+	// outlive a deploy — whether LoopRuntime promises survival or reconnection —
 	// remains open on that issue.
 	const preStopDrainSeconds = 5
 	if container.Lifecycle == nil {
@@ -481,7 +491,7 @@ func buildAppPodSpec(container k8sContainer) k8sPodSpec {
 		}
 	}
 	return k8sPodSpec{
-		ServiceAccountName:           "loopzero-app",
+		ServiceAccountName:           "loop-runtime-app",
 		AutomountServiceAccountToken: &falseVal,
 		SecurityContext: &k8sPodSecurityContext{
 			RunAsNonRoot:   &trueVal,
@@ -523,4 +533,21 @@ func replicasForApp(app AppManifestInput) int {
 		return app.Replicas
 	}
 	return replicas
+}
+
+// RenderedReplicas is the replica count app's workload is rendered with, for
+// callers that report the scale of a deployed app without rendering it.
+func RenderedReplicas(app AppManifestInput) int {
+	return replicasForApp(app)
+}
+
+// PortEnvName is the variable the platform sets on an app's container to the
+// port the app declared.
+const PortEnvName = "PORT"
+
+// PlatformEnvNames lists the variables the platform sets on an app's container
+// itself. A value set there wins over one loaded from a Secret, so a tenant
+// secret of the same name would never reach the app.
+func PlatformEnvNames() []string {
+	return []string{PortEnvName}
 }

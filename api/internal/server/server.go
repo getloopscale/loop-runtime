@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server
 
 import (
 	"context"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/projects/projectshttp"
 	"log/slog"
 	"net/http"
 	"os"
@@ -14,49 +14,49 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/auth/authhttp"
-	"github.com/getloopscale/loopzero/api/internal/bootstrap"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/logs/logshttp"
-	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/projectmetrics/projectmetricshttp"
-	"github.com/getloopscale/loopzero/api/internal/projects"
-	"github.com/getloopscale/loopzero/api/internal/release/argocdhttp"
-	"github.com/getloopscale/loopzero/api/internal/release/promotehttp"
-	"github.com/getloopscale/loopzero/api/internal/release/rollbackhttp"
-	"github.com/getloopscale/loopzero/api/internal/status/statushttp"
-	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
-	"github.com/getloopscale/loopzero/api/internal/tenants/tenantshttp"
-	"github.com/getloopscale/loopzero/api/internal/timeline/timelinehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/auth/authhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/bootstrap"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/logs/logshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/projectmetrics/projectmetricshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/projects"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocdhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/promotehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/release/rollbackhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/status/statushttp"
+	"github.com/getloopscale/loop-runtime/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/tenants/tenantshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/timelinehttp"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
 	// Aliased because `routes/metrics` (the proxy route family, imported above)
 	// already takes the name `metrics` in this file. Same collision as
 	// `routes/source` vs `internal/source`, resolved the same way.
-	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
-	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
-	"github.com/getloopscale/loopzero/api/internal/integrations/integrationshttp"
-	appmetrics "github.com/getloopscale/loopzero/api/internal/metrics"
-	mwaudit "github.com/getloopscale/loopzero/api/internal/middleware/audit"
-	mwauth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
-	"github.com/getloopscale/loopzero/api/internal/repositories/repositorieshttp"
-	"github.com/getloopscale/loopzero/api/internal/scaling/scalinghttp"
-	"github.com/getloopscale/loopzero/api/internal/secrets/secretshttp"
-	"github.com/getloopscale/loopzero/api/internal/source"
-	sourceroutes "github.com/getloopscale/loopzero/api/internal/source/sourcehttp"
-	"github.com/getloopscale/loopzero/api/internal/sse"
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/api/internal/audit/audithttp"
+	"github.com/getloopscale/loop-runtime/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/health/healthhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/integrations/integrationshttp"
+	appmetrics "github.com/getloopscale/loop-runtime/api/internal/metrics"
+	mwaudit "github.com/getloopscale/loop-runtime/api/internal/middleware/audit"
+	mwauth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/preview/previewhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/repositories/repositorieshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/scaling/scalinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/secrets/secretshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	sourceroutes "github.com/getloopscale/loop-runtime/api/internal/source/sourcehttp"
+	"github.com/getloopscale/loop-runtime/api/internal/sse"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	pkglogging "github.com/getloopscale/loop-runtime/pkg/logging"
 )
 
 // Config holds the server configuration.
@@ -104,7 +104,7 @@ type Config struct {
 	ObjectUploader    sourceroutes.ObjectUploader // optional: upload bundles to S3/Spaces for build access
 	SourceBucket      string                      // S3 bucket name for source bundles (env: SOURCE_BUCKET)
 	// EnvBlocklistMode is how a reserved services.json env key is handled on
-	// upload (config.Config.EnvBlocklistMode, env LOOPZERO_ENV_BLOCKLIST_MODE).
+	// upload (config.Config.EnvBlocklistMode, env LOOP_RUNTIME_ENV_BLOCKLIST_MODE).
 	// The zero value enforces.
 	EnvBlocklistMode source.EnvBlocklistMode
 	EventStore       sse.EventStore
@@ -157,7 +157,7 @@ type Config struct {
 	GitHubWebhookHandler http.Handler
 	// Surfaces collects the router's registration decisions so a surface that
 	// was skipped for a missing dependency can be SEEN — via
-	// `loopzero_api_surface_enabled` — instead of only being discovered by whoever
+	// `loop_runtime_api_surface_enabled` — instead of only being discovered by whoever
 	// hits the 404. Nil is legal and means "nobody is observing", which is what
 	// a focused unit test wants; the production path wires it. B-104.
 	Surfaces          *surfaces.Registry
@@ -189,7 +189,7 @@ type Config struct {
 	// through. Nil means an Authenticator with no secrets configured: user
 	// routes still validate tokens, and admin routes refuse everyone.
 	Auth *mwauth.Authenticator
-	// Maintenance is LOOPZERO_MAINTENANCE_MODE, parsed at boot. The zero value is off.
+	// Maintenance is LOOP_RUNTIME_MAINTENANCE_MODE, parsed at boot. The zero value is off.
 	Maintenance policy.MaintenanceSetting
 }
 
@@ -269,7 +269,7 @@ type SecretsConfig struct {
 // AdminConfig carries the collaborators of the operator (admin) routes; each
 // route is mounted only when its collaborator is set.
 type AdminConfig struct {
-	// APIEnabled is the LOOPZERO_ADMIN_API feature flag: off, the admin routes
+	// APIEnabled is the LOOP_RUNTIME_ADMIN_API feature flag: off, the admin routes
 	// answer 404 even to an authorized operator.
 	APIEnabled       bool
 	Evictor          placementhttp.TenantEvictor

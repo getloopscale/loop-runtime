@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package archive provides safe tar extraction with security validations.
 // Extracted from source/safe_tar.go to be importable by github/ and source/.

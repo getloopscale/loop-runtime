@@ -1,0 +1,6 @@
+dependencies:
+- name: loop-runtime-common
+  repository: file://../loop-runtime-common
+  version: 0.3.0
+digest: sha256:fbadf16a8fbe0b1b349167ba0c032e4b99bd48793df6bc67324b2b55b10c649a
+generated: "2026-11-26T15:46:49.131538894-03:00"

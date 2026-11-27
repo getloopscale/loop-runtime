@@ -3,7 +3,7 @@
 # Layered on top of values.yaml for the dev and prod environments only
 # (core.helmfile.yaml.gotmpl), so Gitea survives pod kills and node failures:
 #
-#   helm upgrade gitea gitea-charts/gitea -n loopzero-system \
+#   helm upgrade gitea gitea-charts/gitea -n loop-runtime-system \
 #     -f values.yaml -f values-ha.yaml
 #
 # What this changes, on top of the base values:
@@ -15,7 +15,7 @@
 #
 # Every Redis address points at the bitnami `gitea-redis` release's primary
 # Service, `gitea-redis-master:6379` — the same host values.yaml uses. The
-# `redis.loopzero-system.svc.cluster.local` host this file named before does not
+# `redis.loop-runtime-system.svc.cluster.local` host this file named before does not
 # exist (see the gitea-redis note in values.yaml).
 #
 # Non-git data (LFS, avatars, attachments) stays on the shared volume. Moving it

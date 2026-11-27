@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C12.
 // Source: docs/decisions/MEET-INFRA-NORMALIZE-T3-operator-split.md
@@ -26,10 +26,10 @@ func chartsDir() string {
 }
 
 var splitOperators = []string{
-	"loopzero-tenant-operator",
-	"loopzero-app-operator",
-	"loopzero-preview-operator",
-	"loopzero-platform-operator",
+	"loop-runtime-tenant-operator",
+	"loop-runtime-app-operator",
+	"loop-runtime-preview-operator",
+	"loop-runtime-platform-operator",
 }
 
 func TestSplitOperators_HaveProdValuesOverlay(t *testing.T) {
@@ -41,9 +41,9 @@ func TestSplitOperators_HaveProdValuesOverlay(t *testing.T) {
 			continue
 		}
 		// Each prod overlay MUST set imagePullSecrets to the canonical
-		// loopzero-registry-pull (DOCR auth provisioned by Pulumi L1).
-		if !strings.Contains(string(data), "name: loopzero-registry-pull") {
-			t.Errorf("%s/values-prod.yaml missing 'name: loopzero-registry-pull'", op)
+		// loop-runtime-registry-pull (DOCR auth provisioned by Pulumi L1).
+		if !strings.Contains(string(data), "name: loop-runtime-registry-pull") {
+			t.Errorf("%s/values-prod.yaml missing 'name: loop-runtime-registry-pull'", op)
 		}
 	}
 }
@@ -60,8 +60,8 @@ func TestSplitOperators_HaveStandaloneMultiOverlay(t *testing.T) {
 		if !strings.Contains(string(data), "imagePullSecrets: []") {
 			t.Errorf("%s/values-standalone-multi.yaml must declare 'imagePullSecrets: []' (k3d no-auth)", op)
 		}
-		if !strings.Contains(string(data), "k3d-loopzero-registry:5000") {
-			t.Errorf("%s/values-standalone-multi.yaml must override registry to k3d-loopzero-registry:5000", op)
+		if !strings.Contains(string(data), "k3d-loop-runtime-registry:5000") {
+			t.Errorf("%s/values-standalone-multi.yaml must override registry to k3d-loop-runtime-registry:5000", op)
 		}
 	}
 }

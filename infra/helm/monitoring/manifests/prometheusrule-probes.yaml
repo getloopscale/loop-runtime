@@ -2,16 +2,16 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-probe-alerts
+  name: loop-runtime-probe-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.probes
+    - name: loop-runtime.probes
       rules:
-        - alert: LoopZeroAPIProbeFailure
-          expr: probe_success{job="probe/monitoring/loopzero-api-probe"} == 0
+        - alert: LoopRuntimeAPIProbeFailure
+          expr: probe_success{job="probe/monitoring/loop-runtime-api-probe"} == 0
           for: 2m
           labels:
             severity: critical
@@ -20,7 +20,7 @@ spec:
             description: "Blackbox probe to {{ $labels.instance }} has been failing for 2+ minutes."
             runbook: "Check target service health. Verify network policies allow probe traffic. Check blackbox-exporter logs."
 
-        - alert: LoopZeroTLSCertExpiring
+        - alert: LoopRuntimeTLSCertExpiring
           expr: probe_ssl_earliest_cert_expiry - time() < 604800
           for: 1h
           labels:
@@ -30,8 +30,8 @@ spec:
             description: "Certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}."
             runbook: "Check cert-manager Certificate resources. Verify ACME issuer is working. Renew manually if needed."
 
-        - alert: LoopZeroProbeSlow
-          expr: probe_duration_seconds{job=~"probe/monitoring/loopzero-.*"} > 10
+        - alert: LoopRuntimeProbeSlow
+          expr: probe_duration_seconds{job=~"probe/monitoring/loop-runtime-.*"} > 10
           for: 5m
           labels:
             severity: warning

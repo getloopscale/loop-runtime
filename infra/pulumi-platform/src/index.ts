@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
- * loopzero-platform — infrastructure services on K8s clusters.
+ * loop-runtime-platform — infrastructure services on K8s clusters.
  *
  * Architecture: ComponentResources with explicit dependencies.
  * Each service declares what it needs (inputs) and what it produces (outputs).
@@ -33,7 +33,7 @@ import { Grafana } from "./services/grafana";
 import { Tempo, OtelCollector } from "./services/tempo";
 
 const config = loadPlatformConfig();
-const NAMESPACE = "loopzero-system";
+const NAMESPACE = "loop-runtime-system";
 
 // --- K8s Providers (one per cluster, from StackReference) ---
 const mgmtProvider = new k8s.Provider("mgmt-k8s", { kubeconfig: refs.mgmtKubeconfig });
@@ -41,12 +41,12 @@ const buildProvider = new k8s.Provider("build-k8s", { kubeconfig: refs.buildKube
 const runtimeProvider = new k8s.Provider("runtime-k8s", { kubeconfig: refs.runtimeKubeconfig });
 
 // --- Platform namespace (mgmt cluster) ---
-const mgmtNs = new k8s.core.v1.Namespace("mgmt-loopzero-system", {
+const mgmtNs = new k8s.core.v1.Namespace("mgmt-loop-runtime-system", {
   metadata: {
     name: NAMESPACE,
     labels: {
       "app.kubernetes.io/managed-by": "pulumi",
-      "app.kubernetes.io/part-of": "loopzero-platform",
+      "app.kubernetes.io/part-of": "loop-runtime-platform",
       "pod-security.kubernetes.io/enforce": "baseline",
       "pod-security.kubernetes.io/warn": "restricted",
       "pod-security.kubernetes.io/audit": "restricted",
@@ -55,12 +55,12 @@ const mgmtNs = new k8s.core.v1.Namespace("mgmt-loopzero-system", {
 }, { provider: mgmtProvider });
 
 // --- Platform namespace (runtime cluster) ---
-const runtimeNs = new k8s.core.v1.Namespace("runtime-loopzero-system", {
+const runtimeNs = new k8s.core.v1.Namespace("runtime-loop-runtime-system", {
   metadata: {
     name: NAMESPACE,
     labels: {
       "app.kubernetes.io/managed-by": "pulumi",
-      "app.kubernetes.io/part-of": "loopzero-platform",
+      "app.kubernetes.io/part-of": "loop-runtime-platform",
       "pod-security.kubernetes.io/enforce": "baseline",
       "pod-security.kubernetes.io/warn": "restricted",
       "pod-security.kubernetes.io/audit": "restricted",
@@ -68,9 +68,9 @@ const runtimeNs = new k8s.core.v1.Namespace("runtime-loopzero-system", {
   },
 }, { provider: runtimeProvider });
 
-// --- Docker registry credentials (from loopzero-infra, for imagePullSecrets) ---
+// --- Docker registry credentials (from loop-runtime-infra, for imagePullSecrets) ---
 new k8s.core.v1.Secret("mgmt-registry-creds", {
-  metadata: { name: "loopzero-registry", namespace: NAMESPACE },
+  metadata: { name: "loop-runtime-registry", namespace: NAMESPACE },
   type: "kubernetes.io/dockerconfigjson",
   stringData: { ".dockerconfigjson": refs.dockerConfigJson },
 }, { provider: mgmtProvider, dependsOn: [mgmtNs] });
@@ -195,7 +195,7 @@ const runtimeTraefik = new Traefik("runtime-traefik", {
 }, { dependsOn: [runtimeNs] });
 
 // ═══════════════════════════════════════════════
-// STACK OUTPUTS — consumed by loopzero-control-plane
+// STACK OUTPUTS — consumed by loop-runtime-control-plane
 // ═══════════════════════════════════════════════
 
 export const mgmtIngressEndpoint = mgmtTraefik.ingressEndpoint;

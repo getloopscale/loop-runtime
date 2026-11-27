@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package platform_test
 
@@ -20,8 +20,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
 // buildKubeconfigBytes creates a serialized kubeconfig pointing at the given server
@@ -70,20 +70,20 @@ func buildEnvtestKubeconfigBytes() []byte {
 	return data
 }
 
-func newClusterCredential(name, namespace, clusterName, apiServer, secretName, secretNamespace string) *loopzerov1.ClusterCredential {
-	return &loopzerov1.ClusterCredential{
+func newClusterCredential(name, namespace, clusterName, apiServer, secretName, secretNamespace string) *loopruntimev1.ClusterCredential {
+	return &loopruntimev1.ClusterCredential{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec: loopzerov1.ClusterCredentialSpec{
+		Spec: loopruntimev1.ClusterCredentialSpec{
 			ClusterName: clusterName,
 			APIServer:   apiServer,
-			SecretRef: loopzerov1.SecretReference{
+			SecretRef: loopruntimev1.SecretReference{
 				Name:      secretName,
 				Namespace: secretNamespace,
 			},
-			Scope: loopzerov1.CredentialScope{
+			Scope: loopruntimev1.CredentialScope{
 				ArgoCD:    true,
 				Operators: false,
 			},
@@ -119,7 +119,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 
 			// The controller should set SecretNotFound=True and requeue after 30s.
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-no-secret", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -141,7 +141,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 				// for every credential that has not yet connected. Measured, and
 				// it is why the field carries +kubebuilder:default=false.
 				var raw unstructured.Unstructured
-				raw.SetGroupVersionKind(loopzerov1.GroupVersion.WithKind("ClusterCredential"))
+				raw.SetGroupVersionKind(loopruntimev1.GroupVersion.WithKind("ClusterCredential"))
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-no-secret", Namespace: "default",
 				}, &raw)).To(Succeed())
@@ -180,7 +180,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-unreachable", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -223,7 +223,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			// Use 30s timeout because during the full suite the controller worker
 			// may be busy with other CRs (unreachable clusters take 5s each).
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-reachable", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -300,7 +300,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			Expect(k8sClient.Create(ctx, cr)).To(Succeed())
 
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-bad-kubeconfig", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -324,7 +324,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 
 			// First, SecretNotFound should be True.
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-late-secret", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -351,7 +351,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			// Since we are in envtest, we can wait a bit longer.
 			// The secret points to unreachable host so Connected=False.
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-late-secret", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -401,7 +401,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			}, 30*time.Second, interval).Should(Succeed())
 
 			// Delete the ClusterCredential
-			var toDelete loopzerov1.ClusterCredential
+			var toDelete loopruntimev1.ClusterCredential
 			Expect(k8sClient.Get(ctx, types.NamespacedName{
 				Name: "cc-delete-test", Namespace: "default",
 			}, &toDelete)).To(Succeed())
@@ -419,7 +419,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 
 			// The CR itself should be gone
 			Eventually(func(g Gomega) {
-				var gone loopzerov1.ClusterCredential
+				var gone loopruntimev1.ClusterCredential
 				err := k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-delete-test", Namespace: "default",
 				}, &gone)
@@ -456,7 +456,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			// the controller worker may be busy reconciling other ClusterCredential CRs.
 			var firstCheckTime *metav1.Time
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-recheck", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -469,7 +469,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 	})
 
 	Context("TLS insecure mode (issue #67)", func() {
-		// Regression for github.com/getloopscale/loopzero#67: when a CR declares
+		// Regression for github.com/getloopscale/loop-runtime#67: when a CR declares
 		// spec.tls.insecure=true (the supported way to bypass TLS verification
 		// for development clusters with self-signed certs), the rendered
 		// ArgoCD cluster Secret MUST have config.tlsClientConfig.insecure=true.
@@ -586,7 +586,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 			// the controller worker may be busy reconciling other ClusterCredential CRs
 			// (including ones with unreachable clusters that take 5s per connectivity check).
 			Eventually(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-idempotent", Namespace: "default",
 				}, &fetched)).To(Succeed())
@@ -603,7 +603,7 @@ var _ = Describe("ClusterCredentialController", Ordered, func() {
 
 			// The ArgoCD secret should still exist and not be duplicated after multiple reconciles.
 			Consistently(func(g Gomega) {
-				var fetched loopzerov1.ClusterCredential
+				var fetched loopruntimev1.ClusterCredential
 				g.Expect(k8sClient.Get(ctx, types.NamespacedName{
 					Name: "cc-idempotent", Namespace: "default",
 				}, &fetched)).To(Succeed())

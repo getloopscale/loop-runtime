@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
 import (
 	"testing"
 
-	sm "github.com/getloopscale/loopzero/pkg/statemachine"
+	sm "github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // Every state the release state machine can put on a row has its own

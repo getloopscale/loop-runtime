@@ -1,0 +1,21 @@
+# The AWS Load Balancer Controller makes an ALB from this Ingress, with the node instances
+# as targets of the Service's NodePort.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: loop-runtime-api
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: instance
+    alb.ingress.kubernetes.io/healthcheck-path: /api/v1/health
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: loop-runtime-api
+                port: {number: 3001}

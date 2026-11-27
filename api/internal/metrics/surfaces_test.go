@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package metrics
 
@@ -10,7 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
 )
 
 func TestPublishSurfaces_ZeroForDisabledOneForEnabled(t *testing.T) {
@@ -56,8 +56,8 @@ func TestSurfaceEnabled_ReasonIsNotALabel(t *testing.T) {
 
 func TestSurfaceEnabled_CanonicalName(t *testing.T) {
 	// The name is an operations contract: dashboards and alerts point at it.
-	if !strings.Contains(SurfaceEnabled.WithLabelValues("x").Desc().String(), "loopzero_api_surface_enabled") {
-		t.Error("the metric is not named `loopzero_api_surface_enabled`")
+	if !strings.Contains(SurfaceEnabled.WithLabelValues("x").Desc().String(), "loop_runtime_api_surface_enabled") {
+		t.Error("the metric is not named `loop_runtime_api_surface_enabled`")
 	}
 }
 

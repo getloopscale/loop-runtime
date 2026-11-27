@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant
 
@@ -12,22 +12,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/argocd"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/reconcileloop"
-	"github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/argocd"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/reconcileloop"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // canonicalDestNamespace returns the namespace name to use as an ArgoCD
 // App destination for a tenant environment. When projectSlug is set,
-// returns the canonical formula `loopzero-<tenant>-<project>-<env>` that
+// returns the canonical formula `loop-runtime-<tenant>-<project>-<env>` that
 // matches what the manifest renderer emits (renderer_helpers.go:
 // namespace). When projectSlug is empty (pre-#69 Tenant CRs created
 // before the API started populating env.Project), falls back to the
-// legacy two-segment `loopzero-<tenant>-<env>` formula so the controller
+// legacy two-segment `loop-runtime-<tenant>-<env>` formula so the controller
 // continues reconciling existing installations without manual repair.
 //
 // J-23 LIVE catch 2026-06-07 #69: the renderer canonical refactor
@@ -44,7 +44,7 @@ import (
 // caller in production code (tenant_gitops.go:143, :186 + tenant_controller.go:337)
 // is guaranteed to pass a non-empty project. A silent fallback is forbidden — it was
 // the smoking gun that caused
-// all 4 M2 LIVE workarounds — fail-fast with LoopZeroError is canonical
+// all 4 M2 LIVE workarounds — fail-fast with LoopRuntimeError is canonical
 // (feedback_m2_canonical_drift_operator_renderer memory).
 func canonicalDestNamespace(tenantSlug, projectSlug, envName string) (string, error) {
 	if projectSlug == "" {
@@ -73,8 +73,8 @@ func canonicalDestNamespace(tenantSlug, projectSlug, envName string) (string, er
 // (api/internal/gitops/gitea_pusher.go:136). Pointing at {env} alone let an Application
 // read every project's manifests in that environment.
 func (r *TenantReconciler) buildApplicationSpecs(
-	tenant *loopzerov1.Tenant,
-	previewEnvs []loopzerov1.PreviewEnvironment,
+	tenant *loopruntimev1.Tenant,
+	previewEnvs []loopruntimev1.PreviewEnvironment,
 	repoURL string,
 ) ([]argocd.ApplicationSpec, error) {
 	cellID := tenant.Spec.CellID
@@ -144,8 +144,8 @@ func (r *TenantReconciler) buildApplicationSpecs(
 // expectedApplicationNames is the set pruneOrphanPreviewApps protects from deletion.
 // It is derived from buildApplicationSpecs on purpose — see that function's godoc.
 func (r *TenantReconciler) expectedApplicationNames(
-	tenant *loopzerov1.Tenant,
-	previewEnvs []loopzerov1.PreviewEnvironment,
+	tenant *loopruntimev1.Tenant,
+	previewEnvs []loopruntimev1.PreviewEnvironment,
 	repoURL string,
 ) (map[string]bool, error) {
 	specs, err := r.buildApplicationSpecs(tenant, previewEnvs, repoURL)
@@ -181,7 +181,7 @@ func (r *TenantReconciler) expectedApplicationNames(
 //     AppProject reconcile (no partial destinations written). EC-15 absorption:
 //     better to fail-loud than emit an AppProject with missing destinations
 //     that would silently break sync for half the tenant's projects.
-func buildAppProjectDestNamespaces(tenant *loopzerov1.Tenant, previewEnvs []loopzerov1.PreviewEnvironment) ([]string, error) {
+func buildAppProjectDestNamespaces(tenant *loopruntimev1.Tenant, previewEnvs []loopruntimev1.PreviewEnvironment) ([]string, error) {
 	destNamespaces := make([]string, 0, len(tenant.Spec.Environments)+len(previewEnvs))
 	for _, env := range tenant.Spec.Environments {
 		destNS, nsErr := canonicalDestNamespace(tenant.Name, env.Project, env.Name)
@@ -192,7 +192,7 @@ func buildAppProjectDestNamespaces(tenant *loopzerov1.Tenant, previewEnvs []loop
 	}
 	for _, pe := range previewEnvs {
 		// All envs (production, staging, preview-pr-N) share the SAME
-		// uniform namespace formula: "loopzero-<tenant>-<project>-<env>".
+		// uniform namespace formula: "loop-runtime-<tenant>-<project>-<env>".
 		// Canonical refactor 2026-06-07 — no if/else branching on env type.
 		envName := fmt.Sprintf("preview-pr-%d", pe.Spec.PRNumber)
 		// T1.3.c of plan 2026-06-11-code-review-remediation v1.2 — call-site
@@ -224,7 +224,7 @@ func buildAppProjectDestNamespaces(tenant *loopzerov1.Tenant, previewEnvs []loop
 // Audit gap M10 F2 / §6.E.4c: the canonical production pattern is
 // `tn-acme-gitops` (api/internal/k8s/tenant_cr_manager.go:308 emits
 // `{tenantID}-gitops`). The operator-test fixtures historically use
-// `loopzero-tenant-<tenantName>`. Both shapes are accepted because both
+// `loop-runtime-tenant-<tenantName>`. Both shapes are accepted because both
 // embed the tenant name as a delimited component. A reference that
 // does NOT contain the tenant name as a component (typo or attack)
 // is rejected before the provisioner is given the foreign name.
@@ -247,7 +247,7 @@ func assertRepoNameOwnedByTenant(tenantName, repoName string) error {
 }
 
 // reconcileGitRepo ensures the GitOps repository exists via the GitRepoProvisioner.
-func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzerov1.Tenant) error {
+func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopruntimev1.Tenant) error {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "tenant.gitops.ensure")
 	defer span.End()
 
@@ -274,7 +274,7 @@ func (r *TenantReconciler) reconcileGitRepo(ctx context.Context, tenant *loopzer
 
 // reconcileArgoCDApp ensures one ArgoCD Application CR exists per environment for the tenant.
 // The Application connects the tenant's Gitea repo to the workload namespace via ArgoCD.
-func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopzerov1.Tenant) (err error) {
+func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopruntimev1.Tenant) (err error) {
 	ctx, span := reconcileloop.StartChildSpan(ctx, "tenant.argocd.ensure")
 	defer span.End()
 	defer func() {
@@ -390,8 +390,8 @@ func (r *TenantReconciler) reconcileArgoCDApp(ctx context.Context, tenant *loopz
 // beats recomputing: see buildApplicationSpecs.
 func (r *TenantReconciler) pruneOrphanPreviewApps(
 	ctx context.Context,
-	tenant *loopzerov1.Tenant,
-	previewEnvs []loopzerov1.PreviewEnvironment,
+	tenant *loopruntimev1.Tenant,
+	previewEnvs []loopruntimev1.PreviewEnvironment,
 	repoURL string,
 ) error {
 	// Derived from buildApplicationSpecs, never recomputed here: this set decides what
@@ -428,19 +428,19 @@ func (r *TenantReconciler) pruneOrphanPreviewApps(
 // expected to be small (tens of previews max per tenant). Soft-fails
 // to nil on error so the gitops reconcile can proceed without preview
 // destinations.
-func (r *TenantReconciler) listPreviewEnvsForTenant(ctx context.Context, tenantID string) ([]loopzerov1.PreviewEnvironment, error) {
-	var all loopzerov1.PreviewEnvironmentList
+func (r *TenantReconciler) listPreviewEnvsForTenant(ctx context.Context, tenantID string) ([]loopruntimev1.PreviewEnvironment, error) {
+	var all loopruntimev1.PreviewEnvironmentList
 	if err := r.List(ctx, &all); err != nil {
 		return nil, fmt.Errorf("list preview envs: %w", err)
 	}
-	out := make([]loopzerov1.PreviewEnvironment, 0)
+	out := make([]loopruntimev1.PreviewEnvironment, 0)
 	for _, pe := range all.Items {
 		if pe.Spec.TenantID != tenantID {
 			continue
 		}
 		// Skip CRs in terminal/deleting state — no AppProject
 		// destination needed for those.
-		if pe.Status.Phase == loopzerov1.PreviewPhaseDeleted || pe.Status.Phase == loopzerov1.PreviewPhaseDeleting {
+		if pe.Status.Phase == loopruntimev1.PreviewPhaseDeleted || pe.Status.Phase == loopruntimev1.PreviewPhaseDeleting {
 			continue
 		}
 		out = append(out, pe)

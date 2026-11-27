@@ -13,7 +13,7 @@
 -- All ADMIN queries (ListTenantIDsByPattern + 8-step FK-ordered
 -- eviction) are tenantpredicate:exempt by design — the caller is
 -- already authenticated as an operator and needs to read/write across
--- tenants. LOOPZERO_ADMIN_API gate at the HTTP layer enforces the operator
+-- tenants. LOOP_RUNTIME_ADMIN_API gate at the HTTP layer enforces the operator
 -- authentication.
 --
 -- DELETION-LIFECYCLE queries (RequestDeletion, CancelDeletion,

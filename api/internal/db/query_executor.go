@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package db
 
-import "github.com/getloopscale/loopzero/api/internal/db/dbtx"
+import "github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
 
 // The SQL access port moved to api/internal/db/dbtx so that a consumer needing
 // only the transaction handle does not import the entity package to name it.

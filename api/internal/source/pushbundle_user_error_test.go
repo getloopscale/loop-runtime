@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package source
 
@@ -9,7 +9,7 @@ import (
 )
 
 // Every reason has actionable copy, and the user message keeps the verbatim
-// cause (loopzero-cloud#33): replacing it with "Verify your project name is
+// cause (loop-console#33): replacing it with "Verify your project name is
 // unused" misled operators whose names were fine.
 func TestPushBundleError_UserErrorComposesTheReasonSummaryWithTheCause(t *testing.T) {
 	cases := []struct {

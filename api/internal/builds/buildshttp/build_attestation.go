@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -10,11 +10,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/httpio"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // T1.3 of deep-review-remediation-plan (closes find_arch_001 partial):
@@ -50,14 +50,14 @@ func (h *BuildAttestationHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil || uc.TenantID == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 
 	info, err := h.store.GetBuildAttestationForTenant(r.Context(), uc.TenantID, buildID)
 	if err != nil {
-		if errors.Is(err, loopzeroerrors.ErrBuildNotFound) {
-			httpio.WriteLoopZeroError(w, loopzeroerrors.ErrBuildNotFound)
+		if errors.Is(err, loopruntimeerrors.ErrBuildNotFound) {
+			httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrBuildNotFound)
 			return
 		}
 		h.logger.Error("attestation lookup failed",
@@ -65,7 +65,7 @@ func (h *BuildAttestationHandler) Get(w http.ResponseWriter, r *http.Request) {
 			"tenant_id", uc.TenantID,
 			"error", err,
 		)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError)
 		return
 	}
 

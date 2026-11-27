@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package deploycontracts is the leaf shared-kernel of the services contexts:
 // cross-context deploy DTOs and consumer-defined DIP ports. It is the sink of the
@@ -77,7 +77,7 @@ type AppUnit struct {
 	Build      string   `json:"build"`                // "dockerfile", "buildpack", "custom"
 	Start      string   `json:"start,omitempty"`      // T0.2b: declared services.json start command (canonical Dockerfile CMD)
 	Dockerfile string   `json:"dockerfile,omitempty"` // resolved Dockerfile path (relative to app path)
-	Rendering  string   `json:"rendering,omitempty"`  // "static" or "server" (MEET-009)
+	Rendering  string   `json:"rendering,omitempty"`  // always "server": every app is served by its container
 	Secrets    []string `json:"secrets,omitempty"`
 }
 
@@ -98,6 +98,11 @@ func NormalizeApp(name string, raw AppSpec) (AppUnit, error) {
 	}
 	if appType != "server" && appType != "worker" {
 		return AppUnit{}, fmt.Errorf("app '%s': invalid type '%s' (server|worker only)", name, appType)
+	}
+	// Static delivery was removed (T3.3): every app is served by its container, so a
+	// declared rendering other than server is refused rather than ignored.
+	if raw.Rendering != "" && raw.Rendering != "server" {
+		return AppUnit{}, fmt.Errorf("app '%s': render '%s' is not supported; every app is served by its container, so remove render from its configuration", name, raw.Rendering)
 	}
 
 	// Resolve build strategy.

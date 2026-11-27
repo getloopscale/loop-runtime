@@ -1,0 +1,47 @@
+# Traefik behind an Application Load Balancer (profile.awsLoadBalancerController).
+#
+# The AWS Load Balancer Controller turns the Ingress below into an internet-facing ALB
+# whose targets are the node group's instances on the NodePort of Traefik's Service
+# (target-type instance), so Traefik needs no cloud load balancer of its own. The ALB
+# forwards to Traefik's websecure entry point, where the IngressRoutes and their
+# certificates already live, and passes the client's Host on, which is what the
+# IngressRoutes match. The ALB's own TLS listener and its ACM certificate belong to the
+# public edge in front of it (CloudFront in production, Caddy on staging).
+#
+# Why instance targets and not ip: an ip target is a pod address the controller resolves
+# to the pod's VPC network interface, which exists only when pods take their addresses
+# from the VPC (the Amazon VPC CNI). Instance targets need nothing of the CNI, so the same
+# Ingress works on any EKS cluster. The cost is one extra hop through kube-proxy on the
+# node; the client address still reaches Traefik in X-Forwarded-For, which the ALB sets.
+service:
+  type: NodePort
+
+extraObjects:
+  - apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: traefik-edge
+      namespace: traefik
+      annotations:
+        alb.ingress.kubernetes.io/scheme: internet-facing
+        alb.ingress.kubernetes.io/target-type: instance
+        alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+        alb.ingress.kubernetes.io/backend-protocol: HTTPS
+        alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+        alb.ingress.kubernetes.io/healthcheck-path: /ping
+        alb.ingress.kubernetes.io/success-codes: "200-499"
+    spec:
+      ingressClassName: alb
+      rules:
+        # No host: Traefik's IngressRoutes decide which hosts exist. A rule with the
+        # platform's wildcard made the ALB itself answer any other host with an empty
+        # 404, so a tenant's custom domain never reached its cell's Traefik.
+        - http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: traefik
+                    port:
+                      name: websecure

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildshttp
 
@@ -12,8 +12,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // --- Fake AttestationStore ---
@@ -32,7 +32,7 @@ func (f *fakeAttestationStore) GetBuildAttestationForTenant(_ context.Context, t
 		return nil, f.err
 	}
 	if f.info == nil || tenantID != f.owner {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	return f.info, nil
 }

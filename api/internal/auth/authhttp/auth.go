@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package authhttp serves the identity endpoints under /api/v1/auth: whoami, which
 // answers "who am I and which teams do I belong to", and switch-team, which moves
@@ -20,10 +20,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/httpio"
+	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // UsernameLookup is the narrow contract AuthHandler.Whoami needs to enrich
@@ -96,11 +96,11 @@ type SwitchTeamRequest struct {
 func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 	if h.activeStore == nil || h.membershipLookup == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 			"NOT_AVAILABLE",
 			"Team switching is not configured on this server."))
 		return
@@ -108,12 +108,12 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 
 	var req SwitchTeamRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 			"INVALID_REQUEST", "Invalid JSON body"))
 		return
 	}
 	if req.Name == "" {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 			"MISSING_FIELD", "Team name is required"))
 		return
 	}
@@ -123,7 +123,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("switch team: membership lookup failed",
 			"user_id", uc.UserID, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("Unable to verify team membership."))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError.Wrap("Unable to verify team membership."))
 		return
 	}
 	isMember := false
@@ -134,16 +134,16 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !isMember {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.NewLoopZeroError(
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.NewLoopRuntimeError(
 			"NOT_MEMBER",
-			"You are not a member of team \""+req.Name+"\". Run `loopzero whoami` to see your teams."))
+			"You are not a member of team \""+req.Name+"\". Run `loopscale whoami` to see your teams."))
 		return
 	}
 
 	if err := h.activeStore.SetActiveTenant(r.Context(), uc.UserID, req.Name); err != nil {
 		slog.Error("switch team: SetActiveTenant failed",
 			"user_id", uc.UserID, "tenant_id", req.Name, "error", err)
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrInternalError.Wrap("Unable to persist team selection."))
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInternalError.Wrap("Unable to persist team selection."))
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *AuthHandler) SwitchTeam(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Whoami(w http.ResponseWriter, r *http.Request) {
 	uc := auth.GetUserContext(r.Context())
 	if uc == nil {
-		httpio.WriteLoopZeroError(w, loopzeroerrors.ErrUnauthorized)
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrUnauthorized)
 		return
 	}
 

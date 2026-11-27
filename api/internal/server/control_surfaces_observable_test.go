@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package server_test
 
@@ -14,9 +14,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/surfaces"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/surfaces"
 )
 
 // TestControlSurfaces_DisabledOnesAreObservableWithAReason is B-115 slice 1: the
@@ -104,7 +104,7 @@ func recordedByName(reg *surfaces.Registry) map[string]surfaces.Surface {
 // TestSecretFetchSurface_EnabledWhenTheHandlerExists proves the enabled half.
 //
 // `secret_fetch` is the representative because it is the one measured absent in
-// dev-public (the `loopzero-broker-token` Secret does not exist), and because its
+// dev-public (the `loop-runtime-broker-token` Secret does not exist), and because its
 // dependency is a plain http.Handler — provable without stubbing five interfaces
 // to assert the same property.
 func TestSecretFetchSurface_EnabledWhenTheHandlerExists(t *testing.T) {

@@ -1,19 +1,19 @@
-# Database alerting rules for LoopZero platform (MEET-2026-03-31-024 Phase 1 Track C).
+# Database alerting rules for LoopRuntime platform (MEET-2026-03-31-024 Phase 1 Track C).
 # Monitors PostgreSQL health: connection pool, query performance, transactions, errors, RLS.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-database-alerts
+  name: loop-runtime-database-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.database.warning
+    - name: loop-runtime.database.warning
       rules:
         # Track C Rule 1: Pool exhaustion approaching — 80% of max connections used
-        - alert: LoopZeroDBPoolNearExhaustion
-          expr: loopzero_postgres_connections_active / 25 > 0.8
+        - alert: LoopRuntimeDBPoolNearExhaustion
+          expr: loop_runtime_postgres_connections_active / 25 > 0.8
           for: 2m
           labels:
             severity: warning
@@ -23,18 +23,18 @@ spec:
             runbook: "Check for long-running transactions or leaked connections. Review API pod count — each pod holds connections. Consider increasing pool size if load is legitimate."
 
         # Track C Rule 3: Slow queries — p95 query duration exceeds 500ms
-        - alert: LoopZeroDBSlowQueries
-          expr: histogram_quantile(0.95, sum(rate(loopzero_postgres_query_duration_seconds_bucket[5m])) by (le)) > 0.5
+        - alert: LoopRuntimeDBSlowQueries
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_postgres_query_duration_seconds_bucket[5m])) by (le)) > 0.5
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "PostgreSQL query duration p95 exceeds 500ms"
             description: "Database query latency (p95) has been above 500ms for 5 minutes. May indicate missing indexes, table bloat, or lock contention."
-            runbook: "Check pg_stat_statements for top queries by mean_exec_time. Look for sequential scans on large tables. Verify advisory lock contention via loopzero_lock_hold_duration_seconds."
+            runbook: "Check pg_stat_statements for top queries by mean_exec_time. Look for sequential scans on large tables. Verify advisory lock contention via loop_runtime_lock_hold_duration_seconds."
 
-        - alert: LoopZeroDBPoolExhaustion
-          expr: loopzero_postgres_connections_active / 25 > 0.95
+        - alert: LoopRuntimeDBPoolExhaustion
+          expr: loop_runtime_postgres_connections_active / 25 > 0.95
           for: 1m
           labels:
             severity: critical

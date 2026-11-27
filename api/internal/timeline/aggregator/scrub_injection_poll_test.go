@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/scrub"
+	"github.com/getloopscale/loop-runtime/api/internal/scrub"
 )
 
 // The scrub the aggregator is constructed with is the one it applies; a test

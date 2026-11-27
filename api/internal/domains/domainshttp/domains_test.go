@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domainshttp
 
@@ -8,15 +8,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // --- Fake DomainStore ---
@@ -850,5 +850,56 @@ func TestDomains_Create_V2_CFZone_HappyPath(t *testing.T) {
 	}
 	if len(resp.Nameservers) != 2 {
 		t.Fatalf("want 2 nameservers, got %d", len(resp.Nameservers))
+	}
+}
+
+// The dashboard lists the domains and shows, under a pending one, the two DNS records the
+// customer has to create. The list answered neither, so the screen had nothing to show and a
+// customer could not finish adding a domain from it.
+func TestDomains_List_CarriesTheRecordsACustomerHasToCreate(t *testing.T) {
+	store := &fakeDomainStore{
+		domains: []CustomDomain{
+			{ID: "dom-1", Domain: "app.acme.com", Status: "pending_verification", VerificationToken: "loopscale-verify=0a1b"},
+			{ID: "dom-2", Domain: "www.acme.com", Status: "active", VerificationToken: "loopscale-verify=2c3d"},
+		},
+		total: 2,
+	}
+	h := NewDomainHandler(store, &fakeDomainVerifier{}, &fakeDomainValidator{}, "cname.apps.example")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/domains", nil)
+	req = routestest.WithAuth(req, routestest.DefaultUserContext())
+	w := httptest.NewRecorder()
+
+	h.List(w, req)
+
+	var resp struct {
+		Domains []struct {
+			Domain       string `json:"domain"`
+			CNAMETarget  string `json:"cname_target"`
+			Verification *struct {
+				TXTName  string `json:"txt_name"`
+				TXTValue string `json:"txt_value"`
+			} `json:"verification"`
+		} `json:"domains"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v body=%s", err, w.Body.String())
+	}
+	if len(resp.Domains) != 2 {
+		t.Fatalf("want 2 domains, got %d", len(resp.Domains))
+	}
+
+	pending, active := resp.Domains[0], resp.Domains[1]
+	if pending.CNAMETarget != "cname.apps.example" || active.CNAMETarget != "cname.apps.example" {
+		t.Errorf("cname_target = %q and %q, want the handler's target on both", pending.CNAMETarget, active.CNAMETarget)
+	}
+	if pending.Verification == nil {
+		t.Fatalf("the pending domain carries no verification record: %s", w.Body.String())
+	}
+	if pending.Verification.TXTName != "_loopscale-verify.app.acme.com" || pending.Verification.TXTValue != "loopscale-verify=0a1b" {
+		t.Errorf("verification = %+v", *pending.Verification)
+	}
+	if active.Verification != nil {
+		t.Errorf("an active domain still answers its verification record: %+v", *active.Verification)
 	}
 }

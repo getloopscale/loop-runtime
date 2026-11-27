@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statemachine
 
@@ -18,7 +18,7 @@ package statemachine
 // NOTE: type names use `BuildPhase` instead of `BuildState` to avoid
 // collision with the existing `BuildState` Go identifier that some
 // callers already use as a local variable name. The Phase suffix
-// matches the `loopzerov1.BuildPhase` CR field naming convention.
+// matches the `loopruntimev1.BuildPhase` CR field naming convention.
 
 // BuildPhase is the typed state for the Build lifecycle.
 // Underlying string values are identical to the untyped State

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package manifests
 
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -33,7 +33,7 @@ func appHostname(tenantID, projectID, appName, environment, baseDomain string) s
 // generated for an app inside a tenant environment namespace.
 //
 // **Why `<project>-<app>` instead of `<app>`**: tenant environment namespaces
-// are SHARED across projects (`loopzero-{tenant}-{env}`), so two projects with an
+// are SHARED across projects (`loop-runtime-{tenant}-{env}`), so two projects with an
 // app of the same name (very common: `api`, `web`, `worker`) would generate
 // colliding `Deployment/api` + `Service/api` — the second deploy silently
 // overwrites the first, and Service.spec.selector matches pods from BOTH
@@ -43,7 +43,7 @@ func appHostname(tenantID, projectID, appName, environment, baseDomain string) s
 //
 // **User-facing impact**: zero. Hosts already include the project segment
 // (`<tenant>-<project>-<app>-<env>.<base>`); CLI commands accept `--app <name>`
-// and resolve via the `loopzero.io/app-name` label (still populated). Internal
+// and resolve via the `runtime.getloopscale.com/app-name` label (still populated). Internal
 // K8s names are an implementation detail of the PaaS, never surfaced.
 func resourceName(projectID, appName string) string {
 	return fmt.Sprintf("%s-%s", projectID, appName)
@@ -52,17 +52,17 @@ func resourceName(projectID, appName string) string {
 // commonLabels returns the standard labels for all resources.
 //
 // `app` carries the namespace-unique resource name (project-app) so Service
-// selectors don't cross project boundaries. `loopzero.io/app-name` keeps the
+// selectors don't cross project boundaries. `runtime.getloopscale.com/app-name` keeps the
 // raw user-declared app name for CLI queries (logs, status, scale, etc.).
 func commonLabels(ri renderScope, app AppManifestInput) map[string]string {
 	return map[string]string{
-		"app":                          resourceName(ri.ProjectID, app.Name),
-		"app.kubernetes.io/managed-by": "loopzero",
-		"loopzero.io/tenant":           ri.TenantID,
-		"loopzero.io/project":          ri.ProjectID,
-		"loopzero.io/app-name":         app.Name,
-		"loopzero.io/environment":      ri.Environment,
-		"loopzero.io/app-type":         app.Type,
+		"app":                                  resourceName(ri.ProjectID, app.Name),
+		"app.kubernetes.io/managed-by":         "loop-runtime",
+		"runtime.getloopscale.com/tenant":      ri.TenantID,
+		"runtime.getloopscale.com/project":     ri.ProjectID,
+		"runtime.getloopscale.com/app-name":    app.Name,
+		"runtime.getloopscale.com/environment": ri.Environment,
+		"runtime.getloopscale.com/app-type":    app.Type,
 	}
 }
 

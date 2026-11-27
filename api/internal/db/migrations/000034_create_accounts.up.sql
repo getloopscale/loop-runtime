@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: Apache-2.0
--- Copyright 2025-2026 The LoopZero Authors
+-- Copyright 2025-2026 The LoopRuntime Authors
 
 -- ============================================================================
 -- 000034_create_accounts
@@ -8,7 +8,7 @@
 -- (.claude/knowledge-base/plans/account-foundation-m0-plan.md,
 --  ADR .claude/knowledge-base/adrs/ADR-account-level-tenancy.md)
 --
--- Introduces the ACCOUNT entity ("Cliente LoopZero" / independent developer) ONE
+-- Introduces the ACCOUNT entity ("Cliente LoopRuntime" / independent developer) ONE
 -- level ABOVE the existing tenant. An Account groups 1..N isolated tenants.
 -- v1 is 1:1 user<->account, enforced by UNIQUE(owner_id) — which also enables
 -- the ON CONFLICT (owner_id) idempotency used by EnsureAccount (race-safe

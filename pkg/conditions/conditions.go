@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package conditions provides kstatus-compatible condition contracts
-// for LoopZero platform resources, without depending on k8s.io/apimachinery.
+// for LoopRuntime platform resources, without depending on k8s.io/apimachinery.
 //
 // Per ADR-0032 (introduced in MEET-2026-05-04-PKG-SOTA): pkg/conditions
 // is the canonical replacement for the deleted pkg/health package. It

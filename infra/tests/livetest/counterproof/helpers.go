@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package counterproof implements T3.4 of plan canonical-tests-rewrite-v2 v1.0
 // per ADR-2026-06-17-T3 D3: the counter-proof is the canonical anti-lying gate;
@@ -150,23 +150,23 @@ func Layer8_LiveProofByteGrep(ctx context.Context, repoRoot string) Layer {
 		return c
 	}
 	// L1: source-of-truth grep for expected env vars
-	hasGitHub := regexp.MustCompile(`LOOPZERO_GITHUB_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
-	hasGoogle := regexp.MustCompile(`LOOPZERO_GOOGLE_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
-	hasStripe := regexp.MustCompile(`LOOPZERO_STRIPE_SECRET_KEY\s*=\s*(rk|sk)_`).MatchString(string(data))
-	hasResend := regexp.MustCompile(`LOOPZERO_RESEND_API_KEY\s*=\s*re_`).MatchString(string(data))
+	hasGitHub := regexp.MustCompile(`LOOP_RUNTIME_GITHUB_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
+	hasGoogle := regexp.MustCompile(`LOOP_RUNTIME_GOOGLE_CLIENT_ID\s*=\s*\S`).MatchString(string(data))
+	hasStripe := regexp.MustCompile(`LOOP_RUNTIME_STRIPE_SECRET_KEY\s*=\s*(rk|sk)_`).MatchString(string(data))
+	hasResend := regexp.MustCompile(`LOOP_RUNTIME_RESEND_API_KEY\s*=\s*re_`).MatchString(string(data))
 
 	missing := []string{}
 	if !hasGitHub {
-		missing = append(missing, "LOOPZERO_GITHUB_CLIENT_ID")
+		missing = append(missing, "LOOP_RUNTIME_GITHUB_CLIENT_ID")
 	}
 	if !hasGoogle {
-		missing = append(missing, "LOOPZERO_GOOGLE_CLIENT_ID")
+		missing = append(missing, "LOOP_RUNTIME_GOOGLE_CLIENT_ID")
 	}
 	if !hasStripe {
-		missing = append(missing, "LOOPZERO_STRIPE_SECRET_KEY")
+		missing = append(missing, "LOOP_RUNTIME_STRIPE_SECRET_KEY")
 	}
 	if !hasResend {
-		missing = append(missing, "LOOPZERO_RESEND_API_KEY")
+		missing = append(missing, "LOOP_RUNTIME_RESEND_API_KEY")
 	}
 	if len(missing) > 0 {
 		c.Detail = fmt.Sprintf("L1 .env missing: %v", missing)

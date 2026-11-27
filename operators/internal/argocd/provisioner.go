@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package argocd provides the operator-side client wrapper for
 // ArgoCD's REST API plus a circuit-breaker decorator. Used by
@@ -43,7 +43,7 @@ type ApplicationSpec struct {
 
 	// Environment is the env name (e.g., "production", "staging", "j-rollout-a").
 	// Sprint B B3 prep (code-005 architectural follow-up): populating this enables
-	// adding the `loopzero.io/environment` label to the rendered ArgoCD Application.
+	// adding the `runtime.getloopscale.com/environment` label to the rendered ArgoCD Application.
 	// Future activator iteration can switch from ParseArgoAppName(LastIndex("-"))
 	// to label-based lookup, closing the hyphen-ambiguity finding without breaking
 	// existing fixtures (MEET-ASYNC-AMENDMENT-2026-06-02-002 documented why the
@@ -67,7 +67,7 @@ type AppProjectSpec struct {
 	SourceRepos []string
 
 	// DestinationNamespaces restricts which namespaces ArgoCD can deploy to.
-	// If empty, defaults to "loopzero-{tenantID}-*" wildcard pattern.
+	// If empty, defaults to "loop-runtime-{tenantID}-*" wildcard pattern.
 	DestinationNamespaces []string
 
 	// DestinationServer is the Kubernetes API server URL for allowed destinations.

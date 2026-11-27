@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -10,12 +10,12 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
 )
 
-// loopzero_worker is the one role that may cross tenants, and migration 000023
+// loop_runtime_worker is the one role that may cross tenants, and migration 000023
 // granted it only the tables that existed then. On a database built from the
 // migrations it held nothing on `accounts` or `deploy_events`, so the two
 // cross-tenant writes these tests run were refused with `permission denied`
@@ -23,10 +23,10 @@ import (
 //
 // They exercise the privileges themselves, so they only mean something on a
 // database built from the migrations (not schema.gen.sql with blanket grants)
-// and with LOOPZERO_WORKER_DATABASE_URL connecting as loopzero_worker:
+// and with LOOP_RUNTIME_WORKER_DATABASE_URL connecting as loop_runtime_worker:
 //
-//	DATABASE_URL=<loopzero_api> LOOPZERO_WORKER_DATABASE_URL=<loopzero_worker> \
-//	LOOPZERO_OWNER_DATABASE_URL=<loopzero> go test ./tests/integration/ -run WorkerRole -v
+//	DATABASE_URL=<loop_runtime_api> LOOP_RUNTIME_WORKER_DATABASE_URL=<loop_runtime_worker> \
+//	LOOP_RUNTIME_OWNER_DATABASE_URL=<loop-runtime> go test ./tests/integration/ -run WorkerRole -v
 
 // requireTheWorkerRolesOwnPrivileges skips unless the worker DSN connects as a
 // role whose table privileges are what the migrations granted: a superuser, a
@@ -44,8 +44,8 @@ func requireTheWorkerRolesOwnPrivileges(t *testing.T) {
 		t.Fatalf("read the worker role's posture: %v", err)
 	}
 	if unconstrained {
-		// Such a role cannot reproduce https://github.com/getloopscale/loopzero/issues/385.
-		t.Skip("LOOPZERO_WORKER_DATABASE_URL is not the constrained cross-tenant role; point it at loopzero_worker")
+		// Such a role cannot reproduce https://github.com/getloopscale/loop-runtime/issues/385.
+		t.Skip("LOOP_RUNTIME_WORKER_DATABASE_URL is not the constrained cross-tenant role; point it at loop_runtime_worker")
 	}
 }
 
@@ -98,7 +98,7 @@ func TestWorkerRoleWritesTheDeployOutboxInsideTheEnvironmentLock(t *testing.T) {
 }
 
 // deployEventsOf reads the outbox through the request role scoped to the
-// tenant: loopzero_worker only writes it, and the drain belongs to the control
+// tenant: loop_runtime_worker only writes it, and the drain belongs to the control
 // plane.
 func deployEventsOf(t *testing.T, tenant string) int {
 	t.Helper()

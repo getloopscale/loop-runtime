@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -9,9 +9,9 @@ import (
 	"errors"
 	"testing"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 
-	"github.com/getloopscale/loopzero/api/internal/timeline"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline"
 )
 
 type fakeBuildLookup struct {
@@ -57,7 +57,7 @@ func TestPostgresStore_DeployTenantID_UnknownReturnsNotFound(t *testing.T) {
 		name string
 		l    *fakeBuildLookup
 	}{
-		{"build not found", &fakeBuildLookup{err: loopzeroerrors.ErrBuildNotFound}},
+		{"build not found", &fakeBuildLookup{err: loopruntimeerrors.ErrBuildNotFound}},
 		{"empty tenant", &fakeBuildLookup{tenant: ""}},
 	}
 	for _, tt := range tests {

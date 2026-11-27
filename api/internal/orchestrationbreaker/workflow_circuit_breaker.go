@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package orchestrationbreaker guards the two clients every deploy depends on —
 // the Argo Workflows submitter the builds feature uses and the ArgoCD sync
@@ -13,8 +13,8 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/circuitbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/pkg/circuitbreaker"
 )
 
 // CircuitBreakerWorkflowSubmitter wraps a WorkflowSubmitter with circuit breaker

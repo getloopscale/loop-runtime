@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	dbstore "github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	dbstore "github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // =============================================================================
@@ -36,13 +36,13 @@ func (f *previewFakeStore) ListByProject(_ context.Context, _, _ string) ([]port
 	return nil, nil
 }
 func (f *previewFakeStore) GetByID(_ context.Context, _, _ string) (*ports.Preview, error) {
-	return nil, loopzeroerrors.ErrPreviewNotFound
+	return nil, loopruntimeerrors.ErrPreviewNotFound
 }
 func (f *previewFakeStore) GetByPR(ctx context.Context, tenantID, projectID string, prNumber int) (*ports.Preview, error) {
 	if f.getByPRFn != nil {
 		return f.getByPRFn(ctx, tenantID, projectID, prNumber)
 	}
-	return nil, loopzeroerrors.ErrPreviewNotFound
+	return nil, loopruntimeerrors.ErrPreviewNotFound
 }
 func (f *previewFakeStore) Create(ctx context.Context, tx db.DBTX, rec *dbstore.PreviewRecord) error {
 	if f.createFn != nil {
@@ -184,7 +184,7 @@ func TestPreviewService_CreatePreview_HappyPath(t *testing.T) {
 		Store:      store,
 		Builds:     builds,
 		CRCreator:  cr,
-		BaseDomain: "preview.loopzero.app",
+		BaseDomain: "preview.loop-runtime.app",
 	})
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -404,12 +404,12 @@ func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {
 		},
 		{
 			name:     "public empty → falls back to base domain (legacy local)",
-			base:     "loopzero.local",
+			base:     "loop-runtime.local",
 			tenant:   "acme",
 			project:  "webapp",
 			entry:    "web",
 			prNumber: 42,
-			want:     "https://acme-webapp-web-preview-pr-42.loopzero.local",
+			want:     "https://acme-webapp-web-preview-pr-42.loop-runtime.local",
 		},
 		{
 			name:     "no entry app — URL omits app segment (structurally valid, won't match IngressRoute)",
@@ -444,7 +444,7 @@ func TestPreviewURL_CanonicalWildcardConvention(t *testing.T) {
 	}
 }
 
-func TestEntryAppFromLoopZeroYaml(t *testing.T) {
+func TestEntryAppFromLoopRuntimeYaml(t *testing.T) {
 	cases := []struct {
 		name string
 		apps map[string]map[string]interface{}
@@ -500,9 +500,9 @@ func TestEntryAppFromLoopZeroYaml(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := entryAppFromLoopZeroYaml(tc.apps)
+			got := entryAppFromLoopRuntimeYaml(tc.apps)
 			if got != tc.want {
-				t.Errorf("entryAppFromLoopZeroYaml = %q, want %q", got, tc.want)
+				t.Errorf("entryAppFromLoopRuntimeYaml = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -624,7 +624,7 @@ func TestPreviewService_CreatePreview_D3_UpsertSlotAtomically(t *testing.T) {
 	svc, err := NewPreviewService(PreviewServiceDeps{
 		Store:      store,
 		SlotStore:  slot,
-		BaseDomain: "preview.loopzero.app",
+		BaseDomain: "preview.loop-runtime.app",
 	})
 	if err != nil {
 		t.Fatalf("init: %v", err)
@@ -708,7 +708,7 @@ func TestPreviewService_CreatePreview_D3_DifferentProjectsDoNotSubstitute(t *tes
 	svc, err := NewPreviewService(PreviewServiceDeps{
 		Store:      store,
 		SlotStore:  slot,
-		BaseDomain: "preview.loopzero.app",
+		BaseDomain: "preview.loop-runtime.app",
 	})
 	if err != nil {
 		t.Fatalf("init: %v", err)

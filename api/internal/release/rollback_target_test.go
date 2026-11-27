@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package release
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
-// GitCommit and ID are the only two fields container rollback reads, and both
-// are load-bearing: an empty GitCommit is the guard that refuses a rollback
+// GitCommit and ID are load-bearing for the delivery (Apps, which the sync
+// confirmation reads, has its own test): an empty GitCommit is the guard that refuses a rollback
 // with no manifests to fetch, and ID is the release the pushed manifests are
 // attributed to. Dropping either in the adapter would turn a rollback into a
 // silent no-op or a mis-attributed push.
@@ -30,7 +30,7 @@ func TestRollbackTargetFromCarriesIDAndGitCommit(t *testing.T) {
 		t.Fatal("rollbackTargetFrom() = nil, want a target")
 	}
 	want := deploycontracts.RollbackTarget{ID: "rel-1", GitCommit: "abc123"}
-	if *got != want {
+	if got.ID != want.ID || got.GitCommit != want.GitCommit || len(got.Apps) != 0 {
 		t.Errorf("rollbackTargetFrom() = %+v, want %+v", *got, want)
 	}
 }

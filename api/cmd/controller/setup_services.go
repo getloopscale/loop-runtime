@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -9,17 +9,17 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/getloopscale/loopzero/api/internal/backgroundloops"
-	"github.com/getloopscale/loopzero/api/internal/builds"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/store"
-	"github.com/getloopscale/loopzero/api/internal/domains/cfzone"
-	"github.com/getloopscale/loopzero/api/internal/k8s/tenancy"
-	"github.com/getloopscale/loopzero/api/internal/k8s/workload"
-	"github.com/getloopscale/loopzero/api/internal/lock"
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/backgroundloops"
+	"github.com/getloopscale/loop-runtime/api/internal/builds"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/cfzone"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/tenancy"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s/workload"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 )
 
 // setupServices builds the stores and cluster clients the controller needs and
@@ -73,6 +73,9 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		GitReader:         gitopsPusher,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
 		DeployEventStore:  store.NewDeployEventStoreSqlc(), // J-16 slice 3: deploy.succeeded outbox
+		// No Secrets: this binary has no client for a runtime cluster, so a
+		// deploy it activates does not wait for its secrets to reach the
+		// cluster (#119). The API server's delivery does.
 	})
 
 	orch := builds.NewBuildOrchestrator(builds.BuildOrchestratorDeps{
@@ -87,7 +90,6 @@ func setupServices(cfg config.Config, dbAdapter *db.PgxAdapter, logger *slog.Log
 		GitOps:            gitopsPusher,
 		RegistryURL:       cfg.RegistryURL,
 		ArgocdSyncTimeout: cfg.ArgocdSyncTimeout,
-		BaseDomain:        cfg.BaseDomain,
 		Delivery:          delivery,
 	})
 

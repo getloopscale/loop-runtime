@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
-import "github.com/getloopscale/loopzero/pkg/statemachine"
+import "github.com/getloopscale/loop-runtime/pkg/statemachine"
 
 // Machine singletons for the status-mutation stores. M9 5b relocated these from
 // the root db package (build_types.go / release_types.go) into db/store/ so that

@@ -13,7 +13,7 @@
 # Default values are for local development only.
 mode: distributed
 
-rootUser: loopzero-admin
+rootUser: loop-runtime-admin
 rootPassword: ""  # T1.3: empty triggers MinIO fail-fast
 
 statefulset:
@@ -81,23 +81,23 @@ service:
 consoleService:
   type: ClusterIP
 
-# B75 (end-to-end-deploy-validation-plan iter 9) — buckets required by LoopZero.
-# Source of truth aligned with values.yaml. In LoopZero Cloud production,
-# `loopzero-static-assets` lives in DO Spaces (worker.mjs), but the in-cluster
+# B75 (end-to-end-deploy-validation-plan iter 9) — buckets required by LoopRuntime.
+# Source of truth aligned with values.yaml. In LoopRuntime Cloud production,
+# `loop-runtime-static-assets` lives in DO Spaces (worker.mjs), but the in-cluster
 # MinIO still creates it in case `S3_USE_INCLUSTER_MINIO=true` overrides
 # the cloud delivery path (e.g., DR scenarios).
 buckets:
-  - name: loopzero-builds
+  - name: loop-runtime-builds
     policy: none
-  - name: loopzero-artifacts
+  - name: loop-runtime-artifacts
     policy: none
-  - name: loopzero-logs
+  - name: loop-runtime-logs
     policy: none
-  - name: loopzero-static-assets
+  - name: loop-runtime-static-assets
     policy: none
 
-# NetworkPolicy: only loopzero-system namespace can talk to MinIO.
-# Build cluster reaches via egress NetworkPolicy in loopzero-build CWTs.
+# NetworkPolicy: only loop-runtime-system namespace can talk to MinIO.
+# Build cluster reaches via egress NetworkPolicy in loop-runtime-build CWTs.
 networkPolicy:
   enabled: true
   allowExternal: false

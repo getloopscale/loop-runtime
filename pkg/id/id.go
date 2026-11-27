@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package id provides deterministic ID generation and validation for LoopZero
+// Package id provides deterministic ID generation and validation for LoopRuntime
 // resources. IDs use crypto/rand for cryptographic randomness.
 package id
 
@@ -54,6 +54,11 @@ func GeneratePreviewID() string {
 // Sprint 6 / T0.1 — sidecar table for multi-app attestation (ADR-0014).
 func GenerateAppAttestationID() string {
 	return fmt.Sprintf("%s%s", AppAttestationIDPrefix, randomHex(8))
+}
+
+// GenerateRollbackID creates a new rollback ID with the format rb-<16 hex chars>.
+func GenerateRollbackID() string {
+	return "rb-" + randomHex(8)
 }
 
 // IsValidBuildID reports whether s matches the canonical build ID format

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
@@ -10,8 +10,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/conditions"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/conditions"
 )
 
 // T0.2 / D6: validate that the controller's namespace naming uses
@@ -23,7 +23,7 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 	r := &PreviewReconciler{}
 	cases := []struct {
 		name     string
-		preview  *loopzerov1.PreviewEnvironment
+		preview  *loopruntimev1.PreviewEnvironment
 		want     string
 		wantErr  bool
 		errMatch string
@@ -32,37 +32,37 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 			// J-23 canonical refactor 2026-06-07 (the sponsor asked for
 			// every environment, previews included, to be separated by
 			// project rather than special-cased): namespace formula is uniformly
-			// `loopzero-<tenant>-<project>-<env>` for ALL envs including
+			// `loop-runtime-<tenant>-<project>-<env>` for ALL envs including
 			// preview-pr-N. Pre-refactor was `<tenant>-<project>-pr-N`
-			// (no `loopzero-` prefix, no `preview-` env segment) — which
+			// (no `loop-runtime-` prefix, no `preview-` env segment) — which
 			// collided with EnvironmentNamespace shape and broke ArgoCD
 			// destination matching. Tests aligned to canonical.
 			name: "happy path: tenant + project + PR number",
-			preview: &loopzerov1.PreviewEnvironment{
+			preview: &loopruntimev1.PreviewEnvironment{
 				ObjectMeta: metav1.ObjectMeta{Name: "p"},
-				Spec: loopzerov1.PreviewEnvironmentSpec{
+				Spec: loopruntimev1.PreviewEnvironmentSpec{
 					TenantID:  "acme",
 					ProjectID: "api",
 					PRNumber:  42,
 				},
 			},
-			want: "loopzero-acme-api-preview-pr-42",
+			want: "loop-runtime-acme-api-preview-pr-42",
 		},
 		{
 			name: "single-character slugs are RFC 1123 valid",
-			preview: &loopzerov1.PreviewEnvironment{
-				Spec: loopzerov1.PreviewEnvironmentSpec{
+			preview: &loopruntimev1.PreviewEnvironment{
+				Spec: loopruntimev1.PreviewEnvironmentSpec{
 					TenantID:  "a",
 					ProjectID: "b",
 					PRNumber:  1,
 				},
 			},
-			want: "loopzero-a-b-preview-pr-1",
+			want: "loop-runtime-a-b-preview-pr-1",
 		},
 		{
 			name: "empty tenant slug returns error",
-			preview: &loopzerov1.PreviewEnvironment{
-				Spec: loopzerov1.PreviewEnvironmentSpec{
+			preview: &loopruntimev1.PreviewEnvironment{
+				Spec: loopruntimev1.PreviewEnvironmentSpec{
 					TenantID:  "",
 					ProjectID: "api",
 					PRNumber:  42,
@@ -73,8 +73,8 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 		},
 		{
 			name: "empty project slug returns error",
-			preview: &loopzerov1.PreviewEnvironment{
-				Spec: loopzerov1.PreviewEnvironmentSpec{
+			preview: &loopruntimev1.PreviewEnvironment{
+				Spec: loopruntimev1.PreviewEnvironmentSpec{
 					TenantID:  "acme",
 					ProjectID: "",
 					PRNumber:  42,
@@ -85,8 +85,8 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 		},
 		{
 			name: "non-positive PR number returns error",
-			preview: &loopzerov1.PreviewEnvironment{
-				Spec: loopzerov1.PreviewEnvironmentSpec{
+			preview: &loopruntimev1.PreviewEnvironment{
+				Spec: loopruntimev1.PreviewEnvironmentSpec{
 					TenantID:  "acme",
 					ProjectID: "api",
 					PRNumber:  0,
@@ -97,8 +97,8 @@ func TestPreviewReconciler_NamespaceName_Canonical(t *testing.T) {
 		},
 		{
 			name: "uppercase slugs violate RFC 1123",
-			preview: &loopzerov1.PreviewEnvironment{
-				Spec: loopzerov1.PreviewEnvironmentSpec{
+			preview: &loopruntimev1.PreviewEnvironment{
+				Spec: loopruntimev1.PreviewEnvironmentSpec{
 					TenantID:  "ACME",
 					ProjectID: "api",
 					PRNumber:  42,
@@ -138,7 +138,7 @@ func TestPreviewReconciler_BumpCleanupAttempts_Increments(t *testing.T) {
 	t.Parallel()
 
 	r := &PreviewReconciler{}
-	preview := &loopzerov1.PreviewEnvironment{
+	preview := &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{Name: "p1"},
 	}
 
@@ -171,11 +171,11 @@ func TestPreviewReconciler_BumpCleanupAttempts_Increments(t *testing.T) {
 // T1.2: evaluateWorkloadGate — workload-readiness condition flow
 // =============================================================================
 
-func newPreviewWithCreatedAt(createdAt time.Time, conds ...metav1.Condition) *loopzerov1.PreviewEnvironment {
+func newPreviewWithCreatedAt(createdAt time.Time, conds ...metav1.Condition) *loopruntimev1.PreviewEnvironment {
 	creation := metav1.NewTime(createdAt)
-	return &loopzerov1.PreviewEnvironment{
+	return &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{Name: "p", CreationTimestamp: creation},
-		Status: loopzerov1.PreviewEnvironmentStatus{
+		Status: loopruntimev1.PreviewEnvironmentStatus{
 			CreatedAt:  &creation,
 			Conditions: conds,
 		},
@@ -222,12 +222,12 @@ func TestEvaluateWorkloadGate_BuildSubmittedFalse_TransitionsFailed(t *testing.T
 	preview := newPreviewWithCreatedAt(time.Now(),
 		cond(conditions.TypePreviewBuildSubmitted, metav1.ConditionFalse),
 	)
-	preview.Status.Phase = loopzerov1.PreviewPhaseCreating
+	preview.Status.Phase = loopruntimev1.PreviewPhaseCreating
 	_, gated := r.evaluateWorkloadGate(preview)
 	if !gated {
 		t.Fatal("expected gated=true when BuildSubmitted=False")
 	}
-	if preview.Status.Phase != loopzerov1.PreviewPhaseFailed {
+	if preview.Status.Phase != loopruntimev1.PreviewPhaseFailed {
 		t.Errorf("expected phase=Failed when BuildSubmitted=False, got %q", preview.Status.Phase)
 	}
 }
@@ -254,12 +254,12 @@ func TestEvaluateWorkloadGate_BuildCompletedFalse_TransitionsFailed(t *testing.T
 		cond(conditions.TypePreviewBuildSubmitted, metav1.ConditionTrue),
 		cond(conditions.TypePreviewBuildCompleted, metav1.ConditionFalse),
 	)
-	preview.Status.Phase = loopzerov1.PreviewPhaseCreating
+	preview.Status.Phase = loopruntimev1.PreviewPhaseCreating
 	_, gated := r.evaluateWorkloadGate(preview)
 	if !gated {
 		t.Fatal("expected gated=true when BuildCompleted=False")
 	}
-	if preview.Status.Phase != loopzerov1.PreviewPhaseFailed {
+	if preview.Status.Phase != loopruntimev1.PreviewPhaseFailed {
 		t.Errorf("expected phase=Failed when BuildCompleted=False, got %q", preview.Status.Phase)
 	}
 }
@@ -313,7 +313,7 @@ func TestEvaluateWorkloadGate_AllReady_Proceeds(t *testing.T) {
 
 func TestPreviewWithinGracePeriod_NilCreatedAt_Conservative(t *testing.T) {
 	t.Parallel()
-	preview := &loopzerov1.PreviewEnvironment{ObjectMeta: metav1.ObjectMeta{Name: "p"}}
+	preview := &loopruntimev1.PreviewEnvironment{ObjectMeta: metav1.ObjectMeta{Name: "p"}}
 	// No CreatedAt and no CreationTimestamp set — should default to "within grace".
 	if !previewWithinGracePeriod(preview, time.Now()) {
 		t.Error("expected conservative behavior (within grace) for nil anchor")
@@ -322,7 +322,7 @@ func TestPreviewWithinGracePeriod_NilCreatedAt_Conservative(t *testing.T) {
 
 func TestPreviewWithinGracePeriod_FallsBackToCreationTimestamp(t *testing.T) {
 	t.Parallel()
-	preview := &loopzerov1.PreviewEnvironment{
+	preview := &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "p",
 			CreationTimestamp: metav1.NewTime(time.Now().Add(-200 * time.Second)),
@@ -363,7 +363,7 @@ func TestFindCondition_PresentReturnsPointer(t *testing.T) {
 func TestPreviewReconciler_BumpCleanupAttempts_NilAnnotations(t *testing.T) {
 	t.Parallel()
 	r := &PreviewReconciler{}
-	preview := &loopzerov1.PreviewEnvironment{
+	preview := &loopruntimev1.PreviewEnvironment{
 		ObjectMeta: metav1.ObjectMeta{Name: "p2"},
 	}
 	if preview.Annotations != nil {
@@ -384,8 +384,8 @@ func TestPreviewReconciler_NamespaceName_RejectsLegacyFormat(t *testing.T) {
 	t.Parallel()
 
 	r := &PreviewReconciler{}
-	preview := &loopzerov1.PreviewEnvironment{
-		Spec: loopzerov1.PreviewEnvironmentSpec{
+	preview := &loopruntimev1.PreviewEnvironment{
+		Spec: loopruntimev1.PreviewEnvironmentSpec{
 			TenantID:  "acme",
 			ProjectID: "api",
 			PRNumber:  42,
@@ -413,12 +413,12 @@ func TestPreviewReconciler_NamespaceName_RejectsLegacyFormat(t *testing.T) {
 // doc comment promised the legacy "{tenant}-{project}-pr-{N}" format, but the
 // body already delegated to Namespace — a redundant wrapper, not a format of its
 // own. This test pins the equivalence that made the deletion safe: the preview
-// namespace is the canonical loopzero-{tenant}-{project}-preview-pr-{N}, like any
+// namespace is the canonical loop-runtime-{tenant}-{project}-preview-pr-{N}, like any
 // other environment.
 func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	r := &PreviewReconciler{}
-	preview := &loopzerov1.PreviewEnvironment{
-		Spec: loopzerov1.PreviewEnvironmentSpec{
+	preview := &loopruntimev1.PreviewEnvironment{
+		Spec: loopruntimev1.PreviewEnvironmentSpec{
 			TenantID: "tn-acme", ProjectID: "sample", PRNumber: 3,
 		},
 	}
@@ -427,7 +427,7 @@ func TestPreviewNamespaceName_IsTheCanonicalFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("previewNamespaceName: %v", err)
 	}
-	want := "loopzero-tn-acme-sample-preview-pr-3"
+	want := "loop-runtime-tn-acme-sample-preview-pr-3"
 	if got != want {
 		t.Errorf("previewNamespaceName = %q, want %q — the legacy format matches "+
 			"no namespace on any cluster", got, want)

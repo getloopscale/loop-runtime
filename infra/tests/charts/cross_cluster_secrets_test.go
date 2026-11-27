@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // T1.2 of plan dev-public-cross-cluster-secrets (issue #111).
 //
 // TestCrossClusterSecretStoreContract locks the dev-public ESO
-// ClusterSecretStore overlay (loopzero-external-secrets chart) onto the
+// ClusterSecretStore overlay (loop-runtime-external-secrets chart) onto the
 // canonical SPLIT-CONTEXT contract: workload identity (Kubernetes-auth)
-// against the OpenBao instance running in the SEPARATE k3d-loopzero-secrets
+// against the OpenBao instance running in the SEPARATE k3d-loop-runtime-secrets
 // cluster (Approach A sponsor mandate UNBREAKABLE 2026-06-19). The legacy
 // AppRole shape (static secret_id mounted as K8s Secret in mgmt) is
 // replaced with auth.kubernetes pointing at the ESO controller's
@@ -15,8 +15,8 @@
 //
 // Hermetic: source-level grep on the overlay file + chart values.yaml.
 // No kubectl, no helm template — the cross-package install-contract
-// suite (loopzero_api_install_contract_test.go) already enforces render-time
-// invariants for loopzero-api; this test guards the AUTH MODE choice in the
+// suite (loop_runtime_api_install_contract_test.go) already enforces render-time
+// invariants for loop-runtime-api; this test guards the AUTH MODE choice in the
 // overlay against silent drift back to AppRole (which would re-require
 // the cross-cluster Secret bridge that T1.1 just deleted).
 //
@@ -55,7 +55,7 @@ func readOverlay(t *testing.T, rel string) string {
 
 // TestCrossClusterSecretStoreContract — RED until T1.2 GREEN.
 func TestCrossClusterSecretStoreContract(t *testing.T) {
-	overlay := readOverlay(t, "helmfile/values/dev-public/loopzero-external-secrets.yaml.gotmpl")
+	overlay := readOverlay(t, "helmfile/values/dev-public/loop-runtime-external-secrets.yaml.gotmpl")
 
 	// T1. dev-public overlay declares Kubernetes-auth mode for the
 	// ClusterSecretStore. Look for an `auth:` block with `kubernetes:`
@@ -76,7 +76,7 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 
 	// T3. EC-5: TokenRequest audience set. Audiences MUST match the
 	// OpenBao role's `bound_audiences` (configured by T1.2 chart change
-	// or operator-side `bao write auth/kubernetes/role/loopzero-eso ...`).
+	// or operator-side `bao write auth/kubernetes/role/loop-runtime-eso ...`).
 	// Empty audiences fail-closed: the OpenBao kubernetes-auth role
 	// rejects tokens with no `aud` claim.
 	if !strings.Contains(overlay, "audiences") {
@@ -84,7 +84,7 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 	}
 
 	// T4. Legacy AppRole `roleId` literal removed from the overlay. T1.1
-	// already deleted the cross-cluster Secret bridge (loopzero-openbao-approle
+	// already deleted the cross-cluster Secret bridge (loop-runtime-openbao-approle
 	// in TARGET_CONTEXT/mgmt); leaving roleId here would silently re-route
 	// the chart template into the appRole branch and break the chain.
 	if strings.Contains(overlay, "roleId:") && !strings.Contains(overlay, "# roleId") {
@@ -93,7 +93,7 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 
 	// T5. EC-2: `server` URL preserves canonical intra-cluster hostname
 	// (`openbao.secrets-system.svc.cluster.local`). CoreDNS host-alias
-	// (T2.2) rewrites this DNS to the loopzero-secrets NodePort IP cross-cluster
+	// (T2.2) rewrites this DNS to the loop-runtime-secrets NodePort IP cross-cluster
 	// while preserving the cert SAN. If the overlay literally points at
 	// the node-cluster docker DNS or a 127.0.0.1 host port, the cert SAN
 	// validation would fail.
@@ -111,22 +111,22 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 		t.Error("dev-public ESO overlay missing traceability — add a comment citing `issue #111` OR `dev-public-cross-cluster-secrets` OR `Approach A` so future operator understands the K8s-auth choice")
 	}
 
-	// T7. loopzero-api dev-public overlay parameterizes OPENBAO_VAULT_ADDR
+	// T7. loop-runtime-api dev-public overlay parameterizes OPENBAO_VAULT_ADDR
 	// — does not literally embed the URL but pulls from a value that
 	// can be re-sourced post-T2.2 to point at the cross-cluster IP /
 	// NodePort. For dev-public the LITERAL stays the canonical
 	// intra-cluster DNS (EC-2), but the chain MUST traceably reference
 	// the cross-cluster contract.
-	apiOverlay := readOverlay(t, "helmfile/values/dev-public/loopzero-api.yaml.gotmpl")
+	apiOverlay := readOverlay(t, "helmfile/values/dev-public/loop-runtime-api.yaml.gotmpl")
 	if !strings.Contains(apiOverlay, "openbao.secrets-system.svc.cluster.local") {
-		t.Error("dev-public loopzero-api overlay missing canonical OpenBao address — OPENBAO_VAULT_ADDR must point at the SAN-preserving DNS name")
+		t.Error("dev-public loop-runtime-api overlay missing canonical OpenBao address — OPENBAO_VAULT_ADDR must point at the SAN-preserving DNS name")
 	}
 	apiCross := strings.Contains(apiOverlay, "cross-cluster") ||
 		strings.Contains(apiOverlay, "issue #111") ||
 		strings.Contains(apiOverlay, "dev-public-cross-cluster-secrets") ||
 		strings.Contains(apiOverlay, "CoreDNS")
 	if !apiCross {
-		t.Error("dev-public loopzero-api overlay missing cross-cluster traceability — add a comment referencing T1.2 / issue #111 / CoreDNS host-alias so operator understands the cross-cluster wiring")
+		t.Error("dev-public loop-runtime-api overlay missing cross-cluster traceability — add a comment referencing T1.2 / issue #111 / CoreDNS host-alias so operator understands the cross-cluster wiring")
 	}
 
 	// T8. Base values keep the in-cluster default unchanged (Q3 of plan).
@@ -134,8 +134,8 @@ func TestCrossClusterSecretStoreContract(t *testing.T) {
 	// level safe default; per-env overlay populates). Regressing this
 	// would inject the cross-cluster topology into single-cluster envs
 	// (standalone-multi, prod) that share the base default.
-	baseValues := readOverlay(t, "helm/loopzero-external-secrets/values.yaml")
+	baseValues := readOverlay(t, "helm/loop-runtime-external-secrets/values.yaml")
 	if !strings.Contains(baseValues, "openbaoTransit:") {
-		t.Error("base loopzero-external-secrets values.yaml missing `openbaoTransit:` block — schema contract corrupted")
+		t.Error("base loop-runtime-external-secrets values.yaml missing `openbaoTransit:` block — schema contract corrupted")
 	}
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package integration
 
@@ -12,17 +12,17 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // violationCount reads the per-plan project-cap violation counter (M4 metric).
@@ -36,7 +36,7 @@ func violationCount(plan string) float64 {
 // unlimited, blocks-new-only for grandfathered accounts, and never exceeds the
 // cap under concurrency (the advisory-lock atomic guard).
 //
-//	DATABASE_URL=postgres://loopzero:loopzero@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapPerAccount -race -v
+//	DATABASE_URL=postgres://loop_runtime:loop_runtime@host/db?sslmode=disable go test ./tests/integration/ -run ProjectCapPerAccount -race -v
 
 // realProjectCapChecker adapts a real PlanLimiter to store.ProjectCapChecker.
 type realProjectCapChecker struct{ l *enforcement.PlanLimiter }
@@ -58,7 +58,7 @@ func projectCapStore(t *testing.T) (*store.PostgresProjectStore, *sql.DB) {
 	}
 	t.Cleanup(func() { _ = stdDB.Close() })
 	// The plan is read through the cross-tenant worker role, as main wires it
-	// (wirePlanEnforcement): seedDBURL is LOOPZERO_WORKER_DATABASE_URL.
+	// (wirePlanEnforcement): seedDBURL is LOOP_RUNTIME_WORKER_DATABASE_URL.
 	limiter := enforcement.NewPlanLimiter(store.NewPlanLimitsStore(&db.PgxAdapter{Pool: workerPool(t)}), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// The store runs as main wires it: on the request pool, whose connections
 	// carry the caller's tenant scope, and counting the Account's projects
@@ -123,7 +123,7 @@ func mustCreate(t *testing.T, store *store.PostgresProjectStore, tenant, name, o
 }
 
 func isCapError(err error) bool {
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	return errors.As(err, &te) && te.Code == "PROJECTS_EXCEED_PLAN"
 }
 
@@ -142,7 +142,7 @@ func TestProjectCapPerAccount_PerAccount_BlocksAcrossTenants(t *testing.T) {
 	// 2nd project under the OTHER tenant of the same account → over the Account cap.
 	before := violationCount("starter")
 	err := mustCreate(t, store, tn2, "second", owner)
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("2nd project (over Account cap, different tenant) must be PROJECTS_EXCEED_PLAN; got %v", err)
 	}

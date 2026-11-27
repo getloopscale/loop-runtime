@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 /**
- * Central type definitions for the LoopZero infrastructure platform.
+ * Central type definitions for the LoopRuntime infrastructure platform.
  * These types are provider-independent and used across all layers.
  */
 

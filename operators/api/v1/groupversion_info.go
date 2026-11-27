@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package v1 contains API types for the loopzero.io API group version v1.
+// Package v1 contains API types for the runtime.getloopscale.com API group version v1.
 //
 // These types define the Custom Resource Definitions (CRDs) used by
-// LoopZero's Kubernetes operators: Tenant, PreviewEnvironment, ClusterCredential,
-// PlatformBootstrap, GitRepositoryBinding, Environment, LoopZeroApplication,
+// LoopRuntime's Kubernetes operators: Tenant, PreviewEnvironment, ClusterCredential,
+// PlatformBootstrap, GitRepositoryBinding, Environment, LoopRuntimeApplication,
 // and ExposedRoute (8 CRDs, all wired). AppSecret and ReconciliationReport
 // were deleted 2026-05-13 (ADR 2026-05-13-orphan-crd-deletion).
 //
 // +kubebuilder:object:generate=true
-// +groupName=loopzero.io
+// +groupName=runtime.getloopscale.com
 package v1
 
 import (
@@ -19,8 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// GroupVersion is the API group and version for LoopZero CRDs.
-var GroupVersion = schema.GroupVersion{Group: "loopzero.io", Version: "v1"}
+// GroupVersion is the API group and version for LoopRuntime CRDs.
+var GroupVersion = schema.GroupVersion{Group: "runtime.getloopscale.com", Version: "v1"}
 
 // SchemeBuilder is used to add types to the scheme.
 var SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
@@ -42,8 +42,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&GitRepositoryBindingList{},
 		&Environment{},
 		&EnvironmentList{},
-		&LoopZeroApplication{},
-		&LoopZeroApplicationList{},
+		&LoopRuntimeApplication{},
+		&LoopRuntimeApplicationList{},
 		&ExposedRoute{},
 		&ExposedRouteList{},
 	)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package tenant_test
 
@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/getloopscale/loopzero/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/domain"
 )
 
 // cellIDDefault captures the kubebuilder default rendered for a `cellID:`
@@ -21,8 +21,8 @@ var cellIDDefault = regexp.MustCompile(`(?m)^\s+cellID:\n\s+default:\s+(\S+)\s*$
 // row created without a cell land in the same cell.
 func TestCRDCellIDDefaultIsTheDefaultCellID(t *testing.T) {
 	for _, crdPath := range []string{
-		"../../config/crd/bases/loopzero.io_tenants.yaml",
-		"../../config/crd/bases/loopzero.io_clustercredentials.yaml",
+		"../../config/crd/bases/runtime.getloopscale.com_tenants.yaml",
+		"../../config/crd/bases/runtime.getloopscale.com_clustercredentials.yaml",
 	} {
 		t.Run(crdPath, func(t *testing.T) {
 			content, err := os.ReadFile(crdPath)

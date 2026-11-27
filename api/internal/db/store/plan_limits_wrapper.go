@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
 )
 
 // PlanLimitsStore is the SQL adapter of enforcement.LimitsStore: it reads a
@@ -18,14 +18,14 @@ import (
 // capability PlanLimiter uses for the per-Account project cap.
 //
 // It MUST be given a cross-tenant connection — the background pool, running as
-// loopzero_worker. `subscriptions` and `tenants` are under fail-closed Row Level
+// loop_runtime_worker. `subscriptions` and `tenants` are under fail-closed Row Level
 // Security (migration 000062), and the plan lookups carry no tenant scope: over
-// the request pool (loopzero_api) every lookup sees no row, so every tenant reads
+// the request pool (loop_runtime_api) every lookup sees no row, so every tenant reads
 // as Starter. Scoping the session to the tenant would not be enough either: an
 // Account has ONE subscription (UNIQUE(account_id)), held by one of its
 // tenants, so the Account plan of any sibling tenant is another tenant's row.
 // Measured against the migrated schema: a "pro" Account read "" through
-// loopzero_api and "pro" through loopzero_worker, for both lookups.
+// loop_runtime_api and "pro" through loop_runtime_worker, for both lookups.
 type PlanLimitsStore struct {
 	DB db.DBTX
 }

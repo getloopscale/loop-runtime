@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -27,14 +27,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // GetBuildAttestationForTenant is the tenant-isolated variant: only
@@ -43,7 +43,7 @@ import (
 // leaks per ADR-0014 trust model.
 func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Context, tenantID, buildID string) (*ports.AttestationInfo, error) {
 	if buildID == "" || tenantID == "" {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 	gdb := db.Generated(s.db)
 	q := generated.New()
@@ -54,7 +54,7 @@ func (s *PostgresAttestationStore) GetBuildAttestationForTenant(ctx context.Cont
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, loopzeroerrors.ErrBuildNotFound
+			return nil, loopruntimeerrors.ErrBuildNotFound
 		}
 		return nil, fmt.Errorf("attestation store: query failed: %w", err)
 	}

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // These tests prove the claims migration 000061 makes about the database, instead of
 // trusting them. See docs/decisions/2026-08-09-cell-cluster-unification-adr.md and BACKLOG.md B-005.
@@ -10,7 +10,7 @@
 // While they skip, the unification is verified by reading and not by execution — and the two
 // premises the migration assumes about Postgres remain unproven. The way to run them is the
 // .claude/rules/cleanroom-up-live-test-mandate.md chain, where a database is standing after
-// setup + seeds. Tracked in https://github.com/getloopscale/loopzero/issues/279
+// setup + seeds. Tracked in https://github.com/getloopscale/loop-runtime/issues/279
 package integration
 
 import (
@@ -33,12 +33,12 @@ func cellTestPool(t *testing.T) *pgxpool.Pool {
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dbURL())
 	if err != nil {
-		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loop-runtime/issues/279
 		t.Skipf("skipping: no reachable PostgreSQL: %v", err)
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loop-runtime/issues/279
 		t.Skipf("skipping: no reachable PostgreSQL: %v", err)
 	}
 	return pool
@@ -64,7 +64,7 @@ func TestTriggerResolvesCellIDBeforeNotNullRejects(t *testing.T) {
 	// Always roll back: the test proves an order, it leaves no data.
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loop-runtime/issues/279
 		t.Skipf("skipping: could not open a transaction: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -97,7 +97,7 @@ func TestTriggerFailsLoudlyWhenTenantHasNoCell(t *testing.T) {
 
 	tx, err := pool.Begin(ctx)
 	if err != nil {
-		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loop-runtime/issues/279
 		t.Skipf("skipping: could not open a transaction: %v", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
@@ -129,7 +129,7 @@ func TestCatalogueNoLongerHasTheOldIdentities(t *testing.T) {
 	err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM cells WHERE cell_id IN ('cell-default', 'cell-2')`).Scan(&survivors)
 	if err != nil {
-		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loopzero/issues/279
+		// no database: nothing to prove here. Tracked in https://github.com/getloopscale/loop-runtime/issues/279
 		t.Skipf("skipping: cells table unavailable: %v", err)
 	}
 	if survivors != 0 {

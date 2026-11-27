@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package deploycontracts
 
@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // --- Test doubles ---
@@ -183,7 +183,7 @@ func TestBuildManifestApps_MultipleApps(t *testing.T) {
 
 // CHG-2026-04-29-DOGFOOD iter 8 — supply-chain VAP enforcement: a manifest
 // rendered without an image digest produces pods Forbidden by the
-// `loopzero-require-image-signature` ValidatingAdmissionPolicy. We must
+// `loop-runtime-require-image-signature` ValidatingAdmissionPolicy. We must
 // fail-loud at manifest build time instead of letting the pipeline run
 // to admission and produce an opaque error there.
 func TestBuildManifestApps_MissingDigest_FailsLoud(t *testing.T) {
@@ -244,5 +244,28 @@ func TestBuildAppRelease_URLIsTheCanonicalAppURLEvenWhenTheHostIsTruncated(t *te
 
 	if want := naming.AppURL("tn-1", long, "api", "production", "example.com"); rel.URL != want {
 		t.Errorf("URL = %q, want the host the IngressRoute serves %q", rel.URL, want)
+	}
+}
+
+func TestBuildManifestApps_CarriesTheAutoscalingTargets(t *testing.T) {
+	apps, err := BuildManifestApps(context.Background(), BuildManifestAppsInput{
+		RegistryURL: "registry.example.com",
+		TenantID:    "tn-1",
+		ProjectID:   "my-app",
+		Environment: "production",
+		CommitSHA:   "abc123",
+		Apps: []db.BuildAppSpec{{
+			Name: "api", Type: "server", Port: 3000,
+			Autoscaling: &db.BuildAppAutoscaling{MinReplicas: 1, MaxReplicas: 3, TargetCPU: 70, TargetMemory: 60},
+		}},
+		AppDigests: map[string]string{"api": digestFor("api")},
+	})
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	a := apps[0].Autoscaling
+	if a == nil || a.MinReplicas != 1 || a.MaxReplicas != 3 || a.TargetCPU != 70 || a.TargetMemory != 60 {
+		t.Errorf("autoscaling = %+v, want min 1, max 3, cpu 70, memory 60", a)
 	}
 }

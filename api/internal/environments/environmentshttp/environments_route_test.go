@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environmentshttp_test
 
@@ -12,9 +12,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/middleware/auth/authtest"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/auth/authtest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -257,11 +257,11 @@ func TestEnvironmentCreateRoute(t *testing.T) {
 		}
 	})
 
-	t.Run("POST /api/v1/environments → 400 with reserved name loopzero-system", func(t *testing.T) {
+	t.Run("POST /api/v1/environments → 400 with reserved name loop-runtime-system", func(t *testing.T) {
 		mgr := &fakeEnvironmentManager{}
 		handler := environmentshttp.NewEnvironmentHandler(mgr)
 
-		body := `{"name":"loopzero-system"}`
+		body := `{"name":"loop-runtime-system"}`
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/environments", bytes.NewBufferString(body)).
 			WithContext(authtest.Context("github-lucas", "acme", "owner"))
 		req.Header.Set("Content-Type", "application/json")

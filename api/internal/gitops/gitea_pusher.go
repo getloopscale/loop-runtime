@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package gitops implements the GitOps pusher that commits manifests to Gitea
 // tenant repos. This is the Step 6 architectural fix: the API now owns the
@@ -15,24 +15,24 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/getloopscale/loopzero/api/internal/gitclient"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/pkg/gitearepo"
+	"github.com/getloopscale/loop-runtime/api/internal/gitclient"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/pkg/gitearepo"
 )
 
 // GiteaGitOpsPusherConfig holds configuration for connecting to Gitea GitOps repos.
 type GiteaGitOpsPusherConfig struct {
-	BaseURL string // e.g., "http://gitea-http.loopzero-system.svc:3000"
+	BaseURL string // e.g., "http://gitea-http.loop-runtime-system.svc:3000"
 	Token   string // Gitea access token for push authentication
-	OrgName string // e.g., "loopzero"
+	OrgName string // e.g., "loop-runtime"
 }
 
 // GiteaGitOpsPusher implements deploycontracts.GitOpsPusher by committing manifests
@@ -96,11 +96,11 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOp
 		metrics.GitOpsOperationDuration.WithLabelValues("push").Observe(time.Since(pushStart).Seconds())
 	}()
 
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.gitops.push_manifests",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.gitops.push_manifests",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", opts.TenantID),
-			attribute.String("loopzero.project", opts.ProjectID),
-			attribute.String("loopzero.environment", opts.Environment),
+			attribute.String("loop-runtime.tenant", opts.TenantID),
+			attribute.String("loop-runtime.project", opts.ProjectID),
+			attribute.String("loop-runtime.environment", opts.Environment),
 		))
 	defer span.End()
 
@@ -132,7 +132,7 @@ func (p *GiteaGitOpsPusher) Push(ctx context.Context, opts deploycontracts.GitOp
 	if err != nil {
 		return "", err
 	}
-	span.SetAttributes(attribute.String("loopzero.gitops.commit_sha", sha))
+	span.SetAttributes(attribute.String("loop-runtime.gitops.commit_sha", sha))
 	return sha, nil
 }
 
@@ -221,4 +221,35 @@ func (p *GiteaGitOpsPusher) GetManifestsAtCommit(ctx context.Context, tenantID, 
 	}
 
 	return buf.Bytes(), nil
+}
+
+// EnsureEnvironmentPath makes sure the directory the Argo CD Application of
+// (project, environment) reads exists on the tenant repo. An Application whose
+// path is missing reports ComparisonError until the first release writes it, so
+// an environment is given the directory when it is created.
+//
+// A directory that already exists is left as it is, whatever it holds: a
+// placeholder is never written next to manifests.
+func (p *GiteaGitOpsPusher) EnsureEnvironmentPath(ctx context.Context, tenantID, projectID, environment string) error {
+	ws, cleanup, err := p.openWorkspace(ctx, tenantID, "prepare")
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	relPath := filepath.Join(environment, projectID)
+	if _, err := os.Stat(filepath.Join(ws.dir, relPath)); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("gitops prepare: stat %s: %w", relPath, err)
+	}
+	gitkeep := filepath.Join(relPath, ".gitkeep")
+	if err := ws.writeFile(gitkeep, ""); err != nil {
+		return err
+	}
+	if err := ws.git.Run(ctx, ws.dir, "add", gitkeep); err != nil {
+		return fmt.Errorf("gitops prepare: git add .gitkeep: %w", err)
+	}
+	_, err = ws.commitAndPush(ctx, fmt.Sprintf("Prepare %s in %s", projectID, environment))
+	return err
 }

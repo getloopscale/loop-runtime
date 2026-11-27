@@ -1,0 +1,44 @@
+{{- if .Values.rbac.create }}
+# Secret access in the ArgoCD namespace (config.argocdNamespace — the same
+# value the binary reads as ARGOCD_NAMESPACE, so the Role and the operator's
+# Secret cache always name the same namespace).
+#
+# Read, list and watch go through the manager's Secret cache, scoped to this
+# namespace and loop-runtime-system (operators/cmd/platform-operator
+# managerCacheOptions). Writes, by controller:
+#   - clustercredential_controller: creates/updates the ArgoCD cluster Secret
+#     of each credential, deletes it when the credential goes
+#   - gitrepositorybinding_controller: creates/updates the argocd-repo-*
+#     repository Secret, deletes it when the binding goes
+#   - platformbootstrap_controller: creates/updates the repo-creds Secrets, and
+#     reads the ArgoCD initial admin Secret
+# resourceNames is not used because the cluster and repository Secret names
+# are per credential and per binding. Namespace scope is the boundary.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "loop-runtime-common.fullname" . }}-secrets-argocd
+  namespace: {{ .Values.config.argocdNamespace }}
+  labels:
+    {{- include "loop-runtime-common.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "loop-runtime-common.fullname" . }}-secrets-argocd
+  namespace: {{ .Values.config.argocdNamespace }}
+  labels:
+    {{- include "loop-runtime-common.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "loop-runtime-common.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "loop-runtime-common.fullname" . }}-secrets-argocd
+{{- end }}

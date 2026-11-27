@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placementadapter
 
 import (
 	"context"
 
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/placement/placementhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementhttp"
 )
 
 // TenantEvictorRouteAdapter exposes *placement.TenantEvictor via the

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package admission
 
@@ -30,7 +30,7 @@ import (
 //
 // Usage pattern: in the handler path, before issuing a mutating SQL
 // operation, call breaker.Allow(). If false, return
-// loopzeroerrors.ErrPlatformDegraded (HTTP 503) so the user gets a clear
+// loopruntimeerrors.ErrPlatformDegraded (HTTP 503) so the user gets a clear
 // "come back later" signal. Read-only handlers MUST NOT consult the
 // breaker — reads do not worsen the saturation the breaker is trying to
 // prevent.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package scalinghttp
 
@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // fakePlanTierStore satisfies ports.PlanTierStore so the handler's
@@ -300,6 +300,7 @@ func TestScale_RealPersistence_Applied(t *testing.T) {
 		return true, nil
 	}
 	h := NewScaleHandler(projects, apply, true)
+	h.SetDeliverer(&fakeScaleDeliverer{delivered: true})
 
 	body := `{"environment":"production","app":"api","replicas":3}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
@@ -334,6 +335,7 @@ func TestScale_RealPersistence_NoChange(t *testing.T) {
 		return false, nil
 	}
 	h := NewScaleHandler(projects, apply, true)
+	h.SetDeliverer(&fakeScaleDeliverer{delivered: true})
 
 	body := `{"environment":"production","app":"api","replicas":3}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/my-api/scale", bytes.NewBufferString(body))
@@ -520,7 +522,7 @@ func TestScale_ResponseCarriesMonthlyCostAndPlanTier(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#101 regression-protector (2026-06-27): the
+// Red Team loop-console#101 regression-protector (2026-06-27): the
 // /api/v1/projects/{name}/scale endpoint MUST reject a request whose
 // replicas (or autoscaling.max) exceeds the tenant's plan cap. Before
 // the fix, the scale path had ZERO max-replica enforcement — Starter
@@ -540,7 +542,7 @@ func (f *fakeScaleReplicasChecker) CheckReplicasValue(_ context.Context, _ strin
 type unreadableReplicasChecker struct{}
 
 func (unreadableReplicasChecker) CheckReplicasValue(context.Context, string, int) (bool, string, int, error) {
-	return false, "", 0, loopzeroerrors.ErrPlatformDegraded
+	return false, "", 0, loopruntimeerrors.ErrPlatformDegraded
 }
 
 func TestScaleHandler_RefusesWhenTheReplicaCapCannotBeRead(t *testing.T) {
@@ -674,7 +676,7 @@ func TestScaleHandler_NilChecker_NoEnforcement(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#103 regression-protector — input validation MUST
+// Red Team loop-console#103 regression-protector — input validation MUST
 // return HTTP 400 with the client-classified `INVALID_REPLICAS` code,
 // never `500 INVALID_ARGUMENT` (status×code mismatch + server-failure
 // connotation for a client-input error). The 3 scenarios lock the 3

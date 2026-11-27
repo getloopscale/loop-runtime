@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package charts_test
 
@@ -12,7 +12,7 @@ import (
 
 // SD-02.1 (system-design audit 2026-09-07, as corrected).
 //
-// docs/operations/loopzero-capsim.mjs models the AWS-first TARGET at 50,000 tenants,
+// docs/operations/loop-runtime-capsim.mjs models the AWS-first TARGET at 50,000 tenants,
 // so its replica counts are modelled need and not a claim about the deployed
 // system — the audit first read them as a disagreement with the charts and that
 // reading was wrong.
@@ -25,19 +25,19 @@ import (
 // the configured 5000, and inflated the cell count tenfold).
 //
 // This asserts the VALUES agree. It deliberately does not assert line numbers:
-// the audit found the loopzero-cloud citation pointing at githubAppSlug because the
+// the audit found the loop-console citation pointing at githubAppSlug because the
 // file had grown, and a test that pins line numbers rots the same way.
 func TestCapsim_ResourceRequestsMatchTheCharts(t *testing.T) {
-	capsim, err := os.ReadFile("../../../docs/operations/loopzero-capsim.mjs")
+	capsim, err := os.ReadFile("../../../docs/operations/loop-runtime-capsim.mjs")
 	if err != nil {
 		// The model file was NOT committed alongside this test in commit
 		// ce8af703b ("feat(infra): declare bundle retention on the production
 		// bucket"). Skip until the model is added or the test is deleted —
-		// tracked as B-224 + https://github.com/getloopscale/loopzero/issues/355.
+		// tracked as B-224 + https://github.com/getloopscale/loop-runtime/issues/355.
 		// A Skip is honest here (there is no subject to read); a Fatalf
 		// blocks every push forever on a self-inflicted missing-artefact
 		// defect and defeats the delivery-gate signal for unrelated changes.
-		t.Skipf("skipping: model file missing (%v). See B-224 / https://github.com/getloopscale/loopzero/issues/355", err)
+		t.Skipf("skipping: model file missing (%v). See B-224 / https://github.com/getloopscale/loop-runtime/issues/355", err)
 	}
 	model := string(capsim)
 
@@ -47,8 +47,8 @@ func TestCapsim_ResourceRequestsMatchTheCharts(t *testing.T) {
 		wantCPU   string
 		wantMemMi string
 	}{
-		{"engineApi", "../../../charts/loopzero-api/values.yaml", "100m", "64Mi"},
-		{"bff", "../../../charts/loopzero-cloud/values.yaml", "50m", "64Mi"},
+		{"engineApi", "../../../charts/loop-runtime-api/values.yaml", "100m", "64Mi"},
+		{"bff", "../../../charts/loop-console/values.yaml", "50m", "64Mi"},
 	}
 
 	for _, c := range cases {

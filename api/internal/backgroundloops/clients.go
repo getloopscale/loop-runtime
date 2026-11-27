@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package backgroundloops builds the platform's background loops (build
 // reconcile, reapers, release convergence, pruners, domain lifecycle) and the
@@ -33,12 +33,12 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/argo"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/gitops"
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/orchestrationbreaker"
-	"github.com/getloopscale/loopzero/api/internal/release/argocd"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/argo"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/gitops"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/orchestrationbreaker"
+	"github.com/getloopscale/loop-runtime/api/internal/release/argocd"
 )
 
 // NewWorkflowSubmitter builds the circuit-breaker-wrapped Argo Workflows
@@ -46,21 +46,7 @@ import (
 // configuration carries (per-environment Fulcio audience, cosign
 // keyless/attestation).
 func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerWorkflowSubmitter, error) {
-	raw, err := argo.NewWorkflowSubmitter(argo.WorkflowSubmitterConfig{
-		Kubeconfig:            cfg.BuildKubeconfig,
-		Context:               cfg.BuildKubeContext,
-		RegistryURL:           cfg.RegistryURL,
-		RegistryInsecure:      cfg.RegistryInsecure,
-		BaseDomain:            cfg.BaseDomain,
-		CosignKeyless:         cfg.CosignKeyless,
-		CosignAttestEnabled:   cfg.CosignAttestEnabled,
-		CosignFulcioURL:       cfg.CosignFulcioURL,
-		CosignRekorURL:        cfg.CosignRekorURL,
-		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT,
-		CosignImage:           cfg.CosignImage,
-		SyftImage:             cfg.SyftImage,
-		Env:                   cfg.Env, // sec-010: per-environment Fulcio audience
-	})
+	raw, err := argo.NewWorkflowSubmitter(workflowSubmitterConfig(cfg))
 	if err != nil {
 		return nil, fmt.Errorf("workflow submitter: %w", err)
 	}
@@ -83,7 +69,7 @@ func NewWorkflowSubmitter(cfg config.Config, logger *slog.Logger) (*orchestratio
 func NewSyncClient(cfg config.Config, transport *http.Transport, logger *slog.Logger) (*orchestrationbreaker.CircuitBreakerSyncClient, error) {
 	httpClient := &http.Client{Timeout: cfg.ArgocdClientTimeout}
 	if cfg.ArgocdInsecure {
-		// Local k3d only: cert-manager cannot issue for *.loopzero.local. Production
+		// Local k3d only: cert-manager cannot issue for *.loop-runtime.local. Production
 		// sets ArgocdInsecure=false (audit SEC-101).
 		httpClient.Transport = &http.Transport{
 			MaxIdleConns:        100,
@@ -156,4 +142,26 @@ func newArgoCDTokenProvider(cfg config.Config, logger *slog.Logger) argocd.Token
 	provider.Start(context.Background())
 	logger.Info("argocd token provider: KubeMintingTokenProvider active (self-healing)", "argocd_url", cfg.ArgocdURL)
 	return provider
+}
+
+// workflowSubmitterConfig is the build cluster submitter's share of the configuration.
+func workflowSubmitterConfig(cfg config.Config) argo.WorkflowSubmitterConfig {
+	return argo.WorkflowSubmitterConfig{
+		ObjectStoreIRSA:       cfg.ObjectStoreAWSCredentials,
+		StaticAssetsBucket:    cfg.StaticAssetsBucket,
+		Kubeconfig:            cfg.BuildKubeconfig,
+		Context:               cfg.BuildKubeContext,
+		RegistryURL:           cfg.RegistryURL,
+		RegistryInsecure:      cfg.RegistryInsecure,
+		BaseDomain:            cfg.BaseDomain,
+		CosignKeyless:         cfg.CosignKeyless,
+		CosignAttestEnabled:   cfg.CosignAttestEnabled,
+		CosignFulcioURL:       cfg.CosignFulcioURL,
+		CosignRekorURL:        cfg.CosignRekorURL,
+		CosignInsecureSkipSCT: cfg.CosignInsecureSkipSCT,
+		CosignImage:           cfg.CosignImage,
+		WorkspaceStorageClass: cfg.BuildWorkspaceStorageClass,
+		SyftImage:             cfg.SyftImage,
+		Env:                   cfg.Env, // sec-010: per-environment Fulcio audience
+	}
 }

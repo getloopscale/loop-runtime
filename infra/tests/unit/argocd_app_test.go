@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -64,7 +64,7 @@ func TestApplicationTemplateRendersCorrectStructure(t *testing.T) {
 		t.Fatal("missing metadata.labels")
 	}
 
-	requiredLabels := []string{"loopzero.io/tenant", "loopzero.io/project", "loopzero.io/environment"}
+	requiredLabels := []string{"runtime.getloopscale.com/tenant", "runtime.getloopscale.com/project", "runtime.getloopscale.com/environment"}
 	for _, label := range requiredLabels {
 		if _, ok := labels[label]; !ok {
 			t.Errorf("missing required label: %s", label)

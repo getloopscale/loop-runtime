@@ -95,7 +95,7 @@ ports:
 
 # --- Global Timeouts ---
 #
-# Plan red-team-77-107-closure v1.0 T1.1 (closes Red Team loopzero-cloud#107)
+# Plan red-team-77-107-closure v1.0 T1.1 (closes Red Team loop-console#107)
 # bumps three values from the original 60s/120s/60s cap to Vercel-Pro-parity
 # 300s/600s/300s on the customer-app HTTPS surface (websecure entryPoint).
 # Pre-fix: any response taking > ~61s (SSE / AI streaming / long-poll / large

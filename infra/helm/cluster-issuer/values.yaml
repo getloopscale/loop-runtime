@@ -9,5 +9,10 @@ acme:
   server: https://acme-v02.api.letsencrypt.org/directory
   privateKeySecretRef: letsencrypt-prod-account-key
 
-# LoopZero CA issuer name (always created for local dev fallback)
-loopzeroCaIssuerName: loopzero-ca-issuer
+# LoopRuntime CA issuer name (always created for local dev fallback)
+loopRuntimeCaIssuerName: loop-runtime-ca-issuer
+
+# Extra self-signed issuers, by name. An environment that cannot complete an ACME
+# challenge lists here the issuer name its apps' Certificates ask for, so they are
+# issued. Only for issuerKind selfsigned: with acme the chart owns letsencrypt-prod.
+selfSignedAliases: []

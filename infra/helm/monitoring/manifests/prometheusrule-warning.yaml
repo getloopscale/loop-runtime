@@ -1,18 +1,18 @@
-# Warning alerting rules for LoopZero platform (spec §15.5).
+# Warning alerting rules for LoopRuntime platform (spec §15.5).
 # These indicate potential issues that should be investigated soon.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
-  name: loopzero-warning-alerts
+  name: loop-runtime-warning-alerts
   namespace: monitoring
   labels:
     release: monitoring
 spec:
   groups:
-    - name: loopzero.warning
+    - name: loop-runtime.warning
       rules:
-        - alert: LoopZeroAPIHighLatency
-          expr: histogram_quantile(0.99, sum(rate(loopzero_api_request_duration_seconds_bucket[5m])) by (le)) > 5
+        - alert: LoopRuntimeAPIHighLatency
+          expr: histogram_quantile(0.99, sum(rate(loop_runtime_api_request_duration_seconds_bucket[5m])) by (le)) > 5
           for: 5m
           labels:
             severity: warning
@@ -21,8 +21,8 @@ spec:
             description: "API request latency (p99) has been above 5 seconds for 5 minutes."
             runbook: "Check downstream dependencies (Gitea, Argo, PostgreSQL). Scaling API pods only helps if API itself is the bottleneck."
 
-        - alert: LoopZeroBuildQueueBacklog
-          expr: loopzero_build_queue_depth > 10
+        - alert: LoopRuntimeBuildQueueBacklog
+          expr: loop_runtime_build_queue_depth > 10
           for: 5m
           labels:
             severity: warning
@@ -31,8 +31,8 @@ spec:
             description: "More than 10 builds are queued for 5+ minutes. Builds may be delayed."
             runbook: "Check Argo Workflows controller capacity. Consider scaling workflow workers."
 
-        - alert: LoopZeroReconcilerUnhealthy
-          expr: increase(loopzero_operator_reconcile_errors_total[5m]) > 5
+        - alert: LoopRuntimeReconcilerUnhealthy
+          expr: increase(loop_runtime_operator_reconcile_errors_total[5m]) > 5
           labels:
             severity: warning
           annotations:
@@ -40,7 +40,7 @@ spec:
             description: "StateReconciler is producing errors at an elevated rate."
             runbook: "Check reconciler pod logs. Verify connectivity to ArgoCD and Gitea."
 
-        - alert: LoopZeroArgoCDAppCountWarning
+        - alert: LoopRuntimeArgoCDAppCountWarning
           expr: count(argocd_app_info) > 200
           for: 5m
           labels:
@@ -50,7 +50,7 @@ spec:
             description: "ArgoCD application count exceeds 200. Performance degradation may begin."
             runbook: "Monitor ArgoCD reconciliation latency. Consider controller sharding if latency increases."
 
-        - alert: LoopZeroArgoCDAppCountCritical
+        - alert: LoopRuntimeArgoCDAppCountCritical
           expr: count(argocd_app_info) > 400
           for: 5m
           labels:
@@ -60,7 +60,7 @@ spec:
             description: "ArgoCD application count exceeds 400. Reconciliation degradation likely."
             runbook: "Implement application controller sharding (--application-namespaces). Scale controller resources."
 
-        - alert: LoopZeroArgoCDSyncSlow
+        - alert: LoopRuntimeArgoCDSyncSlow
           expr: histogram_quantile(0.95, sum(rate(argocd_app_reconcile_duration_seconds_bucket[5m])) by (le)) > 30
           for: 5m
           labels:
@@ -71,10 +71,10 @@ spec:
             runbook: "Check ArgoCD controller resources and application count. May indicate capacity issues."
 
         # MEET-2026-03-31-023 T0-3: Build stuck in RELEASING state.
-        # The metric loopzero_releasing_builds exists in api/internal/metrics/release_metrics.go.
+        # The metric loop_runtime_releasing_builds exists in api/internal/metrics/release_metrics.go.
         # This alert was designed but never created as a PrometheusRule.
-        - alert: LoopZeroOrphanBuild
-          expr: loopzero_releasing_builds > 0
+        - alert: LoopRuntimeOrphanBuild
+          expr: loop_runtime_releasing_builds > 0
           for: 5m
           labels:
             severity: warning
@@ -84,19 +84,19 @@ spec:
             runbook: "Check API logs for release activation errors. Verify ArgoCD connectivity. The build reconcile loop should retry automatically on next tick."
 
         # MEET-2026-03-31-023 T1-8: Releases stuck in PENDING state.
-        - alert: LoopZeroReleasesPendingStuck
-          expr: loopzero_releases_pending > 0
+        - alert: LoopRuntimeReleasesPendingStuck
+          expr: loop_runtime_releases_pending > 0
           for: 10m
           labels:
             severity: warning
           annotations:
             summary: "{{ $value }} release(s) stuck in PENDING for 10+ minutes"
             description: "Releases should converge within 5 minutes. Check ArgoCD sync status and convergence loop health."
-            runbook: "Check ArgoCD Application health. Verify convergence loop is running (loopzero_reconcile_loop_last_success_timestamp). Check if TriggerSync failed."
+            runbook: "Check ArgoCD Application health. Verify convergence loop is running (loop_runtime_reconcile_loop_last_success_timestamp). Check if TriggerSync failed."
 
         # MEET-2026-03-31-023 T1-8: Reconcile loop health heartbeat.
-        - alert: LoopZeroReconcileLoopStale
-          expr: time() - loopzero_reconcile_loop_last_success_timestamp{loop="build"} > 120
+        - alert: LoopRuntimeReconcileLoopStale
+          expr: time() - loop_runtime_reconcile_loop_last_success_timestamp{loop="build"} > 120
           for: 0m
           labels:
             severity: warning
@@ -105,7 +105,7 @@ spec:
             description: "The build reconcile loop may have crashed or be stuck. Check API pod logs."
             runbook: "Check API pod health and logs. Restart API pod if loop is stuck."
 
-        - alert: LoopZeroMinIODown
+        - alert: LoopRuntimeMinIODown
           expr: up{job=~".*minio.*"} == 0
           for: 2m
           labels:
@@ -117,8 +117,8 @@ spec:
 
         # WS.1: Service auth secret approaching 90-day rotation deadline.
         # Fires at 80 days (6912000s) to give operators 10 days to rotate.
-        - alert: LoopZeroServiceAuthSecretExpiring
-          expr: loopzero_service_auth_secret_age_seconds > 6912000
+        - alert: LoopRuntimeServiceAuthSecretExpiring
+          expr: loop_runtime_service_auth_secret_age_seconds > 6912000
           for: 1h
           labels:
             severity: warning
@@ -127,7 +127,7 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Service auth secret has been in use for {{ $value | humanizeDuration }}. Rotate within 10 days."
 
-        - alert: LoopZeroArgoCDHealthStuck
+        - alert: LoopRuntimeArgoCDHealthStuck
           expr: argocd_app_info{health_status="Progressing"} == 1
           for: 10m
           labels:
@@ -141,15 +141,15 @@ spec:
     # Workload Protection Alerts (MEET-2026-03-30-021)
     # ═══════════════════════════════════════════════════
 
-    - name: loopzero.workload.warning
+    - name: loop-runtime.workload.warning
       rules:
         # F1-C4: CrashLoopBackOff for 5+ minutes (reduced from 10m per SRE review)
-        - alert: LoopZeroAppCrashLoop
+        - alert: LoopRuntimeAppCrashLoop
           expr: |
             max by (namespace, pod) (
               kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}
             ) * on(namespace) group_left()
-            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            kube_namespace_labels{label_runtime_getloopscale_com_managed_by="environment-controller"}
             > 0
           for: 5m
           labels:
@@ -157,17 +157,17 @@ spec:
           annotations:
             summary: "App pod {{ $labels.pod }} in {{ $labels.namespace }} stuck in CrashLoopBackOff"
             description: "Pod has been crash-looping for 5+ minutes. Resources consumed without serving traffic."
-            runbook: "Check app logs via `loopzero logs`. If image is broken, rollback via `loopzero rollback`."
+            runbook: "Check app logs via `loopscale logs`. If image is broken, rollback via `loopscale rollback`."
 
         # Image pull failure for 5+ minutes
-        - alert: LoopZeroAppImagePullFailed
+        - alert: LoopRuntimeAppImagePullFailed
           expr: |
             max by (namespace, pod) (
               kube_pod_container_status_waiting_reason{reason="ImagePullBackOff"}
               or
               kube_pod_container_status_waiting_reason{reason="ErrImagePull"}
             ) * on(namespace) group_left()
-            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            kube_namespace_labels{label_runtime_getloopscale_com_managed_by="environment-controller"}
             > 0
           for: 5m
           labels:
@@ -178,13 +178,13 @@ spec:
             runbook: "Verify image exists in registry. Check registry credentials. Redeploy with correct image."
 
         # F1-C4: Replica mismatch for 5+ minutes (reduced from 15m per SRE review)
-        - alert: LoopZeroAppReplicaMismatch
+        - alert: LoopRuntimeAppReplicaMismatch
           expr: |
             (
               kube_deployment_spec_replicas
               - kube_deployment_status_replicas_ready
             ) * on(namespace) group_left()
-            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            kube_namespace_labels{label_runtime_getloopscale_com_managed_by="environment-controller"}
             > 0
           for: 5m
           labels:
@@ -195,12 +195,12 @@ spec:
             runbook: "Check pod status. Common causes: resource pressure, crash loop, image issues."
 
         # High restart rate (10+ restarts in 30 minutes)
-        - alert: LoopZeroAppHighRestartRate
+        - alert: LoopRuntimeAppHighRestartRate
           expr: |
             increase(
               kube_pod_container_status_restarts_total[30m]
             ) * on(namespace) group_left()
-            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            kube_namespace_labels{label_runtime_getloopscale_com_managed_by="environment-controller"}
             > 10
           for: 5m
           labels:
@@ -211,11 +211,11 @@ spec:
             runbook: "Check app logs. Consider rollback if latest deploy caused the instability."
 
         # F1-C5: ProgressDeadlineExceeded — primary signal for stuck deploys
-        - alert: LoopZeroAppDeployStuck
+        - alert: LoopRuntimeAppDeployStuck
           expr: |
             kube_deployment_status_condition{condition="Progressing",status="false"}
             * on(namespace) group_left()
-            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            kube_namespace_labels{label_runtime_getloopscale_com_managed_by="environment-controller"}
             > 0
           for: 1m
           labels:
@@ -223,17 +223,17 @@ spec:
           annotations:
             summary: "Deployment {{ $labels.deployment }} in {{ $labels.namespace }} failed to progress"
             description: "Deployment hit progressDeadlineSeconds (210s). New pods could not become ready."
-            runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopzero rollback` to revert."
+            runbook: "Check pod events and logs. Likely causes: image crash, failing health check, insufficient resources. Use `loopscale rollback` to revert."
 
-    - name: loopzero.workload.critical
+    - name: loop-runtime.workload.critical
       rules:
         # F1-C6: CrashLoopBackOff persisting for 30+ minutes — critical escalation
-        - alert: LoopZeroAppCrashLoopCritical
+        - alert: LoopRuntimeAppCrashLoopCritical
           expr: |
             max by (namespace, pod) (
               kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}
             ) * on(namespace) group_left()
-            kube_namespace_labels{label_loopzero_io_managed_by="environment-controller"}
+            kube_namespace_labels{label_runtime_getloopscale_com_managed_by="environment-controller"}
             > 0
           for: 30m
           labels:
@@ -247,10 +247,10 @@ spec:
     # SLO Alerts (Sprint 4 — Observability)
     # ═══════════════════════════════════════
 
-    - name: loopzero.slos
+    - name: loop-runtime.slos
       rules:
-        - alert: LoopZeroQueueSlow
-          expr: histogram_quantile(0.95, sum(rate(loopzero_build_duration_seconds_bucket{status="succeeded"}[1h])) by (le)) > 300
+        - alert: LoopRuntimeQueueSlow
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_build_duration_seconds_bucket{status="succeeded"}[1h])) by (le)) > 300
           for: 10m
           labels:
             severity: warning
@@ -260,8 +260,8 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Build duration (p95) has been above 300s for 10 minutes. SLO target: <300s."
 
-        - alert: LoopZeroDeployFailureRate
-          expr: (sum(rate(loopzero_builds_total{status="failed"}[24h])) / sum(rate(loopzero_builds_total[24h]))) > 0.1
+        - alert: LoopRuntimeDeployFailureRate
+          expr: (sum(rate(loop_runtime_builds_total{status="failed"}[24h])) / sum(rate(loop_runtime_builds_total[24h]))) > 0.1
           for: 30m
           labels:
             severity: warning
@@ -271,8 +271,8 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Deploy success rate dropped below 90% over the last 24 hours. SLO target: >90%."
 
-        - alert: LoopZeroLockContention
-          expr: histogram_quantile(0.95, sum(rate(loopzero_lock_hold_duration_seconds_bucket[5m])) by (le)) > 2
+        - alert: LoopRuntimeLockContention
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_lock_hold_duration_seconds_bucket[5m])) by (le)) > 2
           for: 5m
           labels:
             severity: warning
@@ -282,8 +282,8 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Environment lock hold time (p95) above 2s for 5 minutes. SLO target: <2s."
 
-        - alert: LoopZeroSyncSlow
-          expr: histogram_quantile(0.95, sum(rate(loopzero_deploy_duration_seconds_bucket[1h])) by (le)) > 600
+        - alert: LoopRuntimeSyncSlow
+          expr: histogram_quantile(0.95, sum(rate(loop_runtime_deploy_duration_seconds_bucket[1h])) by (le)) > 600
           for: 10m
           labels:
             severity: warning
@@ -293,8 +293,8 @@ spec:
             runbook: "docs/runbooks.md"
             description: "Full deploy cycle (build + sync) p95 above 600s for 10 minutes. SLO target: <600s."
 
-        - alert: LoopZeroBuildQueueSlow
-          expr: loopzero_build_queue_depth > 5
+        - alert: LoopRuntimeBuildQueueSlow
+          expr: loop_runtime_build_queue_depth > 5
           for: 5m
           labels:
             severity: warning
@@ -305,7 +305,7 @@ spec:
             description: "More than 5 builds waiting in QUEUED state for over 5 minutes."
 
         # MEET-040: Traefik error rate monitoring.
-        - alert: LoopZeroTraefikHighErrorRate
+        - alert: LoopRuntimeTraefikHighErrorRate
           expr: sum(rate(traefik_service_requests_total{code=~"5.."}[5m])) / sum(rate(traefik_service_requests_total[5m])) > 0.05
           for: 5m
           labels:
@@ -315,8 +315,8 @@ spec:
             description: "Traefik is returning 5xx errors on more than 5% of requests for 5+ minutes."
             runbook: "Check backend service health. Review Traefik access logs. Check IngressRoute configuration for misrouted paths."
 
-        - alert: LoopZeroBuildTenantSaturated
-          expr: increase(loopzero_build_tenant_backpressure_total[5m]) > 0
+        - alert: LoopRuntimeBuildTenantSaturated
+          expr: increase(loop_runtime_build_tenant_backpressure_total[5m]) > 0
           for: 5m
           labels:
             severity: warning
@@ -325,8 +325,8 @@ spec:
             description: "Tenant {{ $labels.tenant }} has builds deferred due to per-tenant concurrency limit for 5+ minutes."
             runbook: "This means the tenant is submitting builds faster than they complete. Check if builds are stuck. Consider increasing MAX_CONCURRENT_BUILDS_PER_TENANT if the tenant has a legitimate burst workload."
 
-        - alert: LoopZeroCFKVDriftDetected
-          expr: loopzero_cfkv_drift_detected == 1
+        - alert: LoopRuntimeCFKVDriftDetected
+          expr: loop_runtime_cfkv_drift_detected == 1
           for: 10m
           labels:
             severity: warning
@@ -336,12 +336,12 @@ spec:
             runbook: "Check API leader pod logs for 'kv reconciler: drift detected'. Missing entries mean static apps aren't routable. Extra entries mean stale routes still serving old content. Manual fix: re-deploy affected static apps or clean stale KV entries via CF dashboard."
 
         # P2-9: DB pool saturation — early warning before connection exhaustion
-        - alert: LoopZeroDBPoolSaturation
-          expr: (loopzero_postgres_connections_active / loopzero_postgres_pool_max_conns) > 0.8
+        - alert: LoopRuntimeDBPoolSaturation
+          expr: (loop_runtime_postgres_connections_active / loop_runtime_postgres_pool_max_conns) > 0.8
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "PostgreSQL connection pool >80% utilized"
             description: "{{ $value | humanizePercentage }} of pool connections are active for 5+ minutes. Approaching exhaustion."
-            runbook: "Check loopzero_postgres_pool_acquire_duration_seconds for increased wait times. If sustained, increase DB_MAX_CONNS or investigate slow queries via pg_stat_statements."
+            runbook: "Check loop_runtime_postgres_pool_acquire_duration_seconds for increased wait times. If sustained, increase DB_MAX_CONNS or investigate slow queries via pg_stat_statements."

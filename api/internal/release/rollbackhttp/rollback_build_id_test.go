@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package rollbackhttp
 
@@ -11,11 +11,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/go-chi/chi/v5"
 
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
 )
 
 type fakeReleaseLookup struct {
@@ -25,7 +25,7 @@ type fakeReleaseLookup struct {
 	err       error
 }
 
-func (f *fakeReleaseLookup) GetLatestReleaseForBuild(ctx context.Context, tenantID, buildID string) (string, error) {
+func (f *fakeReleaseLookup) GetReleaseForBuild(ctx context.Context, tenantID, _, _, buildID string) (string, error) {
 	if f.err != nil {
 		return "", f.err
 	}
@@ -51,7 +51,7 @@ func (f *capturingRollbackService) Rollback(_ context.Context, in RollbackInput)
 }
 
 func newRollbackTestServer(svc RollbackService, lookup RollbackReleaseLookup, projects RollbackProjectStore) *httptest.Server {
-	h := NewRollbackHandler(projects, svc, "loopzero.local")
+	h := NewRollbackHandler(projects, svc, "loop-runtime.local")
 	if lookup != nil {
 		h.WithReleaseLookup(lookup)
 	}
@@ -99,8 +99,8 @@ func TestRollback_BuildIDSugar_ResolvesToReleaseID(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d; want 202", resp.StatusCode)
 	}
 	if captured.ToReleaseID != "rel-canon-42" {
 		t.Errorf("ToReleaseID = %q; want rel-canon-42 (resolved from build_id)", captured.ToReleaseID)
@@ -179,8 +179,8 @@ func TestRollback_CanonicalToReleaseID_StillWorks(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d; want 200", resp.StatusCode)
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d; want 202", resp.StatusCode)
 	}
 	if captured.ToReleaseID != "rel-canon-direct" {
 		t.Errorf("ToReleaseID = %q; want rel-canon-direct", captured.ToReleaseID)

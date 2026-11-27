@@ -1,47 +1,49 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
 import (
 	"context"
-	"github.com/getloopscale/loopzero/api/internal/projects/projectshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/projects/projectshttp"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/builds/admission"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildsadapter"
-	"github.com/getloopscale/loopzero/api/internal/builds/buildshttp"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentsadapter"
-	"github.com/getloopscale/loopzero/api/internal/environments/environmentshttp"
-	"github.com/getloopscale/loopzero/api/internal/placement/placementadapter"
-	"github.com/getloopscale/loopzero/api/internal/source"
-	"github.com/getloopscale/loopzero/api/internal/teams/teamshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/admission"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/argo"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/buildshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/environments"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentsadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/environments/environmentshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/placement/placementadapter"
+	"github.com/getloopscale/loop-runtime/api/internal/source"
+	"github.com/getloopscale/loop-runtime/api/internal/teams/teamshttp"
 
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	previewsvc "github.com/getloopscale/loopzero/api/internal/preview"
+	previewsvc "github.com/getloopscale/loop-runtime/api/internal/preview"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/audit/audithttp"
-	"github.com/getloopscale/loopzero/api/internal/billing/billinghttp"
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/domains/domainshttp"
-	"github.com/getloopscale/loopzero/api/internal/health/healthhttp"
-	auth "github.com/getloopscale/loopzero/api/internal/middleware/auth"
-	"github.com/getloopscale/loopzero/api/internal/middleware/observability"
-	policy "github.com/getloopscale/loopzero/api/internal/middleware/policy"
-	ratelimit "github.com/getloopscale/loopzero/api/internal/middleware/ratelimit"
-	"github.com/getloopscale/loopzero/api/internal/placement"
-	"github.com/getloopscale/loopzero/api/internal/preview/previewadapter"
-	previewroutes "github.com/getloopscale/loopzero/api/internal/preview/previewhttp"
-	"github.com/getloopscale/loopzero/api/internal/server"
-	"github.com/getloopscale/loopzero/api/internal/timeline/aggregator"
-	"github.com/getloopscale/loopzero/api/internal/timeline/timelineadapter"
-	"github.com/getloopscale/loopzero/pkg/enforcement"
-	pkglogging "github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/api/internal/audit/audithttp"
+	"github.com/getloopscale/loop-runtime/api/internal/billing/billinghttp"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/domains/domainshttp"
+	"github.com/getloopscale/loop-runtime/api/internal/health/healthhttp"
+	auth "github.com/getloopscale/loop-runtime/api/internal/middleware/auth"
+	"github.com/getloopscale/loop-runtime/api/internal/middleware/observability"
+	policy "github.com/getloopscale/loop-runtime/api/internal/middleware/policy"
+	ratelimit "github.com/getloopscale/loop-runtime/api/internal/middleware/ratelimit"
+	"github.com/getloopscale/loop-runtime/api/internal/placement"
+	"github.com/getloopscale/loop-runtime/api/internal/preview/previewadapter"
+	previewroutes "github.com/getloopscale/loop-runtime/api/internal/preview/previewhttp"
+	"github.com/getloopscale/loop-runtime/api/internal/server"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/aggregator"
+	"github.com/getloopscale/loop-runtime/api/internal/timeline/timelineadapter"
+	"github.com/getloopscale/loop-runtime/pkg/enforcement"
+	pkglogging "github.com/getloopscale/loop-runtime/pkg/logging"
 )
 
 // setupHealthServices creates deep health checkers for critical dependencies.
@@ -65,7 +67,7 @@ func setupHealthServices(cfg config.Config) []healthhttp.ServiceHealthChecker {
 type serverWiring struct {
 	cfg       config.Config
 	dbAdapter *db.PgxAdapter
-	// crossTenant is the background pool (loopzero_worker), asserted able to
+	// crossTenant is the background pool (loop_runtime_worker), asserted able to
 	// cross tenants at boot. Tenant provisioning runs on it; nil without a
 	// database.
 	crossTenant    *db.PgxAdapter
@@ -125,11 +127,11 @@ func baseServerConfig(w serverWiring) server.Config {
 		),
 		// Per-app SBOM endpoint over the release_app_attestations sidecar. With
 		// no object uploader (no S3 in dev) it serves metadata without a
-		// download_url.
+		// download.
 		BuildSBOMHandler: buildshttp.NewBuildSBOMHandler(
 			&buildsadapter.AppSBOMStore{Inner: store.NewAppAttestationStoreSqlc(w.dbAdapter)},
-			toSBOMURLGenerator(w.stores),
-			cfg.SourceBucket,
+			toSBOMObjectReader(w.stores),
+			sbomBucket(cfg),
 			w.logger,
 		),
 		EnvironmentHandler: newEnvironmentHandler(w),
@@ -172,6 +174,9 @@ func newEnvironmentHandler(w serverWiring) *environmentshttp.EnvironmentHandler 
 	if w.dbDeps != nil {
 		h = h.WithProjectLookup(&environmentsadapter.EnvProjectLookupAdapter{Store: w.dbDeps.ProjectStore})
 	}
+	if w.orchDeps != nil && w.orchDeps.GitOpsPusher != nil {
+		h = h.WithGitOpsPathPreparer(w.orchDeps.GitOpsPusher)
+	}
 	return h
 }
 
@@ -184,7 +189,10 @@ func wireDatabaseDeps(sc *server.Config, w serverWiring) {
 	sc.DB = w.dbDeps.DBHealth
 	sc.Guards.PlanLimiter = w.dbDeps.PlanLimiter
 	if w.dbDeps.PlanLimiter != nil {
-		sc.Guards.PlanUsage = store.NewPostgresPlanUsageStore(w.dbDeps.DBAdapter.Pool)
+		sc.Guards.PlanUsage = planUsage{
+			PostgresPlanUsageStore: store.NewPostgresPlanUsageStore(w.dbDeps.DBAdapter.Pool),
+			environments:           environments.PlanUsageFromEnvironments(w.k8sDeps.TenantCRMgr),
+		}
 	}
 	// The project store doubles as the secrets cross-tenant binding checker:
 	// a cross-tenant attempt and a nonexistent project answer the same 404
@@ -281,7 +289,7 @@ func wireDatabaseHandlers(sc *server.Config, w serverWiring) {
 	sc.Secrets.AuditLogger = &store.AuditLogger{DB: d}
 	// GET /api/v1/billing: plan + usage, and the three cost metrics once the
 	// cost store is reachable. The engine does NOT issue billing portal
-	// sessions (ADR 2026-08-11): loopzero-cloud creates the Stripe customer and is
+	// sessions (ADR 2026-08-11): loop-console creates the Stripe customer and is
 	// the only issuer, so no Stripe key lives on the CLI and deploy path.
 	// The plan shown is the plan enforced: billing reads it through the same
 	// store every plan gate uses (sc.PlanTierStore, set by
@@ -341,7 +349,7 @@ func wireAdmin(sc *server.Config, w serverWiring) {
 	sc.Admin.Evictor = buildAdminEvictor(w.cfg, w.crossTenant)
 	pinner := newAdminCellPinner(w.crossTenant)
 	if mgmt := buildMgmtDynamicClient(w.cfg, w.logger); mgmt != nil {
-		pinner = pinner.WithTenantCRPatcher(placementadapter.NewTenantCRCellPatcher(mgmt, "loopzero-system"))
+		pinner = pinner.WithTenantCRPatcher(placementadapter.NewTenantCRCellPatcher(mgmt, "loop-runtime-system"))
 	}
 	sc.Admin.Pinner = pinner
 	sc.Admin.ReleaseInspector = newAdminReleaseInspector(w.crossTenant)
@@ -445,15 +453,21 @@ func wirePlacement(sc *server.Config, w serverWiring) {
 	}
 }
 
-// toSBOMURLGenerator returns a SBOMURLGenerator if the configured
-// uploader supports presigning, else nil. When nil, the SBOM endpoint
-// returns metadata-only (no download_url).
-func toSBOMURLGenerator(stores *StoreDeps) buildshttp.SBOMURLGenerator {
+// sbomBucket is where the SBOM download link points: the bucket the build
+// uploads SBOMs to, not the source bucket.
+func sbomBucket(cfg config.Config) string {
+	return argo.SBOMBucket(cfg.StaticAssetsBucket)
+}
+
+// toSBOMObjectReader returns the configured object store when it can read
+// objects back, else nil. With nil the SBOM endpoint serves metadata and no
+// download.
+func toSBOMObjectReader(stores *StoreDeps) buildshttp.SBOMObjectReader {
 	if stores == nil {
 		return nil
 	}
-	if g, ok := stores.ObjUploader.(buildshttp.SBOMURLGenerator); ok {
-		return g
+	if r, ok := stores.ObjUploader.(buildshttp.SBOMObjectReader); ok {
+		return r
 	}
 	return nil
 }
@@ -465,4 +479,15 @@ func tenantCellResolver(s *store.PostgresCellStore) projectshttp.TenantCellResol
 		return nil
 	}
 	return s
+}
+
+// planUsage counts builds and seats in the database and environments in the
+// tenant's environment list, where an environment exists from its creation.
+type planUsage struct {
+	*store.PostgresPlanUsageStore
+	environments environments.PlanUsage
+}
+
+func (u planUsage) PermanentEnvironments(ctx context.Context, tenantID string) (int, error) {
+	return u.environments.PermanentEnvironments(ctx, tenantID)
 }

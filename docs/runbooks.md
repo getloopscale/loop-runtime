@@ -84,11 +84,12 @@ assembled, or when the decision gate has not been recorded.
 | Multi-cluster Kubernetes auth | one auth backend per cell cluster |
 | AWS resources | the KMS key, its `protect: true` guard, and the backup bucket |
 | Local secrets cluster | `task k3d:secrets:create` + `k3d:secrets:bootstrap`. Installing OpenBao into core is a **topology violation**: the `k3d:secrets:bootstrap-in-core` task was removed on 2026-08-12 (B-047) and the `openbao-bootstrap-in-core-task` gate fails on its existence, or on the same effect under another name. |
+| Staging secrets cluster | `task staging:platform` runs `infra/staging/openbao.sh`: OpenBao on the `secrets` EKS cluster, unsealed by the `awskms` seal, initialised with recovery keys after each rebuild (init file on the host, `/var/lib/loop-runtime-staging/openbao-init.json`, mode 0600). Why a dedicated cluster: `docs/decisions/2026-11-25-tenant-secrets-on-openbao.md`. |
 | Secret migration | moving existing secrets under Transit |
 
 ## Service-auth secret rotation (manual, ~3 min, zero downtime)
 
-Ed25519 keypair for the `loopzero-cloud` to engine proxy.
+Ed25519 keypair for the `loop-console` to engine proxy.
 
 1. Generate a new keypair with `tools/gen-service-auth-ed25519`.
 2. Publish the new **public** key alongside the current one — both are accepted.
@@ -108,28 +109,28 @@ Manual operator actions: force a refresh, or force-revoke **all** sessions for a
 
 ## Build cluster SA token rotation (manual)
 
-**Symptom:** loopzero-api logs `argo step watcher: build cluster auth failed — rotate
-loopzero-workflow-submitter token` — a 401/403 from the build cluster.
+**Symptom:** loop-runtime-api logs `argo step watcher: build cluster auth failed — rotate
+loop-runtime-workflow-submitter token` — a 401/403 from the build cluster.
 
-loopzero-api reaches the build cluster through `loopzero-cluster-kubeconfigs` (key
-`build.kubeconfig`), with a token for `loopzero-workflow-submitter` in `argo`. Re-mint it, with
+loop-runtime-api reaches the build cluster through `loop-runtime-cluster-kubeconfigs` (key
+`build.kubeconfig`), with a token for `loop-runtime-workflow-submitter` in `argo`. Re-mint it, with
 the cell-0 key, through the one minter those keys have:
 
 ```bash
-CORE_CONTEXT=k3d-loopzero-core loopzero-ops seed cluster-kubeconfigs   # task k3d:heal runs the same
+CORE_CONTEXT=k3d-loop-runtime-core loop-runtime-ops seed cluster-kubeconfigs   # task k3d:heal runs the same
 ```
 
-That is `kubectl -n argo create token loopzero-workflow-submitter --duration=720h`, rendered with
-the build cluster's live CA. Do **NOT** mint `loopzero-build-sa` here: it is the workflow
+That is `kubectl -n argo create token loop-runtime-workflow-submitter --duration=720h`, rendered with
+the build cluster's live CA. Do **NOT** mint `loop-runtime-build-sa` here: it is the workflow
 executor, bound only to `workflowtaskresults`, so its token authenticates and is then
-Forbidden to list workflows — a readable 401 traded for a silent 403. loopzero-api re-reads the
+Forbidden to list workflows — a readable 401 traded for a silent 403. loop-runtime-api re-reads the
 token on its next rejected call; no restart is needed.
 
 **A `ClusterCredential` Secret** is a separate path. Symptom: a cached SA token stops working
 *before* its `exp` claim — the SA UID changed because it was recreated during a rollout.
 
 ```bash
-kubectl create token loopzero-system/default --duration=24h
+kubectl create token loop-runtime-system/default --duration=24h
 # then patch the ClusterCredential Secret's data.kubeconfig
 ```
 
@@ -182,7 +183,7 @@ Moves every tenant off a cell so it can be retired.
 
 1. Mark the cell as draining.
 2. Inventory the tenants pinned to it.
-3. Pin each tenant to the destination cell — `loopzero admin tenants pin` is the **only** path
+3. Pin each tenant to the destination cell — `loop-runtime admin tenants pin` is the **only** path
    that moves a tenant; it updates the DB and the Tenant CR atomically and writes
    `audit_log`.
 4. Monitor evacuation progress.
@@ -196,6 +197,54 @@ Migrations are **forward-only** (golang-migrate). A `DROP` requires explicit sig
 is a PITR gate before migrating, a bounded RTO for rollback, and a verification log that
 must be filled in.
 
+## Platform PostgreSQL recovery
+
+The platform's PostgreSQL (`platform-postgres` in `loop-runtime-data-plane`, core cluster) keeps
+base backups and a continuous WAL archive in the environment's `postgres-backups` bucket,
+under a folder named by `platformPostgres.backup.serverName` (default: `platform-postgres`).
+A recovery builds a new cluster from that folder. The operator never restores in place.
+
+**What a recovery gives back.** Everything archived. With one instance, commits newer than
+the last archived WAL segment are lost: at most `archive_timeout`, which CloudNativePG sets
+to 5 minutes, and less under write load. Measured on staging on 2026-11-26: a database of
+a few megabytes recovered in 51 seconds, from creating the cluster to healthy. No recovery
+of a large database has been measured yet, so that number is a floor.
+
+**Proof that it works.** `loop-runtime-ops drill postgres-restore` writes a marker row, waits
+for its WAL to be archived, recovers a temporary cluster (`platform-postgres-restore-drill`)
+from the bucket, checks the marker and the table counts, and deletes the temporary cluster.
+It only reads the archive and writes one row to the running cluster. Staging runs it after
+every nightly rebuild (`infra/staging/restore-drill.sh`) and reports the commit status
+`staging/restore-drill` and the alarm `restore-drill`.
+
+**Recover the cluster.** The service is down from step 2 until step 4 completes.
+
+1. In the environment file (`infra/helmfile/environments/<env>.yaml`), under
+   `platformPostgres`, set `recovery.serverName` to the folder to recover from (the
+   current `backup.serverName`) and `backup.serverName` to a name never used before, such
+   as `platform-postgres-r1`. The recovered cluster starts a new archive there, and the
+   chart refuses the same name on both. To stop at a moment before a mistake, also set
+   `recovery.targetTime` (RFC 3339, UTC); empty replays every archived segment.
+2. Delete the cluster and wait for its volume claims to go:
+   `kubectl -n loop-runtime-data-plane delete cluster platform-postgres`. The bucket is not
+   touched.
+3. Deploy the environment. `recovery.*` is read only when the cluster is created.
+4. Wait for `Cluster in healthy state`, then check `ContinuousArchiving=True` and that the
+   first backup under the new folder completes. Restart the services that use the
+   database: their connections died with the old cluster.
+5. Leave `backup.serverName` at the new name and clear `recovery.*`.
+
+**Going back.** A recovery never writes to the folder it read, so the previous archive is
+intact. To undo a recovery, or to pick another moment, repeat the steps with the original
+folder in `recovery.serverName` and one more new name in `backup.serverName`.
+
+**When the drill fails.** Read the log the alarm carries. "no completed backup": see
+`LoopRuntimePlatformPostgresBackupStale` under "Platform PostgreSQL alerts". "WAL not archived": see
+`LoopRuntimePlatformPostgresWALArchiveFailing`. "recovery timed out": read the logs of the
+`platform-postgres-restore-drill-1` pod while the drill runs; a credential error means the
+IAM role does not trust the service account `platform-postgres-restore-drill`
+(infra-live, `identity/core-platform-postgres`).
+
 ## Multi-cell canary
 
 Staged rollout with **halt criteria fixed in advance per stage** — availability SLI, error
@@ -208,16 +257,16 @@ made under pressure.
 
 ## Local public dashboard (manual, dev only)
 
-The edge serves `{$LOOPZERO_DASHBOARD_DIST:../loopzero-cloud/dashboard/dist}` — that expression is the
+The edge serves `{$LOOP_CONSOLE_DASHBOARD_DIST:../loop-console/dashboard/dist}` — that expression is the
 `root *` of the `app-dev` blocks in `infra/local/Caddyfile`, and the `dashboard-root-parity` gate
 fails this runbook if the two diverge.
 
 It was an absolute path under one person's home until 2026-09-16, which made the file work on
 exactly one machine and published that machine's directory layout to anyone who cloned. The
-default is now relative to this repository, and `LOOPZERO_DASHBOARD_DIST` overrides it for a checkout
+default is now relative to this repository, and `LOOP_CONSOLE_DASHBOARD_DIST` overrides it for a checkout
 laid out differently.
 
-**The obvious path misleads:** the dashboard source moved to the sibling repo `../loopzero-cloud` at M4,
+**The obvious path misleads:** the dashboard source moved to the sibling repo `../loop-console` at M4,
 so a `dashboard/` under this repository is stale if it exists at all. Build in the sibling, serve the
 `dist` it produces.
 
@@ -231,14 +280,14 @@ Three narrow one-off procedures. Read the long form from git before running any 
 
 ## Delivery path
 
-`LoopZeroCFTunnelDisconnected` (2m) — the tunnel is down. Check the CF dashboard, then the
+`LoopRuntimeCFTunnelDisconnected` (2m) — the tunnel is down. Check the CF dashboard, then the
 tunnel pod.
 
 ## Tenant correctness — quiet and expensive
 
-`LoopZeroMisplacedTenant` (5m) · `LoopZeroCellPinnerCRPatchDiverged` (2m) ·
-`LoopZeroTenantDeletionStuck` (5m) · `LoopZeroSBOMGenerationStalled` (5m) ·
-`LoopZeroWorkqueueTerminalWriteFailed` (2m).
+`LoopRuntimeMisplacedTenant` (5m) · `LoopRuntimeCellPinnerCRPatchDiverged` (2m) ·
+`LoopRuntimeTenantDeletionStuck` (5m) · `LoopRuntimeSBOMGenerationStalled` (5m) ·
+`LoopRuntimeWorkqueueTerminalWriteFailed` (2m).
 
 These do not page loudly and cost the most when ignored — a misplaced tenant means routing
 and the database disagree about where a customer lives.
@@ -249,11 +298,11 @@ and the database disagree about where a customer lives.
 |---|---|---|
 | `TenantReconcileBacklog` (5m) | `workqueue_depth{name=~"tenant\|environment\|application\|exposure"} > 50` | operator logs — a backlog is usually one slow reconcile blocking a queue, not global load |
 | `BuildFailureRateHigh` (5m) | >10% of builds FAILED over 5m | recent Argo Workflow failures; check whether one step (clone, sign, push) dominates |
-| `LoopZeroBuildQueueSlow` (5m) | `loopzero_build_queue_depth > 5` | `maxConcurrentBuildsPerCell` is 20 — a depth of 5 is early, not saturated |
+| `LoopRuntimeBuildQueueSlow` (5m) | `loop_runtime_build_queue_depth > 5` | `maxConcurrentBuildsPerCell` is 20 — a depth of 5 is early, not saturated |
 
 ## Sigstore storage
 
-`LoopZeroSigstorePVUsageHigh` (>80% for 30m) · `LoopZeroSigstorePVUsageCritical` (>95% for 5m).
+`LoopRuntimeSigstorePVUsageHigh` (>80% for 30m) · `LoopRuntimeSigstorePVUsageCritical` (>95% for 5m).
 
 Rekor and its Trillian backend only ever grow: the transparency log is append-only and
 nothing in this repository archives or prunes it. The one remedy is more volume —
@@ -264,12 +313,53 @@ rebind). At 100% Rekor stops accepting entries and every signed build stalls.
 
 ## Velero backup alerts
 
-`LoopZeroVeleroServerDown` (`up{job="velero"} == 0` for 2m) · `LoopZeroVeleroBackupStale` (no
-successful backup for >12h) · `LoopZeroVeleroBackupFailing` (any failure in 6h) ·
-`LoopZeroVeleroBackupPartial` (completed with partial failures).
+`LoopRuntimeVeleroServerDown` (`up{job="velero"} == 0` for 2m) · `LoopRuntimeVeleroBackupStale` (no
+successful backup for >12h) · `LoopRuntimeVeleroBackupFailing` (any failure in 6h) ·
+`LoopRuntimeVeleroBackupPartial` (completed with partial failures).
 
 **A backup that has never been restored is a hypothesis.** Prove a restore rather than
 trusting the success metric.
+
+## Platform PostgreSQL alerts
+
+The platform's own PostgreSQL is the CloudNativePG cluster `platform-postgres` in
+`loop-runtime-data-plane` on the core cluster. It holds the databases of the data-plane services.
+Start every one of these with the cluster's own view:
+
+```bash
+kubectl -n loop-runtime-data-plane get cluster platform-postgres -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason} {.message}{"\n"}{end}'
+kubectl -n loop-runtime-data-plane get pods,backup -l cnpg.io/cluster=platform-postgres
+```
+
+- `LoopRuntimePlatformPostgresDown`: an instance is not running or not scraped. Read the pod's
+  events and the `postgres` container's log. With one instance there is no failover: the
+  operator restarts it on the same volume.
+- `LoopRuntimePlatformPostgresWALArchiveFailing` and `LoopRuntimePlatformPostgresWALArchiveBacklog`:
+  WAL is not reaching the bucket. Read the `plugin-barman-cloud` container's log of the
+  primary. The usual causes are the IAM role (the service account's
+  `eks.amazonaws.com/role-arn`, and the role's trust of `loop-runtime-data-plane:platform-postgres`)
+  and the bucket. Until it is fixed the WAL volume fills and recovery cannot go past the
+  last archived segment.
+- `LoopRuntimePlatformPostgresBackupStale` and `LoopRuntimePlatformPostgresBackupFailed`: read
+  `.status.error` of the latest `Backup`. Ask for one by hand with a `Backup` of
+  `method: plugin` once the cause is fixed. A cluster that only just had backups turned on
+  fails its first one, asked for before the instance restarted with the plugin; the next
+  one succeeds.
+- `LoopRuntimePlatformPostgresVolumeFilling`: raise `platformPostgres.storage` or `walStorage` in
+  the environment and deploy; the operator expands the volume when the StorageClass allows
+  it. A WAL volume fills when the archive is failing: fix that first.
+- `LoopRuntimePlatformPostgresReplicaLagging`: a standby is behind. Look for a long transaction
+  on the standby or a slow volume; a standby that never catches up is recreated by deleting
+  its pod and volume claims.
+- `LoopRuntimePlatformPostgresSyncReplicaMissing`: fewer standbys than the quorum requires, so
+  commits wait. Bring the standby back. Lowering `synchronous.dataDurability` to `preferred`
+  resumes writes and gives up the guarantee that no acknowledged commit is lost.
+- `LoopRuntimePlatformPostgresTransactionIDAgeHigh`: vacuum is not freezing rows. Look for a
+  transaction open for days (`pg_stat_activity`), an abandoned replication slot
+  (`pg_replication_slots`) or a prepared transaction, then run `VACUUM (FREEZE)` on the
+  database.
+- `LoopRuntimePlatformPostgresConnectionsNearLimit`: read `pg_stat_activity` grouped by
+  `usename` and `state` to find the service holding connections.
 
 ## VAP delete guardrail
 
@@ -281,7 +371,7 @@ garbage collector **deadlocks namespaces in `Terminating`**. The exempt identiti
 collector among them), `system:kube-controller-manager`, the `system:masters` group, and the
 platform ServiceAccounts listed in `systemActorExemptions.platformServiceAccounts` of the
 admission-policies values. All of it is rendered by one helper,
-`loopzero-admission.systemActorExemptions`, used by every policy that matches UPDATE or DELETE.
+`loop-runtime-admission.systemActorExemptions`, used by every policy that matches UPDATE or DELETE.
 
 Two more traps, both of which make a test pass for the wrong reason:
 
@@ -304,11 +394,11 @@ Rollback is a values toggle — no rebuild.
 
 ## Image-digest admission warnings
 
-`LoopZeroImageDigestWarnRatePresent` fires when the `loopzero-require-image-digest` policy, still in
+`LoopRuntimeImageDigestWarnRatePresent` fires when the `loop-runtime-require-image-digest` policy, still in
 warn mode, saw a pod admitted with an image `:tag` instead of `@sha256:<digest>`.
 
 1. Find the workload: `kubectl get events -A --field-selector reason=FailedAdmission` or the
-   API-server audit log for `loopzero-require-image-digest`.
+   API-server audit log for `loop-runtime-require-image-digest`.
 2. A platform chart, sidecar or operator-rendered manifest using a tag is a defect in that
    source — pin it by digest there.
 3. Only when the rate has stayed at zero for the 7-day soak may

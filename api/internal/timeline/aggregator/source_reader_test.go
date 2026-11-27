@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package aggregator
 
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // TestSourceID_String validates the canonical 5-source enum values.
@@ -20,7 +20,7 @@ func TestSourceID_String(t *testing.T) {
 		{SourceLokiMarkers, "loki_markers"},
 		{SourceReleaseDB, "release_db"},
 		{SourceArgoCDApp, "argocd_app"},
-		{SourceLoopZeroAppInformer, "loopzeroapp_informer"},
+		{SourceLoopRuntimeAppInformer, "loopruntimeapp_informer"},
 		{SourceStatusURLProbe, "status_url_probe"},
 	}
 	for _, tt := range tests {

@@ -16,13 +16,13 @@ ALTER TABLE subscriptions
   DROP CONSTRAINT IF EXISTS subscriptions_account_id_fkey,
   ADD  CONSTRAINT subscriptions_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id);
 
-ALTER TABLE loopzero_api_keys
-  DROP CONSTRAINT IF EXISTS loopzero_api_keys_account_id_fkey,
-  ADD  CONSTRAINT loopzero_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id);
+ALTER TABLE loop_runtime_api_keys
+  DROP CONSTRAINT IF EXISTS loop_runtime_api_keys_account_id_fkey,
+  ADD  CONSTRAINT loop_runtime_api_keys_account_id_fkey FOREIGN KEY (account_id) REFERENCES accounts(id);
 
-ALTER TABLE loopzero_api_keys
-  DROP CONSTRAINT IF EXISTS loopzero_api_keys_rotated_from_fkey,
-  ADD  CONSTRAINT loopzero_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES loopzero_api_keys(id);
+ALTER TABLE loop_runtime_api_keys
+  DROP CONSTRAINT IF EXISTS loop_runtime_api_keys_rotated_from_fkey,
+  ADD  CONSTRAINT loop_runtime_api_keys_rotated_from_fkey FOREIGN KEY (rotated_from) REFERENCES loop_runtime_api_keys(id);
 
 ALTER TABLE preview_environments
   DROP CONSTRAINT IF EXISTS preview_environments_build_id_fkey,

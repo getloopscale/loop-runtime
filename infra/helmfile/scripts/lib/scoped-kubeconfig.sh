@@ -11,16 +11,16 @@
 #   scoped-kubeconfig.sh <cluster-id> <kubeconfig-of-target> [output-path]
 #
 # The TARGET kubeconfig is consumed only to bootstrap the SA — the OUTPUT
-# kubeconfig is what callers (loopzero-api, ArgoCD) use.
+# kubeconfig is what callers (loop-runtime-api, ArgoCD) use.
 set -euo pipefail
 
 CLUSTER_ID="${1:?usage: $0 <cluster-id> <kubeconfig-of-target> [output-path]}"
 TARGET_KUBECONFIG="${2:?usage: $0 <cluster-id> <kubeconfig-of-target> [output-path]}"
-OUTPUT="${3:-${HOME}/.kube/loopzero-${CLUSTER_ID}-scoped.yaml}"
+OUTPUT="${3:-${HOME}/.kube/loop-runtime-${CLUSTER_ID}-scoped.yaml}"
 
-SA_NAME="loopzero-ctrl-runtime"
-NAMESPACE="loopzero-system"
-CLUSTER_ROLE="loopzero-ctrl-runtime-rbac-admin"
+SA_NAME="loop-runtime-ctrl-runtime"
+NAMESPACE="loop-runtime-system"
+CLUSTER_ROLE="loop-runtime-ctrl-runtime-rbac-admin"
 
 log() { printf '[scoped-kubeconfig] %s\n' "$*" >&2; }
 
@@ -39,12 +39,12 @@ kubectl create serviceaccount "$SA_NAME" -n "$NAMESPACE" \
 #     health probe.
 # B81 (end-to-end-deploy-validation-plan iter 12 / 2026-04-29): the original
 #     write list (pods/services/deployments/ingresses on core/apps/networking)
-#     was too narrow — LoopZero-generated tenant manifests target Traefik
+#     was too narrow — LoopRuntime-generated tenant manifests target Traefik
 #     (Middleware, IngressRoute) and cert-manager (Certificate, Issuer)
 #     CRDs as well as KEDA / ESO / Prometheus operator types. ArgoCD would
 #     reach the cluster but get RBAC-forbidden on the apply, leaving Apps
 #     OutOfSync with health=Missing forever. We grant create/update/patch/
-#     delete on the framework CRDs LoopZero controllers depend on, plus the
+#     delete on the framework CRDs LoopRuntime controllers depend on, plus the
 #     namespace + RBAC bindings that the API renders for new tenants.
 cat <<EOF | kubectl apply -f - >/dev/null
 apiVersion: rbac.authorization.k8s.io/v1
@@ -52,7 +52,7 @@ kind: ClusterRole
 metadata:
   name: ${CLUSTER_ROLE}
   labels:
-    loopzero.io/managed-by: loopzero-platform
+    runtime.getloopscale.com/managed-by: loop-runtime-platform
 rules:
   # Cluster-scoped read on all resources (B7).
   - apiGroups: ["*"]
@@ -74,7 +74,7 @@ rules:
   # the workload pods never start (404 from Traefik). Discovered LIVE
   # during fresh-cleanroom Ginkgo journey run when 5/7 specs failed at
   # HTTP 200 because no pods came up; ArgoCD log: 'rollouts.argoproj.io
-  # is forbidden: User "loopzero-ctrl-runtime" cannot create resource
+  # is forbidden: User "loop-runtime-ctrl-runtime" cannot create resource
   # "rollouts" in API group "argoproj.io"'.
   - apiGroups:
       - traefik.io
@@ -105,7 +105,7 @@ kind: ClusterRoleBinding
 metadata:
   name: ${SA_NAME}-binding
   labels:
-    loopzero.io/managed-by: loopzero-platform
+    runtime.getloopscale.com/managed-by: loop-runtime-platform
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -128,12 +128,12 @@ SCRIPT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 TOKEN=""
 if declare -f mint_vault_k8s_token >/dev/null 2>&1; then
-  # Vault role naming convention (T7.2): loopzero-cell-0-<cluster-type>.
-  # Map CLUSTER_ID prefix to role name; default to loopzero-cell-0-mgmt.
+  # Vault role naming convention (T7.2): loop-runtime-cell-0-<cluster-type>.
+  # Map CLUSTER_ID prefix to role name; default to loop-runtime-cell-0-mgmt.
   case "${CLUSTER_ID:-}" in
-    build*) VAULT_ROLE="loopzero-cell-0-build" ;;
-    cell*|workload*) VAULT_ROLE="loopzero-cell-0-workload" ;;
-    *)       VAULT_ROLE="loopzero-cell-0-mgmt" ;;
+    build*) VAULT_ROLE="loop-runtime-cell-0-build" ;;
+    cell*|workload*) VAULT_ROLE="loop-runtime-cell-0-workload" ;;
+    *)       VAULT_ROLE="loop-runtime-cell-0-mgmt" ;;
   esac
   if TOKEN=$(mint_vault_k8s_token "${VAULT_ROLE}" "${NAMESPACE}" 2>/dev/null) && [[ -n "${TOKEN}" ]]; then
     log "T7.3: SA token fetched via Vault kubernetes engine role=${VAULT_ROLE} (TTL 1h)"
@@ -187,7 +187,7 @@ SERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}
 # routable from inside the mgmt cluster. DOKS / cloud kubeconfigs already use
 # routable LB hostnames, so this rewrite is a no-op there.
 if [[ "$SERVER" =~ ^https?://(0\.0\.0\.0|127\.0\.0\.1|localhost)(:.*)?$ ]]; then
-  K3D_SERVER_CONTAINER="k3d-loopzero-${CLUSTER_ID}-server-0"
+  K3D_SERVER_CONTAINER="k3d-loop-runtime-${CLUSTER_ID}-server-0"
   K3D_SERVER_IP=$(docker inspect "$K3D_SERVER_CONTAINER" \
     -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null || true)
   if [[ -n "$K3D_SERVER_IP" ]]; then

@@ -5,10 +5,10 @@ apiVersion: k6.io/v1alpha1
 kind: TestRun
 metadata:
   name: k6-l4-distributed
-  namespace: loopzero-system
+  namespace: loop-runtime-system
   labels:
     app.kubernetes.io/name: k6-load-test
-    app.kubernetes.io/part-of: loopzero
+    app.kubernetes.io/part-of: loop-runtime
 spec:
   parallelism: 8
   script:
@@ -19,16 +19,16 @@ spec:
     image: grafana/k6:0.52.0
     env:
       - name: K6_API_URL
-        value: "http://loopzero-api.loopzero-system.svc.cluster.local:8080"
+        value: "http://loop-runtime-api.loop-runtime-system.svc.cluster.local:8080"
       - name: K6_SVC_AUTH
         valueFrom:
           secretKeyRef:
-            name: loopzero-api-secrets
-            key: LOOPZERO_SERVICE_AUTH_SECRET
+            name: loop-runtime-api-secrets
+            key: LOOP_RUNTIME_SERVICE_AUTH_SECRET
       - name: K6_BUNDLE_PATH
         value: "/fixtures/bundle.bin"
       - name: K6_PROMETHEUS_RW_SERVER_URL
-        value: "http://prometheus-server.loopzero-system.svc.cluster.local/api/v1/write"
+        value: "http://prometheus-server.loop-runtime-system.svc.cluster.local/api/v1/write"
     resources:
       limits:
         cpu: "2"

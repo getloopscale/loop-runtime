@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 )
 
 // T0.2b (plan simplify-deploy-loopzerokit-only v2.0) — thread the declared start
 // command through the build-plan chain: AppSpec → AppUnit → AppBuildPlan, so
 // the canonical Dockerfile generator (T1.1) reads the declared CMD instead of
-// a loopzero-packs heuristic.
+// a loop-runtime-packs heuristic.
 
 func TestNormalizeApp_CarriesStart(t *testing.T) {
 	// Arrange — a server AppSpec with a declared start command

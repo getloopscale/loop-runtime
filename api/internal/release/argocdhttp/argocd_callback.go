@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package argocdhttp serves /internal/argocd-callback: the sync notification the
 // GitOps controller posts back when an application reaches a new state.
@@ -24,7 +24,7 @@ import (
 // ArgoCallbackPayload is the webhook payload sent by ArgoCD Notifications.
 // ArgoCD sends this when an Application reaches a configured trigger state.
 type ArgoCallbackPayload struct {
-	// AppName is the ArgoCD Application name (e.g., "tn-loopzero-production")
+	// AppName is the ArgoCD Application name (e.g., "tn-loop-runtime-production")
 	AppName string `json:"app_name"`
 	// SyncStatus is "Synced" or "OutOfSync"
 	SyncStatus string `json:"sync_status"`
@@ -78,11 +78,11 @@ func (h *ArgoCallbackHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, span := otel.Tracer("loopzero-api").Start(r.Context(), "loopzero.api.argocd.callback_received",
+	_, span := otel.Tracer("loop-runtime-api").Start(r.Context(), "loop-runtime.api.argocd.callback_received",
 		trace.WithAttributes(
-			attribute.String("loopzero.argocd.app_name", payload.AppName),
-			attribute.String("loopzero.argocd.sync_status", payload.SyncStatus),
-			attribute.String("loopzero.argocd.health_status", payload.HealthStatus),
+			attribute.String("loop-runtime.argocd.app_name", payload.AppName),
+			attribute.String("loop-runtime.argocd.sync_status", payload.SyncStatus),
+			attribute.String("loop-runtime.argocd.health_status", payload.HealthStatus),
 		))
 	defer span.End()
 

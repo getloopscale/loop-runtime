@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package httpio
 
 import (
 	"net/http"
 
-	errorshttp "github.com/getloopscale/loopzero/pkg/errors/http"
+	errorshttp "github.com/getloopscale/loop-runtime/pkg/errors/http"
 )
 
 // apiStatusByCode is the HTTP status of every error code the api defines
@@ -20,11 +20,12 @@ var apiStatusByCode = map[string]int{
 	"USER_NOT_FOUND":        http.StatusNotFound, // teams/teamshttp
 	"MEMBER_NOT_FOUND":      http.StatusNotFound, // teams/teamshttp
 	"TEAM_MEMBER_NOT_FOUND": http.StatusNotFound, // teams/teamshttp (remove)
+	"APP_NOT_FOUND":         http.StatusNotFound, // scaling/scalinghttp — app the project does not declare
 	"INVALID_ENVIRONMENT":   http.StatusBadRequest,
 	"INVALID_CALLBACK":      http.StatusBadRequest, // builds — build completion callback
 	"MULTIPART_FIELD_ORDER": http.StatusBadRequest, // source/sourcehttp — services_json must precede bundle
 	// Validation at the input boundary is a 4xx with a client-classified code,
-	// never a 500 (Red Team loopzero-cloud#103).
+	// never a 500 (Red Team loop-console#103).
 	"INVALID_ARGUMENT":        http.StatusBadRequest, // db/store/scaling_types.go
 	"INVALID_DOMAIN":          http.StatusBadRequest, // domains/domainshttp — domain format
 	"INVALID_REPLICAS":        http.StatusBadRequest, // scaling/scalinghttp — replicas <= 0
@@ -32,7 +33,7 @@ var apiStatusByCode = map[string]int{
 	"NOT_MEMBER":              http.StatusForbidden,      // auth/authhttp — team switch
 	"NOT_AVAILABLE":           http.StatusNotImplemented, // auth/authhttp — feature not configured
 	// These five answered 500 until they were registered: their authors
-	// passed the intended status to NewLoopZeroError, which ignored it.
+	// passed the intended status to NewLoopRuntimeError, which ignored it.
 	"INVALID_APP_NAME":          http.StatusBadRequest,     // builds/buildshttp — app name validation
 	"INVALID_APP_PATH":          http.StatusBadRequest,     // builds/buildshttp — app path validation
 	"ENVIRONMENT_AMBIGUOUS":     http.StatusBadRequest,     // environments/environmentshttp — name in several projects

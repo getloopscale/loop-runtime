@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package dev_public — hermetic Go integration tests migrated from
 // infra/tests/e2e/dev-public-*.sh per plan
@@ -86,7 +86,7 @@ func getSpec(t *testing.T) *openapi3.T {
 	return specLoaded
 }
 
-// mintTestJWT signs an HS256 JWT valid for 24h (matches the loopzero-cloud
+// mintTestJWT signs an HS256 JWT valid for 24h (matches the loop-console
 // runtime TTL fix at commit 762f3ae — session token TTL 24h prevents
 // mid-dogfood-sweep re-auth).
 //
@@ -100,9 +100,9 @@ func mintTestJWT(t *testing.T, tenantID string) string {
 		t.Fatalf("mintTestJWT: tenantID required (empty string given)")
 	}
 	claims := jwt.MapClaims{
-		"iss":       "loopzero-cloud",
+		"iss":       "loop-console",
 		"sub":       "00000000-0000-0000-0000-000000000001",
-		"aud":       []string{"loopzero-cloud"},
+		"aud":       []string{"loop-console"},
 		"tenant_id": tenantID,
 		"email":     "test@getloopscale.com",
 		"name":      "M11 Phase A Test User",

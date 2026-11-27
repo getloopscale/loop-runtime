@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 )
 
 // --- Test doubles for DomainHealthChecker ---
@@ -26,6 +26,12 @@ type fakeDomainHealthStore struct {
 	statusUpdated     map[string]string
 	transitions       []struct{ Domain, From, To string }
 	deletedDomains    []string
+	tls               map[string]recordedTLS
+}
+
+type recordedTLS struct {
+	status    string
+	expiresAt time.Time
 }
 
 func newFakeDomainHealthStore() *fakeDomainHealthStore {
@@ -40,6 +46,9 @@ func (f *fakeDomainHealthStore) FindPendingForAutoVerify(_ context.Context, _ st
 	return f.pendingDomains, nil
 }
 func (f *fakeDomainHealthStore) FindActiveForCNAMECheck(_ context.Context, _ time.Time) ([]ports.CustomDomain, error) {
+	return f.activeDomains, nil
+}
+func (f *fakeDomainHealthStore) FindServing(_ context.Context) ([]ports.CustomDomain, error) {
 	return f.activeDomains, nil
 }
 func (f *fakeDomainHealthStore) FindStalePending(_ context.Context, _ time.Duration) ([]ports.CustomDomain, error) {
@@ -70,6 +79,17 @@ func (f *fakeDomainHealthStore) UpdateStatus(_ context.Context, domain, status s
 func (f *fakeDomainHealthStore) TransitionStatus(_ context.Context, domain, expected, next string) error {
 	f.transitions = append(f.transitions, struct{ Domain, From, To string }{domain, expected, next})
 	f.statusUpdated[domain] = next
+	return nil
+}
+func (f *fakeDomainHealthStore) UpdateTLS(_ context.Context, domain, status string, expiresAt *time.Time) error {
+	if f.tls == nil {
+		f.tls = make(map[string]recordedTLS)
+	}
+	rec := recordedTLS{status: status}
+	if expiresAt != nil {
+		rec.expiresAt = *expiresAt
+	}
+	f.tls[domain] = rec
 	return nil
 }
 func (f *fakeDomainHealthStore) Delete(_ context.Context, domain string) error {

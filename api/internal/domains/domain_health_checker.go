@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package domains
 
@@ -8,12 +8,13 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // DomainHealthStore abstracts persistence needed by the health checker.
@@ -23,12 +24,16 @@ type DomainHealthStore interface {
 	// or "" for single-cell / backward-compatible behavior.
 	FindPendingForAutoVerify(ctx context.Context, cellID string) ([]ports.CustomDomain, error)
 	FindActiveForCNAMECheck(ctx context.Context, staleAfter time.Time) ([]ports.CustomDomain, error)
+	// FindServing returns the domains that are routed today: active, and
+	// degraded during the CNAME grace period.
+	FindServing(ctx context.Context) ([]ports.CustomDomain, error)
 	FindStalePending(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
 	FindStaleProvisioning(ctx context.Context, maxAge time.Duration) ([]ports.CustomDomain, error)
 	FindActiveWithTLSExpiry(ctx context.Context, withinDays int) ([]ports.CustomDomain, error)
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
+	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	Delete(ctx context.Context, domain string) error
 }
@@ -50,6 +55,21 @@ type DomainHealthChecker struct {
 	logger      *slog.Logger
 	interval    time.Duration
 	cellID      string // roadmap 03: cell scope for FindPendingForAutoVerify
+	// deployedApps is nil where the checker has no release data; the check for
+	// a removed app is skipped then.
+	deployedApps DeployedAppsReader
+	// certificates is nil where the checker cannot reach the edge; tls_status is left
+	// alone then.
+	certificates CertificateProber
+	// certificateInterval is how often a routed domain without a recorded certificate is
+	// looked up at the edge.
+	certificateInterval time.Duration
+}
+
+// WithDeployedApps lets the checker fail a domain whose app is no longer part
+// of the environment's running release.
+func (h *DomainHealthChecker) WithDeployedApps(apps DeployedAppsReader) {
+	h.deployedApps = apps
 }
 
 // DomainHealthCheckerConfig holds configuration.
@@ -58,6 +78,9 @@ type DomainHealthCheckerConfig struct {
 	CNAMETarget string        // e.g., "cname.dev.getloopscale.com"
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
+	// CertificateInterval is how often the edge is asked for the certificates not recorded
+	// yet. Default: 30s, so a domain shows its certificate soon after it becomes active.
+	CertificateInterval time.Duration
 	// CellID scopes the checker to a single cell (roadmap 03). Empty means every
 	// cell — how the API runs its loops (#450).
 	CellID string
@@ -90,16 +113,21 @@ func NewDomainHealthChecker(
 	if staleDays == 0 {
 		staleDays = 7
 	}
+	certificateInterval := cfg.CertificateInterval
+	if certificateInterval == 0 {
+		certificateInterval = 30 * time.Second
+	}
 	// Empty means every cell (backgroundloops.Deps) — how the API runs its loops (#450).
 	cellID := cfg.CellID
 	return &DomainHealthChecker{
-		store:       store,
-		cnameTarget: cfg.CNAMETarget,
-		graceDays:   graceDays,
-		staleDays:   staleDays,
-		logger:      logger,
-		interval:    interval,
-		cellID:      cellID,
+		store:               store,
+		cnameTarget:         cfg.CNAMETarget,
+		graceDays:           graceDays,
+		staleDays:           staleDays,
+		logger:              logger,
+		interval:            interval,
+		cellID:              cellID,
+		certificateInterval: certificateInterval,
 	}
 }
 
@@ -107,6 +135,8 @@ func NewDomainHealthChecker(
 func (h *DomainHealthChecker) Start(ctx context.Context) {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
+	certificateTicker := time.NewTicker(h.certificateInterval)
+	defer certificateTicker.Stop()
 
 	h.logger.Info("domain health checker started",
 		"interval", h.interval,
@@ -121,6 +151,8 @@ func (h *DomainHealthChecker) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			h.runChecks(ctx)
+		case <-certificateTicker.C:
+			h.recordCertificates(ctx)
 		}
 	}
 }
@@ -131,6 +163,49 @@ func (h *DomainHealthChecker) runChecks(ctx context.Context) {
 	h.cleanupStalePending(ctx)
 	h.checkProvisioningTimeout(ctx) // F-006
 	h.checkTLSExpiry(ctx)           // F-005
+	h.failDomainsOfRemovedApps(ctx)
+}
+
+// failDomainsOfRemovedApps moves a routed domain to failed when the running
+// release of its environment no longer has the app the domain points to. A
+// deploy that replaces the app stops rendering the domain's route, so the host
+// answers 404 from then on while the row still says active.
+func (h *DomainHealthChecker) failDomainsOfRemovedApps(ctx context.Context) {
+	if h.deployedApps == nil {
+		return
+	}
+	domains, err := h.store.FindServing(ctx)
+	if err != nil {
+		h.logger.Error("domain health: find serving domains failed", "error", err)
+		metrics.DomainHealthCheckerErrors.WithLabelValues("app_removed").Inc()
+		return
+	}
+	for _, d := range domains {
+		if ctx.Err() != nil {
+			return
+		}
+		apps, found, err := h.deployedApps.DeployedApps(ctx, d.TenantID, d.ProjectName, d.Environment)
+		if err != nil {
+			h.logger.Error("domain health: deployed apps lookup failed", "error", err, "domain", d.Domain)
+			metrics.DomainHealthCheckerErrors.WithLabelValues("app_removed").Inc()
+			continue
+		}
+		// No running release: there is nothing to compare the domain against.
+		if !found || slices.Contains(apps, d.AppName) {
+			continue
+		}
+		failed, err := nextDomainStatus(d.Domain, d.Status, statemachine.DomainAppRemoved)
+		if err != nil {
+			h.logger.Warn("domain health: removed-app check skipped, status moved on", "error", err, "domain", d.Domain)
+			continue
+		}
+		if err := h.store.UpdateFailure(ctx, d.Domain, failed, appNotDeployedReason(d.AppName, d.Environment)); err != nil {
+			h.logger.Error("domain health: removed-app transition failed", "error", err, "domain", d.Domain)
+			continue
+		}
+		h.logger.Warn("domain health: domain failed, its app is no longer deployed",
+			"domain", d.Domain, "app", d.AppName, "environment", d.Environment)
+	}
 }
 
 // autoVerifyPending checks pending domains for TXT record (convenience feature).
@@ -290,7 +365,7 @@ func (h *DomainHealthChecker) checkProvisioningTimeout(ctx context.Context) {
 			continue
 		}
 		if err := h.store.UpdateFailure(ctx, d.Domain, failed,
-			"Provisioning timed out after 1 hour. Run `loopzero deploy` to retry."); err != nil {
+			"Provisioning timed out after 1 hour. Run `loopscale deploy` to retry."); err != nil {
 			h.logger.Error("domain health: provisioning timeout transition failed", "error", err, "domain", d.Domain)
 		} else {
 			h.logger.Warn("domain health: domain provisioning timed out", "domain", d.Domain)
@@ -326,7 +401,7 @@ func (h *DomainHealthChecker) checkTLSExpiry(ctx context.Context) {
 // verifyTXT checks DNS TXT records.
 // CODE-007 fix: distinguishes NXDOMAIN from transient DNS errors.
 func verifyTXT(ctx context.Context, domain, expectedToken string) (bool, error) {
-	txtName := "_loopzero-verify." + domain
+	txtName := VerificationTXTName(domain)
 	records, err := net.DefaultResolver.LookupTXT(ctx, txtName)
 	if err != nil {
 		// CODE-007 fix: NXDOMAIN is not an error — record just doesn't exist yet

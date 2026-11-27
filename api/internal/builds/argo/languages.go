@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package argo provides real Argo Workflows integration for build pipeline execution.
 //
@@ -13,7 +13,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/builds/shellgen"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
 	forge "github.com/getloopscale/argo-workflows-go"
 	"github.com/getloopscale/argo-workflows-go/model"
@@ -41,7 +42,7 @@ type LanguageStrategy interface {
 	//
 	// build-mode-dispatch-and-dockerfile-security-plan T1.1 (2026-05-07):
 	// restored as interface method; was removed in MEET-2026-03-29-017 when
-	// loopzero-packs went universal. The universal stance ignored the orthogonal
+	// loop-runtime-packs went universal. The universal stance ignored the orthogonal
 	// `build: dockerfile` axis. This restoration re-applies symmetry: each
 	// strategy decides what runs in this phase.
 	DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container
@@ -121,14 +122,22 @@ func (s *unsupportedStrategy) CacheDirs() []string { return nil }
 func (s *unsupportedStrategy) failStep(name string) *forge.Container {
 	var msg string
 	if strings.TrimSpace(s.runtime) == "" {
-		msg = "loopzero: loopzero.yaml does not declare a `runtime` for this app — " +
+		msg = "loop-runtime: loopzero.yaml does not declare a `runtime` for this app — " +
 			"add `runtime: python` or `runtime: node`. " +
-			"LoopZeroCloud deploys the fixed LoopZeroKit stack and the runtime has no default: " +
+			"LoopConsole deploys the fixed LoopZeroKit stack and the runtime has no default: " +
 			"guessing here would silently build the wrong image."
 	} else {
-		msg = fmt.Sprintf("loopzero: runtime %q is not supported — LoopZeroCloud deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
+		msg = fmt.Sprintf("loop-runtime: runtime %q is not supported — LoopConsole deploys the fixed LoopZeroKit stack (python, node)", s.runtime)
 	}
-	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), fmt.Sprintf("echo %q >&2\nexit 1", msg))
+	return buildContainer(name, imageAlpine, forge.ResourcesTiny(), failScript(msg))
+}
+
+// failScript is the body of a fail-closed step: it prints msg to stderr and exits
+// 1. msg is single-quoted, so nothing in it (backticks, $(...), variables) is
+// interpreted by the shell. Error text often carries user input, such as the
+// runtime from loopzero.yaml, and markdown-style backticks.
+func failScript(msg string) string {
+	return "echo " + shellgen.ShellQuote(msg) + " >&2\nexit 1"
 }
 
 func (s *unsupportedStrategy) ValidateStep(_ []deploycontracts.AppSpec) *forge.Container {
@@ -191,7 +200,7 @@ func (s *NodeStrategy) ScanStep(_ []deploycontracts.AppSpec) *forge.Container {
 }
 
 func (s *NodeStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container {
-	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
+	// T1.2: canonical platform Dockerfile (replaces loop-runtime-packs).
 	return canonicalDockerfileStepOrFail("node", apps, totalApps)
 }
 
@@ -232,7 +241,7 @@ func (s *PythonStrategy) ScanStep(apps []deploycontracts.AppSpec) *forge.Contain
 }
 
 func (s *PythonStrategy) DockerfileStep(apps []deploycontracts.AppSpec, totalApps int) *forge.Container {
-	// T1.2: canonical platform Dockerfile (replaces loopzero-packs).
+	// T1.2: canonical platform Dockerfile (replaces loop-runtime-packs).
 	return canonicalDockerfileStepOrFail("python", apps, totalApps)
 }
 
@@ -263,11 +272,11 @@ const dockerfileStepTemplate = "generate-dockerfile"
 func buildContainer(name, image string, resources *forge.ResourceRequirements, script string) *forge.Container {
 	// Plan J-17 Layer 2 (2026-06-06) — every step that flows through
 	// buildContainer gets its script wrapped with user-facing log
-	// markers (::loopzero:: phase=X step=Y level=Z). Promtail extracts
+	// markers (::loop-runtime:: phase=X step=Y level=Z). Promtail extracts
 	// the phase/step/level into Loki labels; the API's default LogQL
-	// filter `{loopzero_phase=~".+"}` then surfaces only labeled lines
+	// filter `{loop_runtime_phase=~".+"}` then surfaces only labeled lines
 	// to the dashboard "Logs" tab.
-	wrapped := wrapWithLoopZeroMarkers(name, script)
+	wrapped := wrapWithLoopRuntimeMarkers(name, script)
 	return &forge.Container{
 		Name:    name,
 		Image:   image,

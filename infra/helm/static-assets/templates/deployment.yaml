@@ -5,7 +5,7 @@ metadata:
   labels:
     app: static-assets
     app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
-    loopzero.io/component: static-delivery
+    runtime.getloopscale.com/component: static-delivery
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:

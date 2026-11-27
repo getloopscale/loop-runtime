@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package main
 
@@ -16,10 +16,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 // stubCapChecker is a fake store.ProjectCapChecker with a fixed bounded cap.
@@ -123,7 +123,7 @@ func TestWireProjectCap_DeployCountsTheAccountAcrossItsTenants(t *testing.T) {
 	// across its other tenants. A cap of 2 must refuse a third project — which it
 	// only does if the count went through the cross-tenant connection.
 	err := store.EnsureProject(context.Background(), deployTx{}, "tenant-1", "newproj", "user-1")
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "PROJECTS_EXCEED_PLAN" {
 		t.Fatalf("a deploy past the per-Account cap must be refused with PROJECTS_EXCEED_PLAN; got %v", err)
 	}

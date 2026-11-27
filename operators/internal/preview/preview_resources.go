@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package preview
 
@@ -13,8 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/tenantpolicy"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/tenantpolicy"
 )
 
 // Sprint 5 / T1.2 — preview namespace hardening.
@@ -52,16 +52,16 @@ func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context,
 	return tenantpolicy.ApplyTenantNetworkPolicies(ctx, rtClient, nsName, r.ingressNS(), "preview networkpolicy")
 }
 
-// reconcilePreviewServiceAccount ensures the `loopzero-app` ServiceAccount
+// reconcilePreviewServiceAccount ensures the `loop-runtime-app` ServiceAccount
 // exists inside the preview namespace.
 //
 // J-23 LIVE catch 2026-06-07: pods rendered by the API set
-// `pod.spec.serviceAccountName: loopzero-app` (renderer_deployment.go:146 +
+// `pod.spec.serviceAccountName: loop-runtime-app` (renderer_deployment.go:146 +
 // renderer_rollout.go:400). The environment_controller creates this SA
 // for production/staging namespaces (environment_rbac.go:129-157) but the
 // preview controller historically didn't — every first preview deploy
-// got a "serviceaccount loopzero-app not found" CrashLoop. The temporary
-// LIVE workaround was `kubectl create sa loopzero-app -n <preview-ns>`
+// got a "serviceaccount loop-runtime-app not found" CrashLoop. The temporary
+// LIVE workaround was `kubectl create sa loop-runtime-app -n <preview-ns>`
 // (codified here so cleanroom self-heals).
 //
 // Shape mirrors environment_rbac.go's appSA: AutomountServiceAccountToken=
@@ -69,7 +69,7 @@ func (r *PreviewReconciler) reconcilePreviewNetworkPolicies(ctx context.Context,
 // labeled with constants.LabelManagedBy. We do NOT copy the pull-secret-
 // from-source dance because (a) previews target the workload cluster
 // where image pulls go through the cluster-default config, and (b) local
-// k3d previews use the k3d-loopzero-registry (HTTP, no pull secret needed).
+// k3d previews use the k3d-loop-runtime-registry (HTTP, no pull secret needed).
 // If a future env requires private-registry previews, mirror the
 // environment_rbac.go ensurePullSecret path here as a separate concern.
 func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, rtClient client.Client, nsName string) error {
@@ -89,7 +89,7 @@ func (r *PreviewReconciler) reconcilePreviewServiceAccount(ctx context.Context, 
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("preview serviceaccount %s/loopzero-app: %w", nsName, err)
+		return fmt.Errorf("preview serviceaccount %s/loop-runtime-app: %w", nsName, err)
 	}
 	return nil
 }

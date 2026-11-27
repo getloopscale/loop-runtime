@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package unit
 
@@ -14,7 +14,7 @@ import (
 )
 
 // TestOryKratosIdentitySchemaValid ensures the identity schema is valid JSON
-// with required fields for LoopZero's auth flow.
+// with required fields for LoopRuntime's auth flow.
 func TestOryKratosIdentitySchemaValid(t *testing.T) {
 	dir := helmDir()
 	schemaPath := filepath.Join(dir, "ory-kratos", "identity.schema.json")
@@ -78,7 +78,7 @@ func TestOryKratosValuesNoPlaintextSecrets(t *testing.T) {
 
 	content := string(data)
 	// Dev secrets must be clearly marked as dev-only
-	if strings.Contains(content, "loopzero-dev-cookie-secret") && !strings.Contains(content, "LOCAL DEV ONLY") {
+	if strings.Contains(content, "loop-runtime-dev-cookie-secret") && !strings.Contains(content, "LOCAL DEV ONLY") {
 		t.Error("ory-kratos values.yaml has dev secrets without LOCAL DEV ONLY marker")
 	}
 }

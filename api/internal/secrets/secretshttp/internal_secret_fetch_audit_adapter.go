@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package secretshttp
 
@@ -27,7 +27,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // Canonical action strings — exported so tests don't drift.
@@ -51,7 +51,7 @@ func NewSecretReadAuditAdapter(logger AuditLogger) *SecretReadAuditAdapter {
 //
 // T2.3 of plan 2026-06-10-j22-layer2-code-review-fixes (closes HIGH #16
 // silent audit error): on LogAudit failure we now (a) increment the
-// canonical Prometheus counter `loopzero_secret_audit_write_failed_total`
+// canonical Prometheus counter `loop_runtime_secret_audit_write_failed_total`
 // AND (b) log via slog.Error with structured fields. Callers may keep
 // the legacy `_ = WriteAudit(...)` posture (audit is best-effort and
 // MUST NOT fail the request); telemetry is observed via the metric +

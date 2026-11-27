@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package tenancy owns the Tenant custom resource and tenant eviction.
 //
@@ -21,11 +21,11 @@ import (
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/getloopscale/loopzero/api/internal/k8s"
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	apiv1 "github.com/getloopscale/loopzero/operators/api/v1"
-	pkgdomain "github.com/getloopscale/loopzero/pkg/domain"
-	"github.com/getloopscale/loopzero/pkg/naming"
+	"github.com/getloopscale/loop-runtime/api/internal/k8s"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	apiv1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	pkgdomain "github.com/getloopscale/loop-runtime/pkg/domain"
+	"github.com/getloopscale/loop-runtime/pkg/naming"
 )
 
 // tenantNamespace is the canonical namespace for all Tenant + Environment CRs.
@@ -35,10 +35,10 @@ import (
 // misplacement vector that allowed iter 7-8 of dogfood to land Tenants in
 // `default`. Removed entirely; future multi-namespace topology requires a
 // new ADR superseding this one (ADR-0018 §Constraints C3).
-const tenantNamespace = "loopzero-system"
+const tenantNamespace = "loop-runtime-system"
 
 // tenantsGroupResource is used to synthesize Conflict errors for RetryOnConflict.
-var tenantsGroupResource = schema.GroupResource{Group: "loopzero.io", Resource: "tenants"}
+var tenantsGroupResource = schema.GroupResource{Group: "runtime.getloopscale.com", Resource: "tenants"}
 
 // TenantCRManager manages Tenant custom resources in Kubernetes.
 // It implements ports.TenantCRManager (DIP) using the TYPED controller-runtime
@@ -74,7 +74,7 @@ func tenantKey(tenantID string) client.ObjectKey {
 	return client.ObjectKey{Namespace: tenantNamespace, Name: tenantID}
 }
 
-// EnsureTenant creates or updates a Tenant CR in the loopzero-system namespace.
+// EnsureTenant creates or updates a Tenant CR in the loop-runtime-system namespace.
 // It is idempotent: calling it multiple times with the same tenantID is safe.
 // If the CR already exists, it updates the spec to match the desired state.
 // It uses retry-on-conflict to handle concurrent modifications by the TenantController.
@@ -122,7 +122,7 @@ func isEnvMatch(entry apiv1.TenantEnvironmentEntry, envName, project string) boo
 // no-op: the create route answers 409, the first-deploy ensurer carries on.
 //
 // M2 v1.2 (2026-06-07): writes the canonical `project` field so the operator
-// can compute the 3-segment namespace `loopzero-<tenant>-<project>-<env>` via
+// can compute the 3-segment namespace `loop-runtime-<tenant>-<project>-<env>` via
 // pkg/naming.Namespace. Empty project preserves the legacy 2-segment
 // pathway for production legacy (ADR D2).
 //
@@ -133,7 +133,7 @@ func isEnvMatch(entry apiv1.TenantEnvironmentEntry, envName, project string) boo
 func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project, envName string) error {
 	// EC-4 pre-flight: reject combined namespace > 63 chars before the
 	// k8s round-trip. Legacy callers (project="") bypass this check —
-	// the legacy `loopzero-<tenant>-<env>` path is enforced elsewhere.
+	// the legacy `loop-runtime-<tenant>-<env>` path is enforced elsewhere.
 	if project != "" {
 		ref, refErr := pkgdomain.NewEnvRef(tenantID, project, envName)
 		if refErr != nil {
@@ -170,7 +170,7 @@ func (m *TenantCRManager) AddEnvironment(ctx context.Context, tenantID, project,
 // ErrEnvironmentNotFound is returned by RemoveEnvironment when the named
 // environment is not present in the Tenant CR. Callers can map to HTTP 404.
 // AUDIT-12 (CHG-2026-04-23-AUDIT-12): previously this was silently idempotent,
-// causing `loopzero env delete nonexistent` to return "deleted" misleadingly.
+// causing `loopscale env delete nonexistent` to return "deleted" misleadingly.
 var ErrEnvironmentNotFound = ports.ErrEnvironmentNotFound
 
 // RemoveEnvironment removes an environment entry from the Tenant CR spec.environments[].
@@ -234,9 +234,16 @@ func (m *TenantCRManager) RemoveEnvironment(ctx context.Context, tenantID, proje
 //
 // M2 v1.2 (2026-06-07): each entry carries the project field; legacy entries
 // (production) have empty project per ADR D2.
+//
+// A tenant with no Tenant CR has no environments: the CR is created with the
+// tenant's first project (EnsureTenant), so a tenant provisioned at sign-up
+// lists as empty (#17). Every other read failure is returned.
 func (m *TenantCRManager) ListEnvironments(ctx context.Context, tenantID string) ([]ports.EnvironmentEntry, error) {
 	var t apiv1.Tenant
 	if err := m.Client.Get(ctx, tenantKey(tenantID), &t); err != nil {
+		if k8serrors.IsNotFound(err) {
+			return []ports.EnvironmentEntry{}, nil
+		}
 		return nil, fmt.Errorf("k8s: get tenant CR %q for ListEnvironments: %w", tenantID, err)
 	}
 
@@ -266,7 +273,7 @@ func (m *TenantCRManager) GetEnvironmentDetail(ctx context.Context, tenantID, pr
 		return nil, fmt.Errorf("k8s: get tenant CR %q for GetEnvironmentDetail: %w", tenantID, err)
 	}
 
-	// Issue #139 — a project-less lookup (the CLI's `loopzero env inspect <name>`
+	// Issue #139 — a project-less lookup (the CLI's `loopscale env inspect <name>`
 	// has no --project flag) used to require entry.Project == "", which the
 	// #124 backfill made unsatisfiable. resolveEnvEntry documents the full
 	// order; it returns an error only for the genuinely ambiguous case.

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
-// Package main is the entrypoint for the LoopZero Controller binary.
+// Package main is the entrypoint for the LoopRuntime Controller binary.
 //
 // # What this binary does
 //
@@ -15,7 +15,7 @@
 //     reconciliation, which is a structural bottleneck above ~50 concurrent
 //     requests.
 //   - This binary owns the background loops exclusively. The API sets
-//     LOOPZERO_DISABLE_LEGACY_LOOPS=true and stays stateless.
+//     LOOP_RUNTIME_DISABLE_LEGACY_LOOPS=true and stays stateless.
 //   - Leader election uses the cell-scoped generation counter from
 //     api/internal/leader so a stale leader's state transitions silently
 //     no-op (see ErrFenced semantics in that package).
@@ -55,12 +55,12 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib" // pgx stdlib driver for sql.Open
 
-	"github.com/getloopscale/loopzero/pkg/logging"
+	"github.com/getloopscale/loop-runtime/pkg/logging"
 
-	"github.com/getloopscale/loopzero/api/internal/config"
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/leader"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/config"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/leader"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 func main() {
@@ -74,11 +74,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger := logging.NewLogger("loopzero-controller").With(
+	logger := logging.NewLogger("loop-runtime-controller").With(
 		"component", "controller",
 		"cell_id", cellID(cfg),
 	)
-	logger.Info("starting loopzero-controller",
+	logger.Info("starting loop-runtime-controller",
 		"registry_url", cfg.RegistryURL,
 		"base_domain", cfg.BaseDomain,
 		"reconcile_interval", cfg.ReconcileInterval,
@@ -167,7 +167,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("loopzero-controller ready — background loops running", "loops", len(loops))
+	logger.Info("loop-runtime-controller ready — background loops running", "loops", len(loops))
 
 	// Block until SIGTERM / SIGINT or a fatal heartbeat failure.
 	<-shutdownCtx.Done()
@@ -196,5 +196,5 @@ func main() {
 		logger.Warn("leader release failed", "error", err)
 	}
 	metrics.LeaderStatus.Set(0)
-	logger.Info("loopzero-controller stopped cleanly")
+	logger.Info("loop-runtime-controller stopped cleanly")
 }

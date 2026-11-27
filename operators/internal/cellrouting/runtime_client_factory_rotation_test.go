@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package cellrouting
 
@@ -12,7 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
 )
 
 // kubeconfigFor builds a syntactically valid kubeconfig. The server is never
@@ -41,17 +41,17 @@ users:
 func cellFixture(t *testing.T, kubeconfig []byte) (client.Client, *corev1.Secret) {
 	t.Helper()
 	scheme := newSchemeForTest(t)
-	cc := &loopzerov1.ClusterCredential{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loopzero-system"},
-		Spec: loopzerov1.ClusterCredentialSpec{
-			ClusterName: "loopzero-cell-1",
+	cc := &loopruntimev1.ClusterCredential{
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1", Namespace: "loop-runtime-system"},
+		Spec: loopruntimev1.ClusterCredentialSpec{
+			ClusterName: "loop-runtime-cell-1",
 			APIServer:   "https://127.0.0.1:6443",
 			CellID:      "cell-1",
-			SecretRef:   loopzerov1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "loopzero-system"},
+			SecretRef:   loopruntimev1.SecretReference{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
 		},
 	}
 	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loopzero-system"},
+		ObjectMeta: metav1.ObjectMeta{Name: "cell-1-kubeconfig", Namespace: "loop-runtime-system"},
 		Data:       map[string][]byte{"kubeconfig": kubeconfig},
 	}
 	mgmt := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cc, secret).Build()
@@ -60,7 +60,7 @@ func cellFixture(t *testing.T, kubeconfig []byte) (client.Client, *corev1.Secret
 
 func TestCellAwareFactory_ReusesClientWhileKubeconfigSecretIsUnchanged(t *testing.T) {
 	mgmt, _ := cellFixture(t, kubeconfigFor("https://127.0.0.1:6443", "token-a"))
-	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loop-runtime-system")
 
 	first, err := f.For(context.Background(), "cell-1")
 	if err != nil {
@@ -81,7 +81,7 @@ func TestCellAwareFactory_ReusesClientWhileKubeconfigSecretIsUnchanged(t *testin
 // reconcile for that cell fails until the operator restarts.
 func TestCellAwareFactory_RebuildsClientWhenKubeconfigSecretRotates(t *testing.T) {
 	mgmt, secret := cellFixture(t, kubeconfigFor("https://127.0.0.1:6443", "token-a"))
-	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loopzero-system")
+	f := NewCellAwareRuntimeClientFactory(mgmt, nil, "loop-runtime-system")
 	before, err := f.For(context.Background(), "cell-1")
 	if err != nil {
 		t.Fatalf("For before rotation: %v", err)

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package builds
 
@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/events"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/events"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -41,16 +41,19 @@ import (
 // Returns ErrLockTimeout if the lock cannot be acquired within 5s.
 func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts.SubmitBuildRequest) (*deploycontracts.SubmitBuildResponse, error) {
 	// MEET-2026-03-30-020: distributed tracing (C3 naming convention)
-	ctx, span := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.build.submit",
+	ctx, span := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.build.submit",
 		trace.WithAttributes(
-			attribute.String("loopzero.tenant", req.TenantID),
-			attribute.String("loopzero.project", req.ProjectID),
-			attribute.String("loopzero.environment", req.Environment),
+			attribute.String("loop-runtime.tenant", req.TenantID),
+			attribute.String("loop-runtime.project", req.ProjectID),
+			attribute.String("loop-runtime.environment", req.Environment),
 		))
 	defer span.End()
 
 	// Phase 1 (INSIDE lock): reserve build slot as QUEUED
 	var buildID string
+	// reusedImages holds, per app, the signed image an earlier build of this
+	// commit already pushed; those apps are not rebuilt.
+	var reusedImages map[string]db.ReusedImage
 
 	err := o.locker.WithLock(ctx, req.TenantID, req.ProjectID, req.Environment, func(tx db.DBTX) error {
 		// Step 2: concurrent build check INSIDE the lock (Rule 6)
@@ -59,7 +62,7 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 			return wrapSubmitBuildError(StageCheckActiveBuilds, err)
 		}
 		if hasActive {
-			return loopzeroerrors.ErrDeployInProgress
+			return loopruntimeerrors.ErrDeployInProgress
 		}
 
 		// Step 2.2: B40 — resolve scaling from app_scaling_config DB rows BEFORE
@@ -81,24 +84,24 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		// enforcement hole (MEET-2026-04-23-059 Constraint 6). Operates on
 		// resolved AppSpec per B40 fix above.
 		//
-		// Sprint 6 /review CODE-003 LOW: enforceScaling returns a *LoopZeroError
+		// Sprint 6 /review CODE-003 LOW: enforceScaling returns a *LoopRuntimeError
 		// directly (ErrScalingAmbiguous / ErrReplicasExceedPlan / etc.) by
 		// design — bypassing wrapSubmitBuildError so mapBuildError dispatches
-		// it via the *LoopZeroError ladder branch with its own code, not as
+		// it via the *LoopRuntimeError ladder branch with its own code, not as
 		// SubmitBuildError. The wrap helper EC-3 guard also short-circuits
-		// any *LoopZeroError that reaches it (defense-in-depth).
+		// any *LoopRuntimeError that reaches it (defense-in-depth).
 		if err := enforceScaling(ctx, req.Apps, o.planCap, req.TenantID, o.kedaEnabled); err != nil {
 			return err
 		}
 
 		// Step 2.5: ensure project exists in projects table (idempotent).
-		// After `loopzero project delete` + redeploy, the build succeeds but the
-		// project doesn't appear in `loopzero project list` because it was hard-deleted.
+		// After `loopscale project delete` + redeploy, the build succeeds but the
+		// project doesn't appear in `loopscale project list` because it was hard-deleted.
 		if o.projectStore != nil {
-			ensureCtx, ensureSpan := otel.Tracer("loopzero-api").Start(ctx, "loopzero.api.project.ensure",
+			ensureCtx, ensureSpan := otel.Tracer("loop-runtime-api").Start(ctx, "loop-runtime.api.project.ensure",
 				trace.WithAttributes(
-					attribute.String("loopzero.tenant", req.TenantID),
-					attribute.String("loopzero.project", req.ProjectID),
+					attribute.String("loop-runtime.tenant", req.TenantID),
+					attribute.String("loop-runtime.project", req.ProjectID),
 				))
 			if err := o.projectStore.EnsureProject(ensureCtx, tx, req.TenantID, req.ProjectID, req.CreatedBy); err != nil {
 				ensureSpan.RecordError(err)
@@ -107,6 +110,15 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 				return wrapSubmitBuildError(StageEnsureProject, err)
 			}
 			ensureSpan.End()
+		}
+
+		// Step 2.6: find the images earlier builds of this commit already built
+		// and signed. The tag is the commit SHA and tenant repositories have
+		// immutable tags, so rebuilding such an image cannot be pushed; the
+		// build reuses it instead.
+		reusedImages, err = o.findSignedImages(ctx, tx, req)
+		if err != nil {
+			return wrapSubmitBuildError(StageFindSignedImages, err)
 		}
 
 		// Step 3: create Build (QUEUED)
@@ -139,11 +151,15 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 				Secrets:   a.Secrets,
 				Replicas:  a.Replicas,
 			}
+			if img, ok := reusedImages[a.Name]; ok {
+				spec.ReusedImage = &img
+			}
 			if a.Autoscaling != nil {
 				spec.Autoscaling = &db.BuildAppAutoscaling{
-					MinReplicas: a.Autoscaling.MinReplicas,
-					MaxReplicas: a.Autoscaling.MaxReplicas,
-					TargetCPU:   a.Autoscaling.TargetCPU,
+					MinReplicas:  a.Autoscaling.MinReplicas,
+					MaxReplicas:  a.Autoscaling.MaxReplicas,
+					TargetCPU:    a.Autoscaling.TargetCPU,
+					TargetMemory: a.Autoscaling.TargetMemory,
 				}
 			}
 			appsSpec = append(appsSpec, spec)
@@ -180,6 +196,11 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 		units = append(units, unit)
 	}
 	plan := deploycontracts.CreateBuildPlan(units, req.TenantID, req.ProjectID, req.CommitSHA, o.registryURL)
+	for i := range plan.Apps {
+		if img, ok := reusedImages[plan.Apps[i].AppName]; ok {
+			plan.Apps[i].ReusedDigest = img.Digest
+		}
+	}
 
 	wfSpec := deploycontracts.WorkflowSpec{
 		BuildID:       buildID,
@@ -259,13 +280,27 @@ func (o *BuildOrchestrator) SubmitBuild(ctx context.Context, req deploycontracts
 	metrics.DeploysTotal.WithLabelValues(req.TenantID, req.Environment, "submitted").Inc()
 	metrics.BuildQueueDepth.Inc()
 
-	span.SetAttributes(attribute.String("loopzero.build_id", buildID))
+	span.SetAttributes(attribute.String("loop-runtime.build_id", buildID))
 
 	streamURL := fmt.Sprintf("/api/v1/builds/%s/stream", buildID)
 	return &deploycontracts.SubmitBuildResponse{
 		BuildID:   buildID,
 		StreamURL: streamURL,
 	}, nil
+}
+
+// findSignedImages returns the signed images earlier builds of the request's
+// commit already pushed, keyed by app name. It returns none when no finder is
+// wired or the request names no commit.
+func (o *BuildOrchestrator) findSignedImages(ctx context.Context, tx db.DBTX, req deploycontracts.SubmitBuildRequest) (map[string]db.ReusedImage, error) {
+	if o.signedImages == nil || req.CommitSHA == "" {
+		return nil, nil
+	}
+	images, err := o.signedImages.FindSignedImages(ctx, tx, req.TenantID, req.ProjectID, req.CommitSHA)
+	if err != nil {
+		return nil, fmt.Errorf("find signed images of commit %s: %w", req.CommitSHA, err)
+	}
+	return images, nil
 }
 
 // enforceScaling rejects requests that set both `replicas` and `autoscaling`
@@ -282,7 +317,7 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 
 		// KEDA gate: scale-to-zero (min=0) requires KEDA to be enabled on the cluster.
 		if hasAutoscaling && a.Autoscaling.MinReplicas == 0 && a.Autoscaling.MaxReplicas > 0 && !kedaEnabled {
-			return loopzeroerrors.NewLoopZeroError(
+			return loopruntimeerrors.NewLoopRuntimeError(
 				"SCALE_TO_ZERO_UNAVAILABLE",
 				fmt.Sprintf("App '%s': scale-to-zero is not available on this cluster. Use min >= 1 for autoscaling, or contact support to enable scale-to-zero.", a.Name))
 		}
@@ -292,9 +327,9 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 			// dashboards show a single plan-enforcement signal.
 			metrics.PlanLimitViolations.WithLabelValues("scaling_ambiguous", "").Inc()
 			// The HTTP status is resolved by errorshttp.Status from the code.
-			return loopzeroerrors.NewLoopZeroError(
-				loopzeroerrors.ErrScalingAmbiguous.Code,
-				fmt.Sprintf("App '%s': %s", a.Name, loopzeroerrors.ErrScalingAmbiguous.Message))
+			return loopruntimeerrors.NewLoopRuntimeError(
+				loopruntimeerrors.ErrScalingAmbiguous.Code,
+				fmt.Sprintf("App '%s': %s", a.Name, loopruntimeerrors.ErrScalingAmbiguous.Message))
 		}
 		if checker == nil {
 			continue
@@ -321,7 +356,7 @@ func enforceScaling(ctx context.Context, apps []deploycontracts.AppSpec, checker
 			// B15 MEET-059 action #9: emit counter so dashboards/alerts can
 			// surface plan-limit friction without scraping audit logs.
 			metrics.PlanLimitViolations.WithLabelValues("max_replicas_per_service", plan).Inc()
-			return loopzeroerrors.NewReplicasExceedPlan(plan, cap, requested, a.Name)
+			return loopruntimeerrors.NewReplicasExceedPlan(plan, cap, requested, a.Name)
 		}
 	}
 	return nil

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package buildsadapter
 
@@ -9,9 +9,9 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/github"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/github"
 )
 
 // The push webhook's commit SHA is untrusted input. A short or empty one must be
@@ -22,7 +22,7 @@ func TestBuildSubmitterAdapter_RefusesACommitSHAShorterThanTheCorrelationPrefix(
 	for _, sha := range []string{"", "abc1234"} {
 		err := a.SubmitBuildFromWebhook(context.Background(), github.WebhookBuildRequest{
 			TenantID: "tn-1", ProjectName: "web", Environment: "production",
-			CommitSHA: sha, RepoFullName: "acme/web", LoopZeroYaml: &github.LoopZeroYamlMinimal{},
+			CommitSHA: sha, RepoFullName: "acme/web", LoopRuntimeYaml: &github.LoopRuntimeYamlMinimal{},
 		})
 		if err == nil {
 			t.Errorf("commit SHA %q must be refused", sha)
@@ -50,7 +50,7 @@ func TestBuildSubmitterAdapter_SubmitsScopedToTheLinkedTenant(t *testing.T) {
 
 	err := a.SubmitBuildFromWebhook(context.Background(), github.WebhookBuildRequest{
 		TenantID: "tn-linked", ProjectName: "web", Environment: "production",
-		CommitSHA: "0123456789abcdef", RepoFullName: "acme/web", LoopZeroYaml: &github.LoopZeroYamlMinimal{},
+		CommitSHA: "0123456789abcdef", RepoFullName: "acme/web", LoopRuntimeYaml: &github.LoopRuntimeYamlMinimal{},
 	})
 
 	if err != nil {

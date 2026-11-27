@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package store
 
@@ -37,14 +37,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbconv"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbconv"
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/getloopscale/loopzero/api/internal/db/generated"
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
-	"github.com/getloopscale/loopzero/pkg/id"
+	"github.com/getloopscale/loop-runtime/api/internal/db/generated"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
+	"github.com/getloopscale/loop-runtime/pkg/id"
 )
 
 // Compile-time assertion: AppAttestationStoreSqlc satisfies
@@ -109,10 +109,10 @@ func (s *AppAttestationStoreSqlc) saveOn(
 	ctx context.Context, tx db.DBTX, releaseID, tenantID string, atts []AppAttestation,
 ) error {
 	if releaseID == "" || tenantID == "" {
-		// Audit gap M02 #13 fix: typed LoopZeroError so the validation
+		// Audit gap M02 #13 fix: typed LoopRuntimeError so the validation
 		// surfaces with a stable code in audit logs + HTTP error
 		// mapping.
-		return loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: release_id and tenant_id are required")
+		return loopruntimeerrors.ErrMissingField.Wrap("app_attestation_store: release_id and tenant_id are required")
 	}
 	if len(atts) == 0 {
 		return nil
@@ -165,7 +165,7 @@ func (s *AppAttestationStoreSqlc) GetBuildAppAttestations(
 	ctx context.Context, tenantID, buildID string,
 ) ([]AppAttestationInfo, error) {
 	if tenantID == "" || buildID == "" {
-		return nil, loopzeroerrors.ErrBuildNotFound
+		return nil, loopruntimeerrors.ErrBuildNotFound
 	}
 
 	rows, err := s.q.GetBuildAppAttestationsForTenant(ctx, s.gen(nil), generated.GetBuildAppAttestationsForTenantParams{
@@ -213,6 +213,51 @@ func (s *AppAttestationStoreSqlc) GetBuildAppAttestations(
 	return out, nil
 }
 
+// FindSignedImages returns, per app name, the newest signed image an earlier
+// build of the tenant's project pushed for commitSHA. Apps that never had a
+// signed image at that commit are absent. tx may be nil to use the pool; the
+// build orchestrator passes its environment-lock transaction. It satisfies
+// builds.SignedImageFinder.
+func (s *AppAttestationStoreSqlc) FindSignedImages(
+	ctx context.Context, tx db.DBTX, tenantID, projectID, commitSHA string,
+) (map[string]db.ReusedImage, error) {
+	if tenantID == "" || projectID == "" || commitSHA == "" {
+		return nil, loopruntimeerrors.ErrMissingField.Wrap("app_attestation_store: tenant_id, project_id and commit_sha are required")
+	}
+	rows, err := s.q.ListSignedAppImagesForCommit(ctx, s.gen(tx), generated.ListSignedAppImagesForCommitParams{
+		TenantID:  tenantID,
+		ProjectID: projectID,
+		CommitSha: &commitSHA,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("app_attestation_store: list signed images of commit %s: %w", commitSHA, err)
+	}
+	images := make(map[string]db.ReusedImage, len(rows))
+	for _, r := range rows {
+		// The query admits only rows with both; the guard keeps a NULL from
+		// ever turning into an unsigned reuse.
+		if r.ImageSignature == nil || !r.SignedAt.Valid {
+			continue
+		}
+		img := db.ReusedImage{
+			Digest:    r.ImageDigest,
+			Signature: *r.ImageSignature,
+			SignedAt:  r.SignedAt.Time.UTC(),
+		}
+		if r.SbomS3Key != nil {
+			img.SBOMS3Key = *r.SbomS3Key
+		}
+		if r.SbomFormat != nil {
+			img.SBOMFormat = *r.SbomFormat
+		}
+		if r.SbomComponentCount != nil {
+			img.SBOMComponentCount = int(*r.SbomComponentCount)
+		}
+		images[r.AppName] = img
+	}
+	return images, nil
+}
+
 // UpdateAppSBOM persists SBOM metadata for a (release, app) row. Used
 // by build_reconcile_complete after extracting workflow output for the
 // syft step. Caller authenticates via release ownership upstream —
@@ -221,8 +266,8 @@ func (s *AppAttestationStoreSqlc) UpdateAppSBOM(
 	ctx context.Context, releaseID, appName, s3Key, format string, componentCount int,
 ) error {
 	if releaseID == "" || appName == "" {
-		// Audit gap M02 #13 fix: typed LoopZeroError for input validation.
-		return loopzeroerrors.ErrMissingField.Wrap("app_attestation_store: release_id and app_name are required")
+		// Audit gap M02 #13 fix: typed LoopRuntimeError for input validation.
+		return loopruntimeerrors.ErrMissingField.Wrap("app_attestation_store: release_id and app_name are required")
 	}
 	if format != SBOMFormatCycloneDXJSON && format != SBOMFormatSPDXJSON {
 		return fmt.Errorf("app_attestation_store: invalid sbom_format %q", format)

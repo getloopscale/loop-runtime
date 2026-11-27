@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+apiVersion: v2
+name: database-bootstrap
+description: |
+  Brings a managed PostgreSQL (RDS) to the state loop-runtime-api boots against: the identity
+  and Gitea databases, the non-owner roles the API and loop-console connect as, and the
+  schema at the latest migration. Runs as a Job on every sync; each step is idempotent.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # update-cross-cluster-ips.sh — Updates cross-cluster IPs across all deployment manifests.
 #
-# k3d clusters share the `k3d-loopzero` Docker network. Server node IPs are used
+# k3d clusters share the `k3d-loop-runtime` Docker network. Server node IPs are used
 # for cross-cluster communication (NodePorts accessible on server nodes).
 # LB IPs are used for HTTP traffic (Traefik on workload).
 #
 # Components patched:
-#   - K8s ConfigMap loopzero-api@loopzero-system on mgmt cluster (Tilt-rendered from charts/loopzero-api):
+#   - K8s ConfigMap loop-runtime-api@loop-runtime-system on mgmt cluster (Tilt-rendered from charts/loop-runtime-api):
 #       MINIO_CROSS_CLUSTER_ENDPOINT, GITEA_CROSS_CLUSTER_URL,
 #       API_CROSS_CLUSTER_URL, WORKLOAD_INGRESS_URL
 #       (post-T1.1.b commit 3fbde9a13: api-deployment.yaml uses envFrom now)
-#   - Build cluster secrets                 (loopzero-minio-credentials MINIO_ENDPOINT)
+#   - Build cluster secrets                 (loop-runtime-minio-credentials MINIO_ENDPOINT)
 #   - infra/helm/promtail/values.yaml       (Loki cross-cluster endpoint)
 #
 # It edits no file git tracks (#264): the committed cross-cluster addresses are
@@ -24,7 +24,7 @@
 # Usage: bash infra/scripts/update-cross-cluster-ips.sh
 set -euo pipefail
 
-SHARED_NETWORK="k3d-loopzero"
+SHARED_NETWORK="k3d-loop-runtime"
 DEPLOYMENT="infra/tilt/api-deployment.yaml"
 
 if [ ! -f "$DEPLOYMENT" ]; then
@@ -40,7 +40,7 @@ get_ip() {
 }
 
 # Mgmt server node IP (NodePorts: 30000=Gitea, 30001=API, 32000=MinIO)
-MGMT_SERVER=$(get_ip k3d-loopzero-core-server-0)
+MGMT_SERVER=$(get_ip k3d-loop-runtime-core-server-0)
 if [ -z "$MGMT_SERVER" ]; then
   echo "ERROR: Cannot find mgmt server IP on ${SHARED_NETWORK}."
   echo "  Are all clusters running? Run: k3d cluster list"
@@ -49,7 +49,7 @@ fi
 echo "  Mgmt server: $MGMT_SERVER (Gitea:30000, API:30001, MinIO:32000)"
 
 # Workload LB IP (HTTP/HTTPS traffic via Traefik)
-WORKLOAD_LB=$(get_ip k3d-loopzero-cell-0-serverlb)
+WORKLOAD_LB=$(get_ip k3d-loop-runtime-cell-0-serverlb)
 if [ -z "$WORKLOAD_LB" ]; then
   echo "ERROR: Cannot find workload LB IP on ${SHARED_NETWORK}."
   exit 1
@@ -58,15 +58,15 @@ echo "  Workload LB: $WORKLOAD_LB (Traefik:80/443)"
 
 
 # ---------------------------------------------------------------------------
-# Patch API ConfigMap (loopzero-api)
+# Patch API ConfigMap (loop-runtime-api)
 #
 # Pre-T1.1.b (commit 3fbde9a13): these 4 envs were inline in
 # infra/tilt/api-deployment.yaml; this script sed-patched the file.
 #
 # Post-T1.1.b: the 4 envs migrated to envFrom: configMapRef:
-# loopzero-api — rendered by the Tiltfile from charts/loopzero-api with
-# infra/tilt/loopzero-api-values.yaml (it was loopzero-api-runtime-config until the
-# bootstrap chart infra/helm/loopzero-api was deleted) (per code-review-remediation-147-findings
+# loop-runtime-api — rendered by the Tiltfile from charts/loop-runtime-api with
+# infra/tilt/loop-runtime-api-values.yaml (it was loop-runtime-api-runtime-config until the
+# bootstrap chart infra/helm/loop-runtime-api was deleted) (per code-review-remediation-147-findings
 # no-hardcode mandate). This script now patches the LIVE ConfigMap on
 # the mgmt cluster post-helmfile-sync, then triggers a rollout restart
 # so the API pod's envFrom re-reads.
@@ -76,11 +76,11 @@ echo "  Workload LB: $WORKLOAD_LB (Traefik:80/443)"
 # may differ run-to-run).
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Patching loopzero-api ConfigMap (mgmt cluster) ==="
+echo "=== Patching loop-runtime-api ConfigMap (mgmt cluster) ==="
 
-MGMT_CTX="k3d-loopzero-core"
-API_CM_NS="loopzero-system"
-API_CM_NAME="loopzero-api"
+MGMT_CTX="k3d-loop-runtime-core"
+API_CM_NS="loop-runtime-system"
+API_CM_NAME="loop-runtime-api"
 
 # Helper: patch ConfigMap key idempotently (no-op when value unchanged).
 patch_cm_key() {
@@ -107,16 +107,16 @@ if kubectl --context "$MGMT_CTX" get configmap "$API_CM_NAME" -n "$API_CM_NS" >/
   # Trigger rollout restart so envFrom re-reads the ConfigMap.
   # Idempotent: kubectl rollout restart adds a new annotation each call,
   # but the pod is only respun if a deploy actually exists.
-  if kubectl --context "$MGMT_CTX" get deployment loopzero-api -n "$API_CM_NS" >/dev/null 2>&1; then
-    kubectl --context "$MGMT_CTX" rollout restart deployment loopzero-api -n "$API_CM_NS" >/dev/null
-    echo "  Triggered rollout restart of loopzero-api Deployment to pick up ConfigMap changes"
+  if kubectl --context "$MGMT_CTX" get deployment loop-runtime-api -n "$API_CM_NS" >/dev/null 2>&1; then
+    kubectl --context "$MGMT_CTX" rollout restart deployment loop-runtime-api -n "$API_CM_NS" >/dev/null
+    echo "  Triggered rollout restart of loop-runtime-api Deployment to pick up ConfigMap changes"
   else
-    echo "  loopzero-api Deployment not yet present — Tilt will pick up ConfigMap on first apply"
+    echo "  loop-runtime-api Deployment not yet present — Tilt will pick up ConfigMap on first apply"
   fi
 else
   echo "WARNING: ConfigMap ${API_CM_NAME} not found in ${API_CM_NS} on ${MGMT_CTX}"
   echo "  Skipping API runtime URL patches — Tilt apply will create the ConfigMap separately"
-  echo "  (the ConfigMap source is charts/loopzero-api/templates/configmap.yaml, rendered by the Tiltfile)"
+  echo "  (the ConfigMap source is charts/loop-runtime-api/templates/configmap.yaml, rendered by the Tiltfile)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -125,22 +125,22 @@ fi
 echo ""
 echo "=== Patching build cluster secrets ==="
 
-BUILD_KUBECONFIG=$(k3d kubeconfig write loopzero-build 2>/dev/null || true)
+BUILD_KUBECONFIG=$(k3d kubeconfig write loop-runtime-build 2>/dev/null || true)
 if [ -n "$BUILD_KUBECONFIG" ]; then
-  # loopzero-minio-credentials — MINIO_ENDPOINT used by CWTs
-  CURRENT_MINIO=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loopzero-minio-credentials -n argo \
+  # loop-runtime-minio-credentials — MINIO_ENDPOINT used by CWTs
+  CURRENT_MINIO=$(kubectl --kubeconfig="$BUILD_KUBECONFIG" get secret loop-runtime-minio-credentials -n argo \
     -o jsonpath='{.data.MINIO_ENDPOINT}' 2>/dev/null | base64 -d 2>/dev/null || true)
   NEW_MINIO="http://${MGMT_SERVER}:32000"
   if [ -n "$CURRENT_MINIO" ] && [ "$CURRENT_MINIO" != "$NEW_MINIO" ]; then
     ENCODED=$(echo -n "$NEW_MINIO" | base64 -w0)
-    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loopzero-minio-credentials -n argo \
+    kubectl --kubeconfig="$BUILD_KUBECONFIG" patch secret loop-runtime-minio-credentials -n argo \
       -p "{\"data\":{\"MINIO_ENDPOINT\":\"${ENCODED}\"}}" 2>&1
-    echo "  loopzero-minio-credentials MINIO_ENDPOINT: $CURRENT_MINIO → $NEW_MINIO"
+    echo "  loop-runtime-minio-credentials MINIO_ENDPOINT: $CURRENT_MINIO → $NEW_MINIO"
   else
-    echo "  loopzero-minio-credentials MINIO_ENDPOINT: already correct ($NEW_MINIO)"
+    echo "  loop-runtime-minio-credentials MINIO_ENDPOINT: already correct ($NEW_MINIO)"
   fi
 else
-  echo "WARNING: Cannot get kubeconfig for loopzero-build — skipping"
+  echo "WARNING: Cannot get kubeconfig for loop-runtime-build — skipping"
 fi
 
 # ---------------------------------------------------------------------------

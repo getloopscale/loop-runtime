@@ -3,7 +3,7 @@
 # core, cell and build include this file through `bases:`, so an environment exists
 # for all three or for none. They used to declare their own `environments:` blocks,
 # and the lists had drifted: core knew seven environments and cell/build five, so
-# `LOOPZERO_HELMFILE_ENV=dev-public task setup` — the documented flow — got past the core
+# `LOOP_RUNTIME_HELMFILE_ENV=dev-public task setup` — the documented flow — got past the core
 # cluster and then stopped at the build cluster with "no releases found that matches
 # specified selector() and environment(dev-public)", exit 3.
 #
@@ -40,7 +40,7 @@ environments:
   dev-public:
     # T2.1 of plan 2026-06-04-dev-public-domain-canonicalization. Variant of
     # standalone-public using *-dev.getloopscale.com hostnames. Used by
-    # `task dev-public:bootstrap` + `LOOPZERO_HELMFILE_ENV=dev-public task setup`.
+    # `task dev-public:bootstrap` + `LOOP_RUNTIME_HELMFILE_ENV=dev-public task setup`.
     values:
       - environments/dev-public.yaml
   drill:
@@ -48,3 +48,10 @@ environments:
     # DOKS clusters provisioned by infra/pulumi-drill/.
     values:
       - environments/drill.yaml
+  staging:
+    # Production's AWS topology (getloopscale/infra-live `staging`) applied to the AWS
+    # emulator: four EKS clusters, RDS, ElastiCache, S3, Secrets Manager and IRSA. The
+    # values a production AWS environment would change are its names and the outputs of
+    # its own infra-live units; what only the emulator needs sits under `emulator:`.
+    values:
+      - environments/staging.yaml

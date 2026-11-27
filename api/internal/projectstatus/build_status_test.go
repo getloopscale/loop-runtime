@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package projectstatus_test
 
@@ -19,8 +19,8 @@ package projectstatus_test
 import (
 	"testing"
 
-	"github.com/getloopscale/loopzero/api/internal/projectstatus"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/projectstatus"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 func TestMapBuildStatusToProjectStatus_CoversAllSevenBuildStates(t *testing.T) {

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 //
 // The clusters that run platform images pull them from Amazon ECR (#435), and their
 // nodes authenticate the way EKS nodes do: the kubelet image credential provider
@@ -21,7 +21,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const credentialProviderMount = "${HOME}/.loopzero/credentialprovider:/var/lib/rancher/credentialprovider"
+const credentialProviderMount = "${HOME}/.loop-runtime/credentialprovider:/var/lib/rancher/credentialprovider"
 
 type k3dVolume struct {
 	Volume      string   `yaml:"volume"`
@@ -32,7 +32,7 @@ type k3dVolumesConfig struct {
 	Volumes []k3dVolume `yaml:"volumes"`
 }
 
-// Core runs loopzero-api, the operators, loopzero-cloud and MinIO; build runs the clone,
+// Core runs loop-runtime-api, the operators, loop-console and MinIO; build runs the clone,
 // sign and scan steps. Both pull platform images, so every node of both mounts it.
 func TestPlatformClustersMountTheCredentialProvider(t *testing.T) {
 	for _, file := range []string{"infra/k3d/core-cluster.yaml", "infra/k3d/build-cluster.yaml"} {

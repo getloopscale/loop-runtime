@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package placement
 
@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
-	"github.com/getloopscale/loopzero/api/internal/metrics"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/metrics"
 )
 
 // OrphanedTenantQuerier returns the set of cell_ids that have tenants assigned
@@ -24,7 +24,7 @@ type OrphanedTenantQuerier interface {
 // tenants referencing that cell become orphaned — their deploys, rollbacks,
 // and status operations will fail.
 //
-// MEET-053 D-04: Emits loopzero_orphaned_tenants gauge and logs warnings.
+// MEET-053 D-04: Emits loop_runtime_orphaned_tenants gauge and logs warnings.
 // Manual remediation is acceptable for Phase 1; automatic migration is Phase 2.
 type OrphanDetector struct {
 	cellLister deploycontracts.CellLister

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Group D: Platform infrastructure controllers.
 // ClusterCredential + GitRepositoryBinding + PlatformBootstrap.
@@ -22,15 +22,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	loopzerov1 "github.com/getloopscale/loopzero/operators/api/v1"
-	"github.com/getloopscale/loopzero/operators/internal/constants"
-	"github.com/getloopscale/loopzero/operators/internal/httpclient"
-	"github.com/getloopscale/loopzero/operators/internal/operatorboot"
-	"github.com/getloopscale/loopzero/operators/internal/platform"
-	"github.com/getloopscale/loopzero/operators/internal/tracing"
-	"github.com/getloopscale/loopzero/pkg/healthcheck"
+	loopruntimev1 "github.com/getloopscale/loop-runtime/operators/api/v1"
+	"github.com/getloopscale/loop-runtime/operators/internal/constants"
+	"github.com/getloopscale/loop-runtime/operators/internal/httpclient"
+	"github.com/getloopscale/loop-runtime/operators/internal/operatorboot"
+	"github.com/getloopscale/loop-runtime/operators/internal/platform"
+	"github.com/getloopscale/loop-runtime/operators/internal/tracing"
+	"github.com/getloopscale/loop-runtime/pkg/healthcheck"
 
-	_ "github.com/getloopscale/loopzero/operators/internal/metrics"
+	_ "github.com/getloopscale/loop-runtime/operators/internal/metrics"
 )
 
 var scheme = runtime.NewScheme()
@@ -39,8 +39,8 @@ func init() {
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
 		panic(fmt.Sprintf("failed to register client-go scheme: %v", err))
 	}
-	if err := loopzerov1.AddToScheme(scheme); err != nil {
-		panic(fmt.Sprintf("failed to register loopzero/v1 scheme: %v", err))
+	if err := loopruntimev1.AddToScheme(scheme); err != nil {
+		panic(fmt.Sprintf("failed to register loop-runtime/v1 scheme: %v", err))
 	}
 }
 
@@ -64,7 +64,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	setupLog := ctrl.Log.WithName("setup")
 
-	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loopzero-platform-operator")
+	tracingShutdown, tracingErr := tracing.Init(context.Background(), "loop-runtime-platform-operator")
 	if tracingErr != nil {
 		setupLog.Error(tracingErr, "tracing init failed — continuing without tracing")
 	}
@@ -96,7 +96,7 @@ func main() {
 		},
 		HealthProbeBindAddress: healthProbeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "loopzero-platform-operator.loopzero.io",
+		LeaderElectionID:       "loop-runtime-platform-operator.runtime.getloopscale.com",
 		Cache:                  cacheOpts,
 	})
 	if err != nil {
@@ -142,10 +142,10 @@ func main() {
 // CHG-2026-04-30-INFRA-NORMALIZE / Phase 2 condition C16. Cache
 // scoping per ADR-0018 v2 C9 + operator-split-invariants.md I-1.
 // PlatformBootstrap, GitRepositoryBinding, ClusterCredential all
-// live in `loopzero-system` only.
+// live in `loop-runtime-system` only.
 //
 // Secrets are read and written in two namespaces, the ones the chart grants
-// through namespaced Roles: loopzero-system (cell kubeconfigs, the Gitea admin
+// through namespaced Roles: loop-runtime-system (cell kubeconfigs, the Gitea admin
 // Secret, platform-tokens, Git credentials) and the ArgoCD namespace (the
 // cluster, repository and repo-creds Secrets the controllers write for
 // ArgoCD, and its admin Secret). The Secret informer — which also feeds the
@@ -162,10 +162,10 @@ func managerCacheOptions(argoCDNamespace string) (cache.Options, error) {
 	}
 	return cache.Options{
 		ByObject: map[client.Object]cache.ByObject{
-			&loopzerov1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
-			&loopzerov1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
-			&loopzerov1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
-			&corev1.Secret{}:                   secretScope,
+			&loopruntimev1.PlatformBootstrap{}:    {Namespaces: platformCRDNamespaces},
+			&loopruntimev1.GitRepositoryBinding{}: {Namespaces: platformCRDNamespaces},
+			&loopruntimev1.ClusterCredential{}:    {Namespaces: platformCRDNamespaces},
+			&corev1.Secret{}:                      secretScope,
 		},
 	}, nil
 }

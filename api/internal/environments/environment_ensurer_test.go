@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package environments
 
@@ -7,13 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/getloopscale/loopzero/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	loopzeroerrors "github.com/getloopscale/loopzero/pkg/errors"
+	loopruntimeerrors "github.com/getloopscale/loop-runtime/pkg/errors"
 )
 
 type stubLister struct {
@@ -163,7 +163,7 @@ func TestEnsureEnvironment_AddErrorMentioningAlreadyExistsFails(t *testing.T) {
 
 	err := e.EnsureEnvironment(context.Background(), "tn-1", "web", "preview")
 
-	var te *loopzeroerrors.LoopZeroError
+	var te *loopruntimeerrors.LoopRuntimeError
 	if !errors.As(err, &te) || te.Code != "ENV_PROVISION_FAILED" {
 		t.Fatalf("expected ENV_PROVISION_FAILED, got %v", err)
 	}
@@ -186,10 +186,10 @@ func TestEnsureEnvironment_NilReceiverFailsLoud(t *testing.T) {
 	}
 }
 
-// TestEnsureEnvironment_AddFailReturnsLoopZeroError asserts that non-already-exists
-// errors from AddEnvironment surface as LoopZeroError(ENV_PROVISION_FAILED).
+// TestEnsureEnvironment_AddFailReturnsLoopRuntimeError asserts that non-already-exists
+// errors from AddEnvironment surface as LoopRuntimeError(ENV_PROVISION_FAILED).
 // Plan T2.2 RED #6.
-func TestEnsureEnvironment_AddFailReturnsLoopZeroError(t *testing.T) {
+func TestEnsureEnvironment_AddFailReturnsLoopRuntimeError(t *testing.T) {
 	lister := &stubLister{}
 	adder := &stubAdder{err: errors.New("permission denied")}
 	e := &EnvironmentEnsurer{Lister: lister, Adder: adder}
@@ -439,7 +439,7 @@ func TestEnsureEnvironment_EmptyProjectPreservesLegacyPath_M2(t *testing.T) {
 //
 //   - Tenant `tn-1` already has `(project=qa-redteam-dogfood, env=preview)` in
 //     spec.environments[].
-//   - Operator runs `loopzero deploy` for `(project=loopzerokit-example, env=preview)`.
+//   - Operator runs `loopscale deploy` for `(project=loopzerokit-example, env=preview)`.
 //   - Pre-m37 (project-agnostic shallow check): HasEnvironment returned
 //     exists=true on env-name match, EnsureEnvironment returned early,
 //     AddEnvironment never called → Tenant CR stale → AppProject destinations

@@ -1,0 +1,80 @@
+{{- /* SPDX-License-Identifier: Apache-2.0 */ -}}
+{{- with .Values.console }}
+{{- if .enabled }}
+{{- $host := required "public-routes: console.host is required" .host }}
+{{- $identity := $.Values.identity }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: public-console
+  namespace: {{ .namespace }}
+  labels:
+    app.kubernetes.io/name: public-routes
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+spec:
+  entryPoints:
+    {{- toYaml $.Values.entryPoints | nindent 4 }}
+  routes:
+    # The dashboard's Kratos calls stay on its own origin. Only whoami of /sessions is
+    # public; the rest of /sessions lists and revokes sessions and is not routed.
+    - match: Host(`{{ $host }}`) && (PathPrefix(`/self-service/`) || Path(`/sessions/whoami`))
+      kind: Rule
+      priority: 300
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ $identity.kratos.service }}
+          namespace: {{ $identity.namespace }}
+          port: {{ $identity.kratos.port }}
+    # GitHub signs its webhook with HMAC and carries no token; it goes to the API itself.
+    - match: Host(`{{ $host }}`) && Path(`/api/v1/webhooks/github`)
+      kind: Rule
+      priority: 300
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .api.service }}
+          port: {{ .api.port }}
+    # The streams of loop-console (Server-Sent Events) skip the buffering middleware,
+    # which would hold each one until it ends (charts/loop-runtime-common ingressRoute).
+    - match: Host(`{{ $host }}`) && (PathPrefix(`/v1/`) || PathPrefix(`/engine/`)) && PathRegexp(`/(stream|timeline)$`)
+      kind: Rule
+      priority: 250
+      {{- with $.Values.streamMiddlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .cloud.service }}
+          port: {{ .cloud.port }}
+    # loop-console: the browser API, the OAuth2 login and consent handlers, the engine proxy.
+    - match: Host(`{{ $host }}`) && (PathPrefix(`/v1/`) || PathPrefix(`/engine/`) || Path(`/auth/login`) || Path(`/auth/login/complete`) || Path(`/auth/consent`) || Path(`/auth/device`))
+      kind: Rule
+      priority: 200
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .cloud.service }}
+          port: {{ .cloud.port }}
+    # The bundle. /internal is never public.
+    - match: Host(`{{ $host }}`) && !PathPrefix(`/internal`) && !PathPrefix(`/sessions`)
+      kind: Rule
+      priority: 100
+      {{- with $.Values.middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ .dashboard.service }}
+          port: {{ .dashboard.port }}
+  {{- include "public-routes.tls" (dict "root" $ "name" "public-console") | trim | nindent 2 }}
+{{- include "public-routes.certificate" (dict "root" $ "name" "public-console" "namespace" .namespace "host" $host) }}
+{{- end }}
+{{- end }}

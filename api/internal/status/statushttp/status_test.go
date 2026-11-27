@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package statushttp
 
@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/ports"
-	"github.com/getloopscale/loopzero/api/internal/routestest"
+	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/routestest"
 )
 
 // --- Fake StatusBuildStore ---
@@ -367,7 +367,7 @@ func TestStatus_Get_NoBuildsNoRelease(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#85 regression-protector — provenance.
+// Red Team loop-console#85 regression-protector — provenance.
 // `active_release.git_commit` MUST match the app commit_sha of the
 // build the release references (build.commit_sha), NOT the internal
 // gitops/SoT push commit. The Red Team observed:
@@ -438,12 +438,12 @@ func TestStatus_ActiveReleaseGitCommitMatchesBuildCommitSHA(t *testing.T) {
 	}
 }
 
-// Red Team loopzero-cloud#70/#62 closure: when the queried environment has no
+// Red Team loop-console#70/#62 closure: when the queried environment has no
 // last_build AND no active_release, the response MUST list any sibling
 // environments that DO have a SUCCEEDED build under `other_envs_with_releases`
 // so the CLI / dashboard can render an honest hint instead of an empty void.
 //
-// Before this closure, `loopzero status` (and the project overview card)
+// Before this closure, `loopscale status` (and the project overview card)
 // defaulted to env=production and rendered "no deployments yet" — even
 // when the user had a successful preview deploy. That misled adopters into
 // thinking nothing had been built, contradicting the BUILD page that listed

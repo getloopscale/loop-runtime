@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package scrub maps internal infrastructure identifiers to user-facing
 // product language before they leave the API boundary. Per Cross-Project
-// Rule 9 (loopzero/CLAUDE.md), internal terms NEVER reach user-facing output:
+// Rule 9 (loop-runtime/CLAUDE.md), internal terms NEVER reach user-facing output:
 // the scrub runs server-side at WRITE time (per plan ADR D4), so the SSE
 // event store never holds an unscrubbed term.
 //
@@ -61,8 +61,8 @@ var canonicalScrubRules = []scrubRule{
 	{regexp.MustCompile(`(?i)\bkubebuilder\b`), "the platform"},
 	{regexp.MustCompile(`(?i)\benvtest\b`), "the platform"},
 	// Server paths and source archives.
-	{regexp.MustCompile(`/tmp/loopzero-[a-zA-Z0-9_-]+/[^\s'"` + "`" + `]*`), "<server tmp>"},
-	{regexp.MustCompile(`/tmp/loopzero-[a-zA-Z0-9_-]+`), "<server tmp>"},
+	{regexp.MustCompile(`/tmp/loop-runtime-[a-zA-Z0-9_-]+/[^\s'"` + "`" + `]*`), "<server tmp>"},
+	{regexp.MustCompile(`/tmp/loop-runtime-[a-zA-Z0-9_-]+`), "<server tmp>"},
 	{regexp.MustCompile(`(?i)\bgit\s+bundle\b`), "<source archive>"},
 	{regexp.MustCompile(`(?i)\bbundle\b`), "<source archive>"},
 	// Stores and delivery.
@@ -96,7 +96,7 @@ var canonicalScrubRules = []scrubRule{
 }
 
 // ScrubEventWithCount is the counted variant used by the aggregator to
-// feed loopzero_deploy_timeline_scrub_replacements_total. The integer is
+// feed loop_runtime_deploy_timeline_scrub_replacements_total. The integer is
 // the total number of regex-pattern matches replaced across all four
 // fields. Pure function — safe to call from any goroutine.
 func ScrubEventWithCount(in PhaseEvent) (PhaseEvent, int) {
@@ -119,7 +119,7 @@ func ScrubEventWithCount(in PhaseEvent) (PhaseEvent, int) {
 // narrower rule would have rewritten more precisely).
 //
 // Returns the rewritten string AND the count of replacements applied —
-// callers feed this count to the loopzero_deploy_timeline_scrub_replacements_total
+// callers feed this count to the loop_runtime_deploy_timeline_scrub_replacements_total
 // metric (T5.2 wiring + closes HIGH H2 dead-metric finding from review).
 func applyAll(s string) (string, int) {
 	replacements := 0

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // Package integration tests rollback behavior with real PostgreSQL.
 //
@@ -26,16 +26,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getloopscale/loopzero/api/internal/lock"
-	"github.com/getloopscale/loopzero/api/internal/release"
+	"github.com/getloopscale/loop-runtime/api/internal/lock"
+	"github.com/getloopscale/loop-runtime/api/internal/release"
 
-	"github.com/getloopscale/loopzero/api/internal/deploycontracts"
+	"github.com/getloopscale/loop-runtime/api/internal/deploycontracts"
 
-	"github.com/getloopscale/loopzero/api/internal/db/store"
+	"github.com/getloopscale/loop-runtime/api/internal/db/store"
 
-	"github.com/getloopscale/loopzero/api/internal/db"
-	"github.com/getloopscale/loopzero/api/internal/db/dbtx"
-	"github.com/getloopscale/loopzero/pkg/statemachine"
+	"github.com/getloopscale/loop-runtime/api/internal/db"
+	"github.com/getloopscale/loop-runtime/api/internal/db/dbtx"
+	"github.com/getloopscale/loop-runtime/pkg/statemachine"
 )
 
 // rollbackTenant is the tenant every rollback fixture belongs to.
@@ -54,6 +54,14 @@ func (fakeRollbackDelivery) Activate(context.Context, deploycontracts.Activation
 
 func (fakeRollbackDelivery) Rollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
 	return nil
+}
+
+func (fakeRollbackDelivery) AwaitRollback(context.Context, deploycontracts.RollbackDeliveryRequest) error {
+	return nil
+}
+
+func (fakeRollbackDelivery) RollbackConverged(context.Context, deploycontracts.RollbackDeliveryRequest) (bool, error) {
+	return true, nil
 }
 
 // --- Rollback-specific test data ---
@@ -185,6 +193,7 @@ func TestRollback_SupersedesPreviousActiveRelease(t *testing.T) {
 		CorrelationID: "corr-rollback-test",
 		UserID:        "user-test",
 	})
+	orch.Wait() // the release state settles after the answer
 
 	// Assert: no error
 	if err != nil {
@@ -309,6 +318,7 @@ func TestConcurrentRollbacks_ExactlyOneSucceeds(t *testing.T) {
 				CorrelationID: fmt.Sprintf("corr-concurrent-%d", idx),
 				UserID:        "user-test",
 			})
+			orch.Wait()
 
 			results[idx] = rollbackResult{result: res, err: err}
 		}(i)

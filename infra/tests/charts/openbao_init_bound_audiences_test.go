@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 // R2 of plan dev-public-cross-cluster-secrets (issue #111) — sponsor
 // approved 2026-06-19. Extends the `openbao-init` chart's

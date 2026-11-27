@@ -41,7 +41,7 @@ tasks:
       # target kept pointing at the old home and had been failing ever since,
       # unseen because nothing asserted the PACKAGE PATTERN of a `go test` —
       # only the `cd` argument, and `pkg` still exists (B-087).
-      - cd cmd/loopzero-ops && go test ./internal/quality/deadlineratchet/... -count=1
+      - cd cmd/loop-runtime-ops && go test ./internal/quality/deadlineratchet/... -count=1
 
   service-auth-ed25519:check-rotation-deadline:
     desc: |
@@ -49,37 +49,37 @@ tasks:
       Useful for operator dashboards or pre-merge sanity.
       Exit codes: 0 OK, 1 usage error, 2 blocked.
     cmds:
-      - cd cmd/loopzero-ops && go run . quality service-auth-rotation --root "{{.ROOT_DIR}}"
+      - cd cmd/loop-runtime-ops && go run . quality service-auth-rotation --root "{{.ROOT_DIR}}"
 
   service-auth-ed25519:verify-cluster:
     desc: |
       Operator step 1.5 of the rollout runbook — verify the API + cloud
       deployments are correctly consuming the Ed25519 Secrets.
-      Reads logs of loopzero-api + loopzero-cloud and greps for the expected
+      Reads logs of loop-runtime-api + loop-console and greps for the expected
       bootstrap messages.
 
       Variables:
-        NAMESPACE — defaults to loopzero-system
+        NAMESPACE — defaults to loop-runtime-system
     vars:
-      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+      NAMESPACE: '{{.NAMESPACE | default "loop-runtime-system"}}'
     cmds:
       - echo "=== ExternalSecret status ==="
-      - kubectl get externalsecret loopzero-service-auth-ed25519 -n {{.NAMESPACE}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || echo "not present"
-      - kubectl get externalsecret loopzero-service-auth-ed25519-pub -n {{.NAMESPACE}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || echo "not present"
+      - kubectl get externalsecret loop-runtime-service-auth-ed25519 -n {{.NAMESPACE}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || echo "not present"
+      - kubectl get externalsecret loop-runtime-service-auth-ed25519-pub -n {{.NAMESPACE}} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' || echo "not present"
       - echo ""
-      - echo "=== loopzero-api Ed25519 bootstrap log ==="
-      - kubectl logs -l app=loopzero-api -n {{.NAMESPACE}} --tail=100 | grep -E "service-auth Ed25519|service-auth nonce store" || echo "no bootstrap lines yet"
+      - echo "=== loop-runtime-api Ed25519 bootstrap log ==="
+      - kubectl logs -l app=loop-runtime-api -n {{.NAMESPACE}} --tail=100 | grep -E "service-auth Ed25519|service-auth nonce store" || echo "no bootstrap lines yet"
       - echo ""
-      - echo "=== loopzero-cloud Ed25519 bootstrap log ==="
-      - kubectl logs -l app=loopzero-cloud -n {{.NAMESPACE}} --tail=100 | grep -E "service-auth Ed25519" || echo "no bootstrap lines yet"
+      - echo "=== loop-console Ed25519 bootstrap log ==="
+      - kubectl logs -l app=loop-console -n {{.NAMESPACE}} --tail=100 | grep -E "service-auth Ed25519" || echo "no bootstrap lines yet"
 
   service-auth-ed25519:metrics:
     desc: |
       Operator step 1.5/1.7 of the rollout runbook — dump the live
-      service-auth counters from the loopzero-api pod's /metrics endpoint.
+      service-auth counters from the loop-runtime-api pod's /metrics endpoint.
       Useful for confirming Phase 1 adoption rate without leaving the
       terminal.
     vars:
-      NAMESPACE: '{{.NAMESPACE | default "loopzero-system"}}'
+      NAMESPACE: '{{.NAMESPACE | default "loop-runtime-system"}}'
     cmds:
-      - kubectl exec -n {{.NAMESPACE}} deploy/loopzero-api -- curl -s localhost:9090/metrics 2>/dev/null | grep loopzero_service_auth_signature || echo "counters not yet emitted (no signed traffic seen)"
+      - kubectl exec -n {{.NAMESPACE}} deploy/loop-runtime-api -- curl -s localhost:9090/metrics 2>/dev/null | grep loop_runtime_service_auth_signature || echo "counters not yet emitted (no signed traffic seen)"

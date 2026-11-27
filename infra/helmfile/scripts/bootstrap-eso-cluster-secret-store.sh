@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # CHG-2026-04-29-DOGFOOD-REAL-E2E — Phase 5 follow-up
 #
-# Provisions the ESO ClusterSecretStore `loopzero-core-store` on the runtime cluster
+# Provisions the ESO ClusterSecretStore `loop-runtime-core-store` on the runtime cluster
 # (parity with Pulumi runtime-bootstrap.ts). Without it, any pod with a
 # secret declared in loopzero.yaml stays in CreateContainerConfigError because
 # ESO cannot sync Secrets from mgmt into the tenant ns.
 #
 # Resources created:
-#   1. ServiceAccount `eso-secret-reader` in the mgmt cluster (ns loopzero-system)
-#   2. Role + RoleBinding scoped to [secrets get/list/watch] in loopzero-system
+#   1. ServiceAccount `eso-secret-reader` in the mgmt cluster (ns loop-runtime-system)
+#   2. Role + RoleBinding scoped to [secrets get/list/watch] in loop-runtime-system
 #   3. SA Token Secret (long-lived) — the source of truth for the bearer
 #   4. Secret `core-cluster-token` in the runtime cluster, ns external-secrets,
 #      holding {token, ca} extracted from the SA Token (via base64 round-trip)
-#   5. ClusterSecretStore `loopzero-core-store` on runtime, pointing at the
+#   5. ClusterSecretStore `loop-runtime-core-store` on runtime, pointing at the
 #      mgmt API server with bearer + CA
 #
 # Idempotent — re-running does not change the state (the SA Token is stable).
@@ -21,25 +21,25 @@
 #   bash infra/helmfile/scripts/bootstrap-eso-cluster-secret-store.sh \
 #     [<mgmt-context>] [<runtime-context>]
 #
-#   defaults: k3d-loopzero-core + k3d-loopzero-cell-0
+#   defaults: k3d-loop-runtime-core + k3d-loop-runtime-cell-0
 #
 # SPDX-License-Identifier: Apache-2.0
 
 set -euo pipefail
 
-MGMT_CTX="${1:-k3d-loopzero-core}"
-RUNTIME_CTX="${2:-k3d-loopzero-cell-0}"
-PLATFORM_NS="loopzero-system"
+MGMT_CTX="${1:-k3d-loop-runtime-core}"
+RUNTIME_CTX="${2:-k3d-loop-runtime-cell-0}"
+PLATFORM_NS="loop-runtime-system"
 ESO_NS="external-secrets"
 SA_NAME="eso-secret-reader"
 TOKEN_SECRET="${SA_NAME}-token"
-CSS_NAME="loopzero-core-store"
+CSS_NAME="loop-runtime-core-store"
 
 log() { printf '[bootstrap-eso-css] %s\n' "$*" >&2; }
 fail() { printf '[bootstrap-eso-css] FAIL: %s\n' "$*" >&2; exit 1; }
 
 # ----------------------------------------------------------------------------
-# Step 1 — ServiceAccount + RBAC (mgmt cluster, scoped to loopzero-system secrets)
+# Step 1 — ServiceAccount + RBAC (mgmt cluster, scoped to loop-runtime-system secrets)
 # ----------------------------------------------------------------------------
 log "creating ServiceAccount + Role + RoleBinding on $MGMT_CTX (ns=$PLATFORM_NS)"
 
@@ -50,7 +50,7 @@ metadata:
   name: $SA_NAME
   namespace: $PLATFORM_NS
   labels:
-    app.kubernetes.io/managed-by: loopzero-bootstrap
+    app.kubernetes.io/managed-by: loop-runtime-bootstrap
     app.kubernetes.io/component: eso-source
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -59,7 +59,7 @@ metadata:
   name: $SA_NAME
   namespace: $PLATFORM_NS
   labels:
-    app.kubernetes.io/managed-by: loopzero-bootstrap
+    app.kubernetes.io/managed-by: loop-runtime-bootstrap
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -71,7 +71,7 @@ metadata:
   name: $SA_NAME
   namespace: $PLATFORM_NS
   labels:
-    app.kubernetes.io/managed-by: loopzero-bootstrap
+    app.kubernetes.io/managed-by: loop-runtime-bootstrap
 subjects:
   - kind: ServiceAccount
     name: $SA_NAME
@@ -144,7 +144,7 @@ metadata:
   name: core-cluster-token
   namespace: $ESO_NS
   labels:
-    app.kubernetes.io/managed-by: loopzero-bootstrap
+    app.kubernetes.io/managed-by: loop-runtime-bootstrap
     app.kubernetes.io/component: eso-source
 stringData:
   token: $(printf '%s' "$DECODED_TOKEN")
@@ -161,7 +161,7 @@ kind: ClusterSecretStore
 metadata:
   name: $CSS_NAME
   labels:
-    app.kubernetes.io/managed-by: loopzero-bootstrap
+    app.kubernetes.io/managed-by: loop-runtime-bootstrap
 spec:
   provider:
     kubernetes:

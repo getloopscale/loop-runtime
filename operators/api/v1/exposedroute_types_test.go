@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Copyright 2025-2026 The LoopZero Authors
+// Copyright 2025-2026 The LoopRuntime Authors
 
 package v1
 
@@ -45,7 +45,7 @@ func TestExposedRoute_SpecFields(t *testing.T) {
 	route := ExposedRoute{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "web-route",
-			Namespace: "loopzero-acme-production",
+			Namespace: "loop-runtime-acme-production",
 		},
 		Spec: ExposedRouteSpec{
 			ApplicationRef: "my-app",

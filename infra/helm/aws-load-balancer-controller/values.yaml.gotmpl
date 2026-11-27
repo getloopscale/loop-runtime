@@ -1,0 +1,35 @@
+# AWS Load Balancer Controller (eks/aws-load-balancer-controller), installed on every
+# cluster of an environment with profile.awsLoadBalancerController. The helmfile adds the
+# cluster name and the IRSA annotation of that cluster's role.
+#
+# Region and VPC are set rather than discovered: discovery reads the instance metadata
+# service, which a pod reaches only when the node allows a second IMDSv2 hop.
+region: {{ .Values.aws.region | quote }}
+vpcId: {{ env "LOOP_RUNTIME_VPC_ID" | quote }}
+
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: aws-load-balancer-controller
+
+# The platform's edge is an ALB in front of Traefik (the Ingress lives with the Traefik
+# release); Services of type LoadBalancer are not used, so the mutating webhook that
+# rewrites them is not needed.
+enableServiceMutatorWebhook: false
+
+# Without cert-manager the chart generates the webhook's CA and serving certificate, and
+# by default a new pair on every upgrade. The running controller keeps serving the old
+# certificate until it reloads the Secret, so for that minute the API server refuses
+# every Ingress the same sync creates (`failed calling webhook "vingress.elbv2.k8s.aws"
+# ... x509: certificate signed by unknown authority`). Reusing the Secret keeps the pair
+# the controller already serves.
+keepTLSSecret: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
