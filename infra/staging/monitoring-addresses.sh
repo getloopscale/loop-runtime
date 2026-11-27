@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2025-2026 The LoopRuntime Authors
 #
-# monitoring-addresses.sh <loki|metrics|core-api> [--wait <seconds>]
+# monitoring-addresses.sh <loki|metrics|core-api|cell-origins> [--wait <seconds>]
 #
 # Prints, as shell exports for `eval`, the DNSNames of the internal ALBs staging's
 # monitoring and the cells' secret broker are reached through. The AWS Load Balancer Controller writes each one into
@@ -19,6 +19,11 @@
 #             (loop-runtime-system/loop-runtime-api-secret-fetch), read after the core sync, for
 #             the broker store of the cells (cell.helmfile release loop-runtime-broker).
 #
+#   cell-origins  LOOP_RUNTIME_CELL_ORIGINS: `<cell>=<DNSName>,...`, the public load
+#             balancer of each cell (traefik/traefik-edge), read after the cells, for the
+#             custom domain fleet on core (core.helmfile release loop-edge), which proxies
+#             a host to the cell that serves it.
+#
 # Each value is printed double-quoted and unescaped: `published` admits only DNS name
 # characters, and Task's shell interpreter keeps the backslashes `printf %q` would put
 # before a comma, which ended up inside the scrape paths (deploy of a49a25d).
@@ -34,7 +39,7 @@
 #   CELL_CONTEXTS   the cells, space-separated (default: "cell-0 cell-1")
 set -euo pipefail
 
-USAGE="usage: $0 <loki|metrics|core-api> [--wait <seconds>]"
+USAGE="usage: $0 <loki|metrics|core-api|cell-origins> [--wait <seconds>]"
 WHAT="${1:?$USAGE}"
 WAIT=""
 if [[ $# -ge 2 ]]; then
@@ -108,6 +113,14 @@ case "$WHAT" in
   core-api)
     read_name "$CORE_CONTEXT" loop-runtime-system loop-runtime-api-secret-fetch
     printf 'export LOOP_RUNTIME_CORE_API_ALB_DNS_NAME="%s"\n' "$name"
+    ;;
+  cell-origins)
+    pairs=()
+    for ctx in $CELL_CONTEXTS; do
+      read_name "$ctx" traefik traefik-edge
+      pairs+=("$ctx=$name")
+    done
+    printf 'export LOOP_RUNTIME_CELL_ORIGINS="%s"\n' "$(IFS=,; echo "${pairs[*]}")"
     ;;
   *)
     echo "$USAGE" >&2

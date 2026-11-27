@@ -4,8 +4,10 @@
 package dogfood
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -193,4 +197,76 @@ func (e *Engine) DeleteDomain(ctx context.Context, domain string) error {
 // IsNotFound reports whether err is the API's answer for something that does not exist.
 func IsNotFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "answered HTTP 404")
+}
+
+// EdgeFleetContextEnv names the kubectl context of the cluster that runs loop-edge, the
+// fleet that serves custom domains in production. Where the public edge is something else
+// (the host's Caddy on staging), the journey also asks the fleet for the domain.
+const EdgeFleetContextEnv = "LOOP_RUNTIME_DOGFOOD_EDGE_FLEET_CONTEXT"
+
+const (
+	edgeFleetNamespace = "loop-runtime-system"
+	edgeFleetService   = "service/loop-edge"
+)
+
+var forwardingLine = regexp.MustCompile(`^Forwarding from 127\.0\.0\.1:(\d+) -> \d+`)
+
+// forwardedPort reads the local port from a line `kubectl port-forward` prints.
+func forwardedPort(line string) (string, bool) {
+	m := forwardingLine.FindStringSubmatch(line)
+	if m == nil {
+		return "", false
+	}
+	return m[1], true
+}
+
+// RequestThroughFleet requests https://<domain><path> from the loop-edge Service of the
+// cluster behind kubeContext, through a port-forward, and returns the status.
+//
+// The certificate is not checked. A fleet with no public address issues from its own
+// authority, and this request asks whether the fleet knows the host and reaches its cell;
+// the certificate a visitor sees is checked on the public address.
+func RequestThroughFleet(ctx context.Context, kubeContext, domain, path string) (int, error) {
+	forwardCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	forward := exec.CommandContext(forwardCtx, "kubectl", "--context", kubeContext, "-n", edgeFleetNamespace,
+		"port-forward", edgeFleetService, ":443")
+	stdout, err := forward.StdoutPipe()
+	if err != nil {
+		return 0, fmt.Errorf("port-forward to %s: %w", edgeFleetService, err)
+	}
+	var stderr bytes.Buffer
+	forward.Stderr = &stderr
+	if err := forward.Start(); err != nil {
+		return 0, fmt.Errorf("port-forward to %s: %w", edgeFleetService, err)
+	}
+	defer func() {
+		stop()
+		_ = forward.Wait()
+	}()
+
+	port := ""
+	lines := bufio.NewScanner(stdout)
+	for lines.Scan() {
+		if found, ok := forwardedPort(lines.Text()); ok {
+			port = found
+			break
+		}
+	}
+	if port == "" {
+		return 0, fmt.Errorf("port-forward to %s on %s printed no local port: %s", edgeFleetService, kubeContext, truncate(stderr.String(), 300))
+	}
+
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return dialer.DialContext(ctx, network, net.JoinHostPort("127.0.0.1", port))
+			},
+			TLSClientConfig: &tls.Config{ServerName: domain, InsecureSkipVerify: true}, // #nosec G402 -- see the function's comment
+		},
+	}
+	defer client.CloseIdleConnections()
+	return CallApp(ctx, client, "https://"+domain, path)
 }

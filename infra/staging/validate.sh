@@ -75,8 +75,8 @@ export LOOP_RUNTIME_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 #     ready-replicas metric, and an autoscaling range whose HPA reads CPU and memory.
 #     Its last step attaches a custom domain ($LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN) to the
 #     app: the domain is verified through DNS, serves the app over HTTPS with a
-#     certificate the edge obtains, has that certificate recorded by the API, and stops
-#     serving once removed.
+#     certificate the edge obtains, is served by the loop-edge fleet on the core cluster
+#     as well, has that certificate recorded by the API, and stops serving once removed.
 #     It needs kubectl and the cell contexts (run_suite).
 # Left out, because staging does not run what they need:
 #   j06 j08 j09 j17 j19 j20 j21 j23 j25: read the canonical `sample` project, which the
@@ -97,6 +97,9 @@ export LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN="${LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN:
 export LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE="${LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE:-getloopscale.com}"
 export LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD="${LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD:-_loopscale-verify.staging-validate.staging}"
 export LOOP_RUNTIME_DOGFOOD_DNS_TOKEN_FILE="${LOOP_RUNTIME_DOGFOOD_DNS_TOKEN_FILE:-/etc/loop-runtime-edge/hostinger-api-token}"
+# The cluster that runs loop-edge, the fleet that serves custom domains in production. On
+# staging the host's Caddy is the public edge, so the journey asks the fleet through kubectl.
+export LOOP_RUNTIME_DOGFOOD_EDGE_FLEET_CONTEXT="${LOOP_RUNTIME_DOGFOOD_EDGE_FLEET_CONTEXT:-core}"
 
 # The kubectl contexts of the cells: the app lifecycle journey reads the app's Rollout
 # from the one that runs it.

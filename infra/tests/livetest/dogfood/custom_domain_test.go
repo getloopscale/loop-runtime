@@ -142,3 +142,16 @@ func TestEngine_DomainCallsCarryAnIdempotencyKeyAndDecodeTheRecords(t *testing.T
 		t.Errorf("a missing domain answered %v, want a not-found error", err)
 	}
 }
+
+func TestForwardedPort_ReadsThePortKubectlChose(t *testing.T) {
+	port, ok := forwardedPort("Forwarding from 127.0.0.1:43127 -> 8443")
+	if !ok || port != "43127" {
+		t.Errorf("forwardedPort = %q, %v; want 43127", port, ok)
+	}
+	if _, ok := forwardedPort("Forwarding from [::1]:43127 -> 8443"); ok {
+		t.Error("the IPv6 line was taken for the address the request dials")
+	}
+	if _, ok := forwardedPort("error: unable to forward port"); ok {
+		t.Error("an error line was taken for a forwarded port")
+	}
+}

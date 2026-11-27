@@ -108,6 +108,8 @@ platformImages:
     loop-runtime-clone-runner: "develop-3e93755"
     loop-runtime-syft-scanner: "develop-3e93755"
     loop-runtime-cosign-signer: "develop-3e93755"
+    # The first build that runs without privileges (#216).
+    loop-edge: "develop-a5438af"
     # getloopscale/loop-console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopRuntimeCloud is on.
     loop-console: "develop-8d41c35"
@@ -243,6 +245,19 @@ dashboardRoute:
 # production environment has no `emulator:` block.
 emulator:
   endpoint: "https://172.29.0.1:9597"
+
+# loop-edge, the fleet that serves tenants' custom domains in production, on the core
+# cluster. Staging only: the host's Caddy (infra/staging/edge) holds ports 80 and 443 of
+# the one public address, so the fleet has no load balancer and no ACME authority can
+# reach it; it issues from Caddy's own authority. Every deploy still proves the image, the
+# certificate store the pods share and the proxying to the cells. Production sets
+# `issuer: acme`, an `acmeEmail` and no `serviceType`.
+customDomainEdge:
+  enabled: true
+  issuer: internal
+  serviceType: ClusterIP
+  platformDomains:
+    - getloopscale.com
 
 profile:
   highAvailability: false       # multi-replica Gitea on NFS (values-ha.yaml), distributed MinIO, KEDA HA overlays

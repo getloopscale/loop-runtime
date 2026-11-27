@@ -16,7 +16,8 @@
 //	step 4  a line the app logs arrives on the runtime log stream
 //	step 5  the metrics endpoint answers the app's ready replicas
 //	step 7  a custom domain goes from added to serving the app over HTTPS, the
-//	        API records its certificate, and a removed domain stops serving
+//	        loop-edge fleet serves it too, the API records its certificate, and a
+//	        removed domain stops serving
 //
 // The app is fixtures/env-probe, a node server with no dependency. The journey
 // uses its own project (ProbeProject) and creates what it needs, so it runs on
@@ -36,6 +37,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -413,6 +415,18 @@ var _ = Describe("App lifecycle", Ordered, Label("live", "dogfood", "app-lifecyc
 
 		must("", WaitFor(ctx, "step 7: GET https://"+domain+"/health answers 200 with a valid certificate", domainServeTimeout, pollInterval, func(ctx context.Context) (bool, string) {
 			status, err := CallApp(ctx, visitor, "https://"+domain, "/health")
+			if err != nil {
+				return false, err.Error()
+			}
+			return status == http.StatusOK, fmt.Sprintf("HTTP %d", status)
+		}))
+
+		// The fleet that serves custom domains in production runs here too, behind no public
+		// address. It has to know the host and reach its cell like the public edge does.
+		fleetContext := os.Getenv(EdgeFleetContextEnv)
+		Expect(fleetContext).ToNot(BeEmpty(), "step 7: "+EdgeFleetContextEnv+" names no cluster; infra/staging/validate.sh sets it")
+		must("", WaitFor(ctx, "step 7: the loop-edge fleet on "+fleetContext+" serves https://"+domain+"/health", domainServeTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			status, err := RequestThroughFleet(ctx, fleetContext, domain, "/health")
 			if err != nil {
 				return false, err.Error()
 			}

@@ -817,6 +817,69 @@ releases:
 {{- end }}
 {{- end }}
 
+  # The Caddy fleet that serves tenants' custom domains (charts/loop-edge,
+  # docs/decisions/2026-11-26-customer-domains-at-the-edge.md). Each cell's origin is the
+  # host its load balancer answers for: customDomainEdge.cells where the names are fixed,
+  # and LOOP_RUNTIME_CELL_ORIGINS (`<cell>=<host>,...`) where a deploy reads them.
+  - name: loop-edge
+    namespace: loop-runtime-system
+    chart: ../../charts/loop-edge
+    installed: {{ .Values | get "customDomainEdge.enabled" false }}
+    values:
+{{- if .Values | get "customDomainEdge.enabled" false }}
+{{- $cells := dict }}
+{{- range $cell, $origin := (.Values | get "customDomainEdge.cells" dict) }}
+{{- $_ := set $cells $cell $origin }}
+{{- end }}
+{{- range (env "LOOP_RUNTIME_CELL_ORIGINS" | splitList ",") }}
+{{- if . }}
+{{- $pair := splitList "=" . }}
+{{- $_ := set $cells (index $pair 0) (index $pair 1) }}
+{{- end }}
+{{- end }}
+      - image:
+          registry: {{ required "platformImages.registry is not set" .Values.platformImages.registry | trimSuffix "/" | quote }}
+          tag: {{ required "platformImages.tags.loop-edge is not set: pin the image CI published" (index .Values.platformImages.tags "loop-edge") | quote }}
+        platformDomains:
+          {{- toYaml (required "customDomainEdge.platformDomains is not set" (.Values | get "customDomainEdge.platformDomains" list)) | nindent 10 }}
+        acme:
+          issuer: {{ .Values | get "customDomainEdge.issuer" "acme" | quote }}
+          email: {{ .Values | get "customDomainEdge.acmeEmail" "" | quote }}
+        storage:
+          host: {{ env "LOOP_RUNTIME_CACHE_HOST" | quote }}
+          port: {{ env "LOOP_RUNTIME_CACHE_PORT" | default "6379" }}
+          # Written by the aws-secrets-manager release.
+          passwordSecret:
+            name: loop-edge-store
+            key: token
+{{- if .Values | get "emulator.endpoint" "" }}
+          caConfigMap:
+            name: loop-edge-emulator-ca
+            key: ca.pem
+{{- end }}
+        cells:
+          {{- toYaml $cells | nindent 10 }}
+{{- with .Values | get "emulator.endpoint" "" }}
+        # Staging only (environments/staging.yaml `emulator:`): the emulator serves every
+        # load balancer at its own endpoint and tells them apart by Host, with a
+        # certificate of its own authority for the name localhost. `task staging:platform`
+        # writes that authority into the ConfigMap.
+        upstream:
+          address: {{ . | trimPrefix "https://" | quote }}
+          hostHeader: origin
+          tls:
+            serverName: localhost
+            caConfigMap:
+              name: loop-edge-emulator-ca
+              key: ca.pem
+{{- end }}
+{{- with .Values | get "customDomainEdge.serviceType" "" }}
+        service:
+          type: {{ . | quote }}
+          annotations: {}
+{{- end }}
+{{- end }}
+
   # Traefik IngressRoutes for the public hostnames no chart owns: login on the auth host
   # (Kratos and Hydra) and, with loop-console, the console on the app host. Where the
   # edge passes every hostname to Traefik (staging's ALB); see infra/helm/public-routes.

@@ -117,7 +117,7 @@ func TestStagingSyncsTheApiAgainOnceTheLokiALBIsKnown(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	firstCore := strings.Index(text, "helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl")
+	firstCore := strings.Index(text, "helmfile --selector 'name!=promtail,name!=loop-edge' -f infra/helmfile/core.helmfile.yaml.gotmpl")
 	earlyLoki := strings.Index(text, `eval "$(bash infra/staging/monitoring-addresses.sh loki)"`)
 	if firstCore < 0 || earlyLoki < 0 || earlyLoki > firstCore {
 		t.Errorf("the previous deploy's Loki ALB is not read before the first core sync (loki read at %d, core sync at %d)", earlyLoki, firstCore)
@@ -136,7 +136,7 @@ func TestStagingReadsTheCoreAPIALBBetweenTheCoreAndCellSyncs(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-	firstCore := strings.Index(text, "helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl")
+	firstCore := strings.Index(text, "helmfile --selector 'name!=promtail,name!=loop-edge' -f infra/helmfile/core.helmfile.yaml.gotmpl")
 	read := strings.Index(text, `eval "$(bash infra/staging/monitoring-addresses.sh core-api --wait `)
 	cells := strings.Index(text, "helmfile -f infra/helmfile/cell.helmfile.yaml.gotmpl")
 	if firstCore < 0 || read < 0 || cells < 0 || !(firstCore < read && read < cells) {
