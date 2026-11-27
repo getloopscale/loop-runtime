@@ -13,9 +13,14 @@ FROM mirror.gcr.io/library/caddy:2.11.9-builder@sha256:cda07fe9d82728c7ac44d8443
 
 ARG CADDY_VERSION=v2.11.9
 ARG STORAGE_REDIS_VERSION=v1.9.0
+# Caddy v2.11.9 requires golang.org/x/net v0.60.0, which trivy reports for CVE-2026-78661
+# (HIGH, fixed in v0.62.0; measured 2026-11-27). Drop this when a Caddy release requires
+# v0.62.0 or newer.
+ARG X_NET_VERSION=v0.62.0
 
 RUN xcaddy build "${CADDY_VERSION}" \
       --with "github.com/pberkel/caddy-storage-redis@${STORAGE_REDIS_VERSION}" \
+      --replace "golang.org/x/net=golang.org/x/net@${X_NET_VERSION}" \
       --output /out/caddy \
     && /out/caddy version \
     && /out/caddy list-modules | grep -q '^caddy.storage.redis$'
