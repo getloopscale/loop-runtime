@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getloopscale/loop-runtime/api/internal/domains"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
 
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
@@ -130,7 +131,7 @@ func (h *DomainHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Environment: domain.Environment,
 		Status:      domain.Status,
 		Verification: &domainVerificationInfo{
-			TXTName:  "_loop-runtime-verify." + domain.Domain,
+			TXTName:  domains.VerificationTXTName(domain.Domain),
 			TXTValue: token,
 		},
 		CNAMETarget: h.cnameTarget,
