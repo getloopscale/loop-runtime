@@ -84,3 +84,21 @@ func TestBuildPromQL_OtherSignalsIntact(t *testing.T) {
 		t.Errorf("unknown signal must fall through to up{}, got: %s", q)
 	}
 }
+
+// The resource signals read what the app's containers use and the ceiling they fill.
+// A limit is the sum over the pods, the same scope as the usage, so the two divide.
+func TestBuildPromQL_ReadsTheResourceSeriesRecordedPerTenantApp(t *testing.T) {
+	const labels = `tenant_id="tn-1",project="shop",environment="production"`
+	cases := map[string]string{
+		"cpu_usage":    `sum(loop_runtime_app:container_cpu_usage_seconds:rate5m{` + labels + `})`,
+		"memory_usage": `sum(loop_runtime_app:container_memory_working_set_bytes:sum{` + labels + `})`,
+		"cpu_limit":    `sum(loop_runtime_app_resource:kube_pod_container_resource_limits:sum{resource="cpu",` + labels + `})`,
+		"memory_limit": `sum(loop_runtime_app_resource:kube_pod_container_resource_limits:sum{resource="memory",` + labels + `})`,
+		"restarts_1h":  `sum(loop_runtime_app:kube_pod_container_status_restarts:increase1h{` + labels + `})`,
+	}
+	for signal, want := range cases {
+		if got := buildPromQL(signal, "tn-1", "shop", "production"); got != want {
+			t.Errorf("%s:\n got  %s\n want %s", signal, got, want)
+		}
+	}
+}

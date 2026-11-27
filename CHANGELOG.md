@@ -13,6 +13,7 @@ to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `GET /projects/{name}/metrics` answers five more signals for an environment of a project: `cpu_usage` and `cpu_limit` in cores, `memory_usage` and `memory_limit` in bytes, and `restarts_1h`. Each is summed over the pods of the app. The cells record the series from cAdvisor and kube-state-metrics.
 
 - `loopzero-ops drill postgres-restore` proves that the platform's PostgreSQL recovers from its backups: it writes a marker, recovers a temporary cluster from the bucket, compares and deletes it. Staging runs it after every nightly rebuild and reports the commit status `staging/restore-drill` and the alarm `restore-drill` (#186).
 - The core Prometheus scrapes the platform's PostgreSQL and staging loads ten alerts for it (instance down, WAL archive, base backups, volume, replication, transaction ID age, connections), each with a runbook entry. Promtail ships the logs of `loopzero-data-plane` and `cnpg-system` to Loki (#182).
