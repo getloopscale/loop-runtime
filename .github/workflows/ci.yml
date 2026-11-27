@@ -385,6 +385,24 @@ jobs:
           helmfile --version
           helm version --short
 
+      # The chart tests run the cells' recording rules through promtool and skip without
+      # it, so until this step no workflow evaluated the rules.
+      - name: promtool (pinned, SHA-256 verified)
+        env:
+          PROMETHEUS_VERSION: 2.55.1
+          PROMETHEUS_SHA256: 19700bdd42ec31ee162e4079ebda4cd0a44432df4daa637141bdbea4b1cd8927
+        run: |
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/prometheus"
+          archive="prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz"
+          mkdir -p "${dir}"
+          curl -fsSL --retry 3 -o "${dir}/${archive}" \
+            "https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/${archive}"
+          echo "${PROMETHEUS_SHA256}  ${dir}/${archive}" | sha256sum -c -
+          tar -xzf "${dir}/${archive}" -C "${dir}" --strip-components=1 "prometheus-${PROMETHEUS_VERSION}.linux-amd64/promtool"
+          sudo install -m 0755 "${dir}/promtool" /usr/local/bin/promtool
+          promtool --version
+
       # The dogfood package holds the staging journeys. Without the `live` tag only its
       # offline tests run: they check the probe app the journeys embed and the client
       # they drive, so a broken fixture fails here and not on the staging host.
