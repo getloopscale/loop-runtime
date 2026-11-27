@@ -18,7 +18,11 @@ ARG STORAGE_REDIS_VERSION=v1.9.0
 # v0.62.0 or newer.
 ARG X_NET_VERSION=v0.62.0
 
-RUN xcaddy build "${CADDY_VERSION}" \
+# The builder image sets XCADDY_SETCAP=1, which makes xcaddy give the binary the
+# cap_net_bind_service file capability. Caddy listens on unprivileged ports here, and a
+# container that runs with no capability and no privilege escalation cannot start a binary
+# that carries one.
+RUN XCADDY_SETCAP=0 xcaddy build "${CADDY_VERSION}" \
       --with "github.com/pberkel/caddy-storage-redis@${STORAGE_REDIS_VERSION}" \
       --replace "golang.org/x/net=golang.org/x/net@${X_NET_VERSION}" \
       --output /out/caddy \

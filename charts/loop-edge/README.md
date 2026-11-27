@@ -15,6 +15,7 @@ refused before a certificate is asked for.
   Stock Caddy refuses the configuration this chart writes.
 - A Redis or Valkey every pod reaches. Certificates, ACME accounts and the locks that keep
   two pods from asking for the same certificate live there, so pods hold no state.
+  When a private authority signs the store's certificate, `storage.caConfigMap` names it.
 - The Secret with the bearer loop-runtime-api expects on the route lookup
   (`loop-runtime-edge-route-token` by default).
 - A load balancer that passes TCP 80 and 443 through. The default Service annotations ask the
