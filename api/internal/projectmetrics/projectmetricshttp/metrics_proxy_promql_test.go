@@ -11,7 +11,7 @@ import (
 // instrument, so kube_deployment_status_replicas_ready and http_requests_total
 // hold nothing for it (getloopscale/loop-runtime#107).
 func TestBuildPromQL_ReadsTheSeriesRecordedPerTenantApp(t *testing.T) {
-	const labels = `tenant_id="tn-1",project="shop"`
+	const labels = `tenant_id="tn-1",project="shop",environment="production"`
 	cases := map[string]string{
 		"replicas_ready": `sum(loop_runtime_app:kube_pod_status_ready:sum{` + labels + `})`,
 		"p95_latency":    `histogram_quantile(0.95, sum by (le) (loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m{` + labels + `}))`,
@@ -20,7 +20,7 @@ func TestBuildPromQL_ReadsTheSeriesRecordedPerTenantApp(t *testing.T) {
 			` / sum(loop_runtime_app:traefik_service_requests:rate5m{` + labels + `}) * 100`,
 	}
 	for signal, want := range cases {
-		if got := buildPromQL(signal, "tn-1", "shop"); got != want {
+		if got := buildPromQL(signal, "tn-1", "shop", "production"); got != want {
 			t.Errorf("%s:\n got  %s\n want %s", signal, got, want)
 		}
 	}
@@ -30,11 +30,11 @@ func TestBuildPromQL_ReadsTheSeriesRecordedPerTenantApp(t *testing.T) {
 // project with several apps, environments or cells must come back as one.
 func TestBuildPromQL_TenantAppSignalsAggregateToOneSeries(t *testing.T) {
 	for _, signal := range []string{"replicas_ready", "rps"} {
-		if q := buildPromQL(signal, "t", "p"); !strings.HasPrefix(q, "sum(") {
+		if q := buildPromQL(signal, "t", "p", "production"); !strings.HasPrefix(q, "sum(") {
 			t.Errorf("%s is not aggregated to one series: %s", signal, q)
 		}
 	}
-	if q := buildPromQL("p95_latency", "t", "p"); !strings.Contains(q, "sum by (le) (") {
+	if q := buildPromQL("p95_latency", "t", "p", "production"); !strings.Contains(q, "sum by (le) (") {
 		t.Errorf("p95_latency does not merge the buckets of every app by le: %s", q)
 	}
 }
@@ -43,7 +43,7 @@ func TestBuildPromQL_TenantAppSignalsAggregateToOneSeries(t *testing.T) {
 // ratio of 5xx to all requests times 100. An app that served traffic and no 5xx
 // has no 5xx series at all; it reads 0, not an empty result.
 func TestBuildPromQL_ErrorRate_IsAPercentageThatReadsZeroWithoutErrors(t *testing.T) {
-	q := buildPromQL("error_rate", "tn-1", "app")
+	q := buildPromQL("error_rate", "tn-1", "app", "production")
 
 	if !strings.HasSuffix(q, "* 100") {
 		t.Errorf("error_rate must be a percentage (ratio times 100), got: %s", q)
@@ -61,7 +61,7 @@ func TestBuildPromQL_ErrorRate_IsAPercentageThatReadsZeroWithoutErrors(t *testin
 
 // Label values are quoted, so a value cannot close the selector and widen it.
 func TestBuildPromQL_QuotesLabelValues(t *testing.T) {
-	q := buildPromQL("rps", `tn-1"}`, `shop",tenant_id=~".+`)
+	q := buildPromQL("rps", `tn-1"}`, `shop",tenant_id=~".+`, "production")
 	if !strings.Contains(q, `tenant_id="tn-1\"}"`) || !strings.Contains(q, `project="shop\",tenant_id=~\".+"`) {
 		t.Errorf("label values are not escaped: %s", q)
 	}
@@ -75,12 +75,12 @@ func TestBuildPromQL_OtherSignalsIntact(t *testing.T) {
 		"last_deploy_time": "loop_runtime_release_last_deploy_timestamp_seconds{",
 	}
 	for signal, want := range cases {
-		if q := buildPromQL(signal, "t", "p"); !strings.Contains(q, want) {
+		if q := buildPromQL(signal, "t", "p", "production"); !strings.Contains(q, want) {
 			t.Errorf("%s query changed: want substring %q, got: %s", signal, want, q)
 		}
 	}
 	// Unknown signal falls through to a safe up{} query.
-	if q := buildPromQL("bogus", "t", "p"); !strings.Contains(q, "up{") {
+	if q := buildPromQL("bogus", "t", "p", "production"); !strings.Contains(q, "up{") {
 		t.Errorf("unknown signal must fall through to up{}, got: %s", q)
 	}
 }

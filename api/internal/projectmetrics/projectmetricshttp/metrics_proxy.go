@@ -19,6 +19,7 @@ import (
 
 	"github.com/getloopscale/loop-runtime/api/internal/httpio"
 	"github.com/getloopscale/loop-runtime/api/internal/ports"
+	"github.com/getloopscale/loop-runtime/api/internal/validation"
 
 	"github.com/go-chi/chi/v5"
 
@@ -142,10 +143,21 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 		rangeStr = "7d"
 	}
 
+	// A project has one series per environment. With none named the answer is for
+	// production, as GET /projects/{name}/status answers.
+	environment := r.URL.Query().Get("env")
+	if environment == "" {
+		environment = defaultMetricsEnvironment
+	}
+	if err := validation.ValidateEnvironmentName(environment); err != nil {
+		httpio.WriteLoopRuntimeError(w, loopruntimeerrors.ErrInvalidName.Wrap(err.Error()))
+		return
+	}
+
 	// EC-2 absorption: PromQL is built server-side with tenant_id + project
 	// labels derived from session ctx, NOT from URL. The signal parameter
 	// chooses the query template; the labels are mandatory.
-	promQL := buildPromQL(signal, uc.TenantID, name)
+	promQL := buildPromQL(signal, uc.TenantID, name, environment)
 
 	end := time.Now().Unix()
 	rangeDur := parseMetricsRange(rangeStr)
@@ -199,6 +211,9 @@ func (h *MetricsProxyHandler) Get(w http.ResponseWriter, r *http.Request) {
 // carries tenant_id, project, app and environment. A tenant app is an Argo
 // Rollout that LoopScale does not instrument, so its replicas come from pod
 // readiness and its traffic from the cell's ingress (getloopscale/loop-runtime#107).
+// defaultMetricsEnvironment is the environment a request that names none reads.
+const defaultMetricsEnvironment = "production"
+
 const (
 	appReadyReplicasSeries         = "loop_runtime_app:kube_pod_status_ready:sum"
 	appRequestRateSeries           = "loop_runtime_app:traefik_service_requests:rate5m"
@@ -210,21 +225,23 @@ const (
 // query template for the requested signal. EC-2 absorption: labels come from
 // session ctx, NOT URL. Defense against cross-tenant data leak.
 //
-// The tenant app signals aggregate to one series: a project has one series per
-// app, environment and cell, and the client reads the first series of a result.
+// The tenant app signals read one environment and aggregate to one series: an
+// environment has one series per app and cell, and the client reads the first series
+// of a result. Without the environment, production and preview were summed.
 //
 // Unknown signal names fall through to a safe `up{...}` query — the UI never
 // triggers this path (consumers use PromQueryKeys from statusResponse), but
 // any caller bypassing it gets a constrained well-formed query, not panic.
-func buildPromQL(signal, tenantID, projectName string) string {
+func buildPromQL(signal, tenantID, projectName, environment string) string {
 	labels := fmt.Sprintf(`tenant_id=%q,project=%q`, tenantID, projectName)
+	appLabels := fmt.Sprintf(`%s,environment=%q`, labels, environment)
 	switch signal {
 	case "uptime_24h":
 		return fmt.Sprintf("avg_over_time(up{%s}[24h])", labels)
 	case "replicas_ready":
-		return fmt.Sprintf("sum(%s{%s})", appReadyReplicasSeries, labels)
+		return fmt.Sprintf("sum(%s{%s})", appReadyReplicasSeries, appLabels)
 	case "p95_latency":
-		return fmt.Sprintf("histogram_quantile(0.95, sum by (le) (%s{%s}))", appRequestDurationBucketSeries, labels)
+		return fmt.Sprintf("histogram_quantile(0.95, sum by (le) (%s{%s}))", appRequestDurationBucketSeries, appLabels)
 	case "error_rate":
 		// loop-runtime#170: error_rate is displayed as a PERCENTAGE by the dashboard
 		// (SignalGrid fmtPercent). It must be the ratio of 5xx to total requests
@@ -233,9 +250,9 @@ func buildPromQL(signal, tenantID, projectName string) string {
 		// traffic the denominator is empty or zero, the result is empty or NaN,
 		// and the handler maps that to "collecting".
 		return fmt.Sprintf(`(sum(%s{status_class="5xx",%s}) or vector(0)) / sum(%s{%s}) * 100`,
-			appRequestRateByClassSeries, labels, appRequestRateSeries, labels)
+			appRequestRateByClassSeries, appLabels, appRequestRateSeries, appLabels)
 	case "rps":
-		return fmt.Sprintf("sum(%s{%s})", appRequestRateSeries, labels)
+		return fmt.Sprintf("sum(%s{%s})", appRequestRateSeries, appLabels)
 	case "status_terminal":
 		return fmt.Sprintf("loop_runtime_release_status_terminal{%s}", labels)
 	case "alerts_active":
