@@ -98,6 +98,11 @@ config:
   ragBaseUrl: ""
   lensBaseUrl: ""
   traefikMcpBaseUrl: ""
+  # Base URL of the LoopSandbox API (SANDBOX_API_URL). Unset, the console has no
+  # /v1/sandboxes. The sandbox must run with LOOPSANDBOX_AUTH=gateway and trust the
+  # public half of LOOP_RUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY, which the console then
+  # needs: with this URL set and no key it refuses to start.
+  sandboxApiUrl: ""
   # Prometheus the cost aggregator reads; unset, the aggregator does not start
   # (LOOP_RUNTIME_PROMETHEUS_URL).
   prometheusUrl: ""
@@ -206,6 +211,11 @@ networkPolicy:
       ports:
         - protocol: TCP
           port: 13002
+  # The address block and port of the LoopSandbox API, when it runs outside the cluster
+  # (config.sandboxApiUrl). Both set, a second NetworkPolicy lets the console reach it.
+  sandboxApi:
+    cidr: ""
+    port: 0
   extraEgress:
     # Ory Kratos + Hydra
     - ports:

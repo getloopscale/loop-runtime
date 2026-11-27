@@ -78,6 +78,11 @@ export LOOP_RUNTIME_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 #     certificate the edge obtains, is served by the loop-edge fleet on the core cluster
 #     as well, has that certificate recorded by the API, and stops serving once removed.
 #     It needs kubectl and the cell contexts (run_suite).
+#   sandbox: with the token of the validation identity alone, creates a code sandbox
+#     through loop-console's /v1/sandboxes, runs a plain `pip install pandas` in it and
+#     uses the library, checks that it reaches no address inside the platform, then
+#     creates one restricted to pypi.org, sees example.com refused and listed among
+#     the refused connections, and changes the rules while it runs.
 # Left out, because staging does not run what they need:
 #   j06 j08 j09 j17 j19 j20 j21 j23 j25: read the canonical `sample` project, which the
 #     dev seed connects to a fixture GitHub repository; staging has no GitHub App, no
@@ -86,7 +91,7 @@ export LOOP_RUNTIME_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 #   j26 storage: loop-console runs with storage disabled (no /v1/storage)
 #   dp-memory dp-rag dp-lens: the data-plane products are not deployed on staging
 # A scenario that is still a sketch calls Skip; Ginkgo reports it as skipped, not passed.
-JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || j14 || j15 || j18 || j22 || app-lifecycle}"
+JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || j14 || j15 || j18 || j22 || app-lifecycle || sandbox}"
 # The custom domain of the app lifecycle journey: a name in a zone outside the platform, as
 # a customer's is. Two records of that zone are fixed and were created by hand:
 #   <domain>                    CNAME  the edge (cname.staging.getloopscale.com)

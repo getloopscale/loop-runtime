@@ -37,6 +37,11 @@ config:
   # github-app.json; GitHub returns the browser to
   # <appPublicUrl>/v1/integrations/github/callback.
   githubAppClientId: {{ env "LOOP_RUNTIME_GITHUB_APP_CLIENT_ID" | quote }}
+  # The sandbox service, which staging:platform starts on the host
+  # (infra/staging/sandbox.sh) and reaches at the gateway of the core VPC. The console
+  # signs what it forwards there with the key of the loop-runtime-service-auth-ed25519
+  # Secret, written by the aws-secrets-manager release.
+  sandboxApiUrl: {{ env "LOOP_RUNTIME_SANDBOX_API_URL" | quote }}
 
 # The cloud host: the whole control plane API. The app host is the public-routes release.
 ingressRoute:

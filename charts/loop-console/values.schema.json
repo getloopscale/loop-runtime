@@ -230,6 +230,9 @@
         "engineApiUrl": {
           "type": "string"
         },
+        "sandboxApiUrl": {
+          "type": "string"
+        },
         "loopRuntimeEnv": {
           "type": "string"
         },

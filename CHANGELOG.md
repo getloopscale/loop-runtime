@@ -13,6 +13,8 @@ to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Staging runs the sandbox service (getloopscale/loop-sandbox), and a customer reaches it at `app.staging.getloopscale.com/v1/sandboxes` with the LoopScale credential they already hold. `task staging:platform` starts it on the host's Docker (`infra/staging/sandbox.sh`), because its container driver needs a Docker daemon and the emulator's EKS nodes run containerd, and `task staging:down` removes it with its sandboxes. loop-console signs what it forwards with an Ed25519 key that the platform secret now holds (`service-auth-ed25519-private-key`), and the sandbox service trusts the public half. The `sandbox` journey of `infra/staging/validate.sh` creates a sandbox, runs `pip install pandas` in it, checks that it reaches no address inside the platform and that a sandbox restricted to pypi.org is refused example.com.
+- `charts/loop-console`: `config.sandboxApiUrl` sets `SANDBOX_API_URL`, and `networkPolicy.sandboxApi` allows the egress to it.
 - `GET /api/v1/environments` answers `replicas_ready` and `replicas_ready_at` for each environment the readiness poller has observed: the ready replicas and when they were read. The dashboard's Environments table had a cell for them and nothing to show. (getloopscale/loop-console#637)
 
 ## [0.1.0] - 2026-11-27
