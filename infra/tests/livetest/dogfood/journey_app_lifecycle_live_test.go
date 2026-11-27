@@ -266,6 +266,22 @@ var _ = Describe("App lifecycle", Ordered, Label("live", "dogfood", "app-lifecyc
 		}))
 	})
 
+	It("step 5b: answers the memory the app uses and its limit on the metrics endpoint", func() {
+		for _, signal := range []string{"memory_usage", "memory_limit"} {
+			must("", WaitFor(ctx, "step 5b: GET /projects/"+target.Name+"/metrics?signal="+signal+"&range=1h answers status ok with a positive value", metricsTimeout, 10*time.Second, func(ctx context.Context) (bool, string) {
+				series, err := engine.Metric(ctx, target.Name, signal, "1h")
+				if err != nil {
+					return false, err.Error()
+				}
+				if !strings.EqualFold(series.Status, "ok") || len(series.Data) == 0 {
+					return false, fmt.Sprintf("status %q with %d data points, hint %q", series.Status, len(series.Data), series.CollectingHint)
+				}
+				latest := series.Data[len(series.Data)-1].V
+				return latest > 0, fmt.Sprintf("the latest %s is %v", signal, latest)
+			}))
+		}
+	})
+
 	It("step 6: autoscales on CPU and memory the cell can read", func() {
 		Expect(target.TenantID).ToNot(BeEmpty(), "step 6 needs the project of step 1")
 		namespace := TenantNamespace(target.TenantID, target.Name, ProbeEnvironment)

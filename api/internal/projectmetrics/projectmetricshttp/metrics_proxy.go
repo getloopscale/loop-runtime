@@ -219,6 +219,10 @@ const (
 	appRequestRateSeries           = "loop_runtime_app:traefik_service_requests:rate5m"
 	appRequestRateByClassSeries    = "loop_runtime_app_status_class:traefik_service_requests:rate5m"
 	appRequestDurationBucketSeries = "loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m"
+	appCPUUsageSeries              = "loop_runtime_app:container_cpu_usage_seconds:rate5m"
+	appMemoryUsageSeries           = "loop_runtime_app:container_memory_working_set_bytes:sum"
+	appResourceLimitsSeries        = "loop_runtime_app_resource:kube_pod_container_resource_limits:sum"
+	appRestartsSeries              = "loop_runtime_app:kube_pod_container_status_restarts:increase1h"
 )
 
 // buildPromQL injects mandatory tenant_id + project labels into the Prometheus
@@ -253,6 +257,18 @@ func buildPromQL(signal, tenantID, projectName, environment string) string {
 			appRequestRateByClassSeries, appLabels, appRequestRateSeries, appLabels)
 	case "rps":
 		return fmt.Sprintf("sum(%s{%s})", appRequestRateSeries, appLabels)
+	// CPU in cores and memory in bytes, each summed over the pods of the environment,
+	// with the limit over the same pods so a client can divide one by the other.
+	case "cpu_usage":
+		return fmt.Sprintf("sum(%s{%s})", appCPUUsageSeries, appLabels)
+	case "memory_usage":
+		return fmt.Sprintf("sum(%s{%s})", appMemoryUsageSeries, appLabels)
+	case "cpu_limit":
+		return fmt.Sprintf(`sum(%s{resource="cpu",%s})`, appResourceLimitsSeries, appLabels)
+	case "memory_limit":
+		return fmt.Sprintf(`sum(%s{resource="memory",%s})`, appResourceLimitsSeries, appLabels)
+	case "restarts_1h":
+		return fmt.Sprintf("sum(%s{%s})", appRestartsSeries, appLabels)
 	case "status_terminal":
 		return fmt.Sprintf("loop_runtime_release_status_terminal{%s}", labels)
 	case "alerts_active":

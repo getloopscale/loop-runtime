@@ -22,10 +22,23 @@
 #       the same, by `status_class` of the answer ("2xx" ... "5xx")
 #   loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m
 #       the request duration histogram, by `le`, for histogram_quantile
+#   loop_runtime_app:container_cpu_usage_seconds:rate5m
+#       CPU cores the app's containers use, summed over its pods
+#   loop_runtime_app:container_memory_working_set_bytes:sum
+#       working set of the app's containers in bytes, summed over its pods
+#   loop_runtime_app_resource:kube_pod_container_resource_limits:sum
+#       the limits of the app's containers summed over its pods, by `resource`
+#       ("cpu" in cores, "memory" in bytes), the ceiling the two series above fill
+#   loop_runtime_app:kube_pod_container_status_restarts:increase1h
+#       container restarts of the app's pods over the last hour
 #
 # The core Prometheus federates the names that start with `loop_runtime_app`
 # (values-prometheus.yaml) and adds `cluster`; the two `loop_runtime_pod:` and
 # `loop_runtime_service:` series are the join's right-hand sides and stay on the cell.
+#
+# cAdvisor reports a pod three times: each container, the pod sandbox and the cgroup of
+# the whole pod. Only a container's series has a `container` label, so the usage rules
+# select `container!=""` and count nothing twice.
 #
 # The desired replica count is not recorded: it lives in the Rollout's spec, which
 # kube-state-metrics does not read without a custom resource state configuration.
@@ -101,4 +114,32 @@ serverFiles:
                   "traefik_backend", "$1", "service", "(.+)-[^-@]+@kubernetescrd")
                 * on (traefik_backend) group_left (tenant_id, project, app, environment)
                 loop_runtime_service:kube_service_labels:max
+              )
+          - record: loop_runtime_app:container_cpu_usage_seconds:rate5m
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app:container_memory_working_set_bytes:sum
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                sum by (namespace, pod) (container_memory_working_set_bytes{container!=""})
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app_resource:kube_pod_container_resource_limits:sum
+            expr: |-
+              sum by (tenant_id, project, app, environment, resource) (
+                sum by (namespace, pod, resource) (kube_pod_container_resource_limits{resource=~"cpu|memory"})
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
+              )
+          - record: loop_runtime_app:kube_pod_container_status_restarts:increase1h
+            expr: |-
+              sum by (tenant_id, project, app, environment) (
+                sum by (namespace, pod) (increase(kube_pod_container_status_restarts_total[1h]))
+                * on (namespace, pod) group_left (tenant_id, project, app, environment)
+                loop_runtime_pod:kube_pod_labels:max
               )

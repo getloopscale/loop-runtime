@@ -35,6 +35,10 @@ var tenantAppSeries = []string{
 	"loop_runtime_app:traefik_service_requests:rate5m",
 	"loop_runtime_app_status_class:traefik_service_requests:rate5m",
 	"loop_runtime_app_le:traefik_service_request_duration_seconds_bucket:rate5m",
+	"loop_runtime_app:container_cpu_usage_seconds:rate5m",
+	"loop_runtime_app:container_memory_working_set_bytes:sum",
+	"loop_runtime_app_resource:kube_pod_container_resource_limits:sum",
+	"loop_runtime_app:kube_pod_container_status_restarts:increase1h",
 }
 
 type recordingRule struct {
@@ -188,6 +192,10 @@ func TestCorePrometheusFederatesTheRecordedTenantAppSeries(t *testing.T) {
 func TestTenantAppRecordingRulesPassPromtool(t *testing.T) {
 	promtool, err := exec.LookPath("promtool")
 	if err != nil {
+		// CI installs promtool; there a skip would hide the rules from every gate.
+		if os.Getenv("CI") != "" {
+			t.Fatal("promtool is not on PATH, and CI must evaluate the recording rules")
+		}
 		t.Skip("promtool is not on PATH (https://prometheus.io/download)")
 	}
 	rules, _ := cellRecordingRules(t)
