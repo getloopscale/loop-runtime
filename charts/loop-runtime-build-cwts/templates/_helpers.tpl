@@ -4,18 +4,19 @@ emitted inside a `sh -c` block, so each one is plain shell; the caller indents i
 */}}
 
 {{/*
-loop-runtime-build-cwts.mcAlias — configure the `loop-runtime` mc alias for MinIO.
+loop-runtime-build-cwts.mcAlias — configure the `storage` mc alias for MinIO.
 MOD-6: --insecure is a Helm value, never hardcoded.
 */}}
 {{- define "loop-runtime-build-cwts.mcAlias" -}}
 {{- if eq (.Values.objectStorage.credentials | default "secret") "irsa" }}
 # mc exchanges the pod's IRSA token for credentials at STS (its MC_*_<alias> variables).
-export MC_STS_ENDPOINT_loop-runtime="${AWS_ENDPOINT_URL_STS:-https://sts.${AWS_REGION}.amazonaws.com}"
-export MC_WEB_IDENTITY_TOKEN_FILE_loop-runtime="${AWS_WEB_IDENTITY_TOKEN_FILE:?no IRSA token: the workflow ServiceAccount has no eks.amazonaws.com/role-arn}"
-export MC_ROLE_ARN_loop-runtime="${AWS_ROLE_ARN:?no IRSA role: the workflow ServiceAccount has no eks.amazonaws.com/role-arn}"
-mc alias set loop-runtime "${AWS_ENDPOINT_URL_S3:-${AWS_ENDPOINT_URL:-https://s3.${AWS_REGION}.amazonaws.com}}" "" "" \
+# The alias is part of a shell variable name, so it carries no hyphen.
+export MC_STS_ENDPOINT_storage="${AWS_ENDPOINT_URL_STS:-https://sts.${AWS_REGION}.amazonaws.com}"
+export MC_WEB_IDENTITY_TOKEN_FILE_storage="${AWS_WEB_IDENTITY_TOKEN_FILE:?no IRSA token: the workflow ServiceAccount has no eks.amazonaws.com/role-arn}"
+export MC_ROLE_ARN_storage="${AWS_ROLE_ARN:?no IRSA role: the workflow ServiceAccount has no eks.amazonaws.com/role-arn}"
+mc alias set storage "${AWS_ENDPOINT_URL_S3:-${AWS_ENDPOINT_URL:-https://s3.${AWS_REGION}.amazonaws.com}}" "" "" \
 {{- else }}
-mc alias set loop-runtime "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
+mc alias set storage "$MINIO_ENDPOINT" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" \
 {{- end }}
 {{- if .Values.minio.insecure }}
   --insecure \
@@ -69,5 +70,5 @@ if [ -n "$SUFFIX" ]; then
 else
   CACHE_KEY="{{ "{{inputs.parameters.tenant-id}}" }}/{{ "{{inputs.parameters.project-id}}" }}/{{ "{{inputs.parameters.cache-key}}" }}"
 fi
-CACHE_PATH="loop-runtime/{{ .Values.cacheBucket | default .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
+CACHE_PATH="storage/{{ .Values.cacheBucket | default .Values.sourceBucket }}/{{ "{{inputs.parameters.tenant-id}}" }}/cache/deps/${CACHE_KEY}.tar.gz"
 {{- end }}
