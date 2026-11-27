@@ -176,11 +176,19 @@ type domainTLSInfo struct {
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
+// domainListItem is a domain as the list answers it: the stored record plus what a customer
+// needs to finish the setup in their DNS. The dashboard reads both from the list.
+type domainListItem struct {
+	CustomDomain
+	Verification *domainVerificationInfo `json:"verification,omitempty"`
+	CNAMETarget  string                  `json:"cname_target,omitempty"`
+}
+
 type domainListResponse struct {
-	Domains []CustomDomain `json:"domains"`
-	Total   int            `json:"total"`
-	Limit   int            `json:"limit"`
-	Offset  int            `json:"offset"`
+	Domains []domainListItem `json:"domains"`
+	Total   int              `json:"total"`
+	Limit   int              `json:"limit"`
+	Offset  int              `json:"offset"`
 }
 
 type domainDeleteResponse struct {
@@ -241,12 +249,7 @@ func (h *DomainHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// v1: expose verification token to owner/admin for pending domains
-	if statemachine.DomainPhase(d.Status) == statemachine.DPhPendingVerification && auth.HasMinRole(uc.Role, "admin") {
-		resp.Verification = &domainVerificationInfo{
-			TXTName:  domains.VerificationTXTName(d.Domain),
-			TXTValue: d.VerificationToken,
-		}
-	}
+	resp.Verification = verificationRecordFor(d, uc.Role)
 
 	httpio.WriteJSON(w, http.StatusOK, resp)
 }
@@ -290,12 +293,34 @@ func (h *DomainHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	items := make([]domainListItem, 0, len(domains))
+	for i := range domains {
+		items = append(items, domainListItem{
+			CustomDomain: domains[i],
+			Verification: verificationRecordFor(&domains[i], uc.Role),
+			CNAMETarget:  h.cnameTarget,
+		})
+	}
+
 	httpio.WriteJSON(w, http.StatusOK, domainListResponse{
-		Domains: domains,
+		Domains: items,
 		Total:   total,
 		Limit:   filter.Limit,
 		Offset:  filter.Offset,
 	})
+}
+
+// verificationRecordFor is the TXT record that proves control of d, for a caller allowed to
+// see it. Only a domain still waiting for verification has one to show, and only an admin or
+// owner reads the token.
+func verificationRecordFor(d *CustomDomain, role string) *domainVerificationInfo {
+	if statemachine.DomainPhase(d.Status) != statemachine.DPhPendingVerification || !auth.HasMinRole(role, "admin") {
+		return nil
+	}
+	return &domainVerificationInfo{
+		TXTName:  domains.VerificationTXTName(d.Domain),
+		TXTValue: d.VerificationToken,
+	}
 }
 
 func strPtr(s string) *string { return &s }
