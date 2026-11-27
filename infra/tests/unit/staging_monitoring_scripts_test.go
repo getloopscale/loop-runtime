@@ -304,7 +304,7 @@ func TestStagingPlatformSyncsCoreMonitoringAfterTheRemoteClusters(t *testing.T) 
 	text := string(data)
 	order := []string{
 		"bash infra/staging/restart-uninjected-pods.sh core build cell-0 cell-1",
-		"helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl",
+		"helmfile --selector 'name!=promtail,name!=loop-edge' -f infra/helmfile/core.helmfile.yaml.gotmpl",
 		"infra/helmfile/build.helmfile.yaml.gotmpl",
 		"monitoring-addresses.sh loki --wait",
 		"infra/helmfile/cell.helmfile.yaml.gotmpl",

@@ -401,7 +401,8 @@ tasks:
         # infra/staging/deploy.sh pins the images of the commit it deploys through
         # STAGING_STATE_VALUES, a values file layered over the staging environment.
         # core's Promtail needs the Loki ALB, which the build sync creates: it is synced last.
-        helmfile --selector 'name!=promtail' -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+        # So is loop-edge, the custom domain fleet: it proxies to the cells' load balancers.
+        helmfile --selector 'name!=promtail,name!=loop-edge' -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         helmfile -f infra/helmfile/build.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
         eval "$(bash infra/staging/monitoring-addresses.sh loki --wait 600)"
         # The cells' broker store calls loop-runtime-api's secret-fetch endpoint through core's
@@ -413,6 +414,16 @@ tasks:
         eval "$(bash infra/staging/monitoring-addresses.sh metrics --wait 600)"
         # loop-runtime-api again, for a rebuild: its first core sync ran before the Loki ALB existed.
         helmfile --selector name=promtail --selector name=prometheus --selector name=loop-runtime-api -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+        # loop-edge, the fleet that serves custom domains in production. On staging the host's
+        # Caddy holds the public ports, so the fleet gets no load balancer; it runs so that
+        # every deploy proves its image, its shared certificate store and its proxying.
+        # Staging only: the cells' load balancers and Valkey present certificates of the
+        # emulator's authority, which reaches a pod with an IRSA role and no other.
+        eval "$(bash infra/staging/monitoring-addresses.sh cell-origins --wait 600)"
+        kubectl --context core -n loop-runtime-system create configmap loop-edge-emulator-ca \
+          --from-file=ca.pem="$AWS_CA_BUNDLE" --dry-run=client -o yaml | kubectl --context core apply -f - >/dev/null
+        helmfile --selector name=loop-edge -f infra/helmfile/core.helmfile.yaml.gotmpl -e staging ${STAGING_STATE_VALUES:+--state-values-file "$STAGING_STATE_VALUES"} sync
+        kubectl --context core -n loop-runtime-system rollout status deployment/loop-edge --timeout=180s
         # The middlewares the routes name (traefik-rate-limit, traefik-body-limit), which
         # are not a release: infra:install:cell applies the same file after its sync.
         # Traefik disables a route whose middleware does not exist.
