@@ -290,7 +290,7 @@ func (d *AutoDeployer) markCommitPending(log *slog.Logger, req PushRequest, owne
 		if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
 			State:       "pending",
 			Description: "Deploying to production...",
-			Context:     "loop-runtime/deploy",
+			Context:     DeployStatusContext,
 		}); err != nil {
 			log.Warn("auto-deploy: set commit status failed", "error", err)
 		} else {
@@ -318,7 +318,7 @@ func (d *AutoDeployer) markCommitUndeployable(log *slog.Logger, req PushRequest,
 	if err := d.cfg.AppClient.SetCommitStatus(statusCtx, req.InstallationID, owner, repo, req.CommitSHA, CommitStatus{
 		State:       "failure",
 		Description: fitCommitStatusDescription(description),
-		Context:     "loop-runtime/deploy",
+		Context:     DeployStatusContext,
 	}); err != nil {
 		log.Warn("auto-deploy: set commit status failed", "error", err)
 		return

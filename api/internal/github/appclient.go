@@ -205,12 +205,17 @@ func (c *AppClient) DownloadSource(ctx context.Context, installationID int64, ow
 
 // --- Commit Status ---
 
+// DeployStatusContext is the context of every commit status a deploy posts. It is what the
+// customer reads beside their commit and what a branch protection of theirs names, so it
+// carries the product name and changing it is a contract change.
+const DeployStatusContext = "loopscale/deploy"
+
 // CommitStatus represents a GitHub commit status.
 type CommitStatus struct {
 	State       string // "pending", "success", "failure", "error"
 	TargetURL   string // URL to LoopRuntime deploy/logs
 	Description string // Short description (max 140 chars)
-	Context     string // "loop-runtime/deploy" or "loop-runtime/preview"
+	Context     string // DeployStatusContext
 }
 
 // SetCommitStatus updates the commit status on GitHub.

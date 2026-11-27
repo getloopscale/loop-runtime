@@ -380,7 +380,7 @@ func TestSetCommitStatus_Success(t *testing.T) {
 	err := client.SetCommitStatus(context.Background(), 1, "owner", "repo", "sha123", CommitStatus{
 		State:       "success",
 		Description: "Deployed",
-		Context:     "loop-runtime/deploy",
+		Context:     "loopscale/deploy",
 	})
 
 	// Assert
@@ -390,8 +390,8 @@ func TestSetCommitStatus_Success(t *testing.T) {
 	if !strings.Contains(receivedBody, `"success"`) {
 		t.Errorf("expected 'success' in body, got: %s", receivedBody)
 	}
-	if !strings.Contains(receivedBody, `"loop-runtime/deploy"`) {
-		t.Errorf("expected 'loop-runtime/deploy' in body, got: %s", receivedBody)
+	if !strings.Contains(receivedBody, `"loopscale/deploy"`) {
+		t.Errorf("expected 'loopscale/deploy' in body, got: %s", receivedBody)
 	}
 }
 
@@ -455,7 +455,7 @@ func TestSetCommitStatusSendsTheDescriptionAsValidJSON(t *testing.T) {
 	defer server.Close()
 	client := newTestAppClient(t, server)
 	client.httpClient = redirectingClient(server.URL)
-	want := CommitStatus{State: "failure", TargetURL: "https://x.example", Description: description, Context: "loop-runtime/deploy"}
+	want := CommitStatus{State: "failure", TargetURL: "https://x.example", Description: description, Context: "loopscale/deploy"}
 
 	// Act
 	err := client.SetCommitStatus(context.Background(), 1, "owner", "repo", "sha123", want)

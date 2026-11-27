@@ -113,6 +113,7 @@ to [Semantic Versioning](https://semver.org/).
   7 domains (`loopzero`, `api`, `cmd`, `infra`, `operators`, `pkg`, `tools`), all resolving.
 
 ### Changed
+- The commit status a deploy posts on the customer's repository has the context `loopscale/deploy`. It was `loop-runtime/deploy`. A branch protection that requires the old context must name the new one.
 - The engine is named loop-runtime everywhere, because LoopZero is the name of the agent framework. Platform components follow one pattern, `loop-{name}`, written with a hyphen wherever the syntax allows one. What an operator has to change:
   - Images, charts and the ops binary: `loopzero-api` is `loop-runtime-api`, and so on for every `loopzero-*` name.
   - The console's images and charts: `loopzero-cloud` is `loop-console` and `loopzero-dashboard` is `loop-console-dashboard`.

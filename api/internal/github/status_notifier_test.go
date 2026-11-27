@@ -120,3 +120,19 @@ func TestOnDeployFailedMarksASupersededDeployAsError(t *testing.T) {
 		t.Errorf("description = %q, want it to say the deploy was superseded", (*got)["description"])
 	}
 }
+
+// The context is what the customer reads on their commit and what a branch protection of theirs
+// names. It carries the product name, not the name of the component that posts it.
+func TestCommitStatusesCarryTheProductContext(t *testing.T) {
+	client, got := statusCapture(t)
+	n := NewStatusNotifier(client, fakeProjectRepoLookup{}, fakeServedAppsLookup{apps: []string{"checkout"}}, "getloopscale.app", slog.Default())
+
+	n.OnBuildSucceeded(context.Background(), "tn-1", "shop", "build-1", "production")
+
+	if (*got)["context"] != "loopscale/deploy" {
+		t.Errorf("context = %q, want loopscale/deploy", (*got)["context"])
+	}
+	if DeployStatusContext != "loopscale/deploy" {
+		t.Errorf("DeployStatusContext = %q, want loopscale/deploy", DeployStatusContext)
+	}
+}
