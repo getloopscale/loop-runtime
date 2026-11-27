@@ -33,6 +33,7 @@ type DomainHealthStore interface {
 	UpdateVerified(ctx context.Context, domain string, verifiedAt time.Time) error
 	UpdateCNAMECheck(ctx context.Context, domain string, checkTime time.Time, consecutiveFailures int) error
 	UpdateFailure(ctx context.Context, domain, status, reason string) error
+	UpdateTLS(ctx context.Context, domain, tlsStatus string, expiresAt *time.Time) error
 	TransitionStatus(ctx context.Context, domain, expectedStatus, newStatus string) error
 	Delete(ctx context.Context, domain string) error
 }
@@ -57,6 +58,12 @@ type DomainHealthChecker struct {
 	// deployedApps is nil where the checker has no release data; the check for
 	// a removed app is skipped then.
 	deployedApps DeployedAppsReader
+	// certificates is nil where the checker cannot reach the edge; tls_status is left
+	// alone then.
+	certificates CertificateProber
+	// certificateInterval is how often a routed domain without a recorded certificate is
+	// looked up at the edge.
+	certificateInterval time.Duration
 }
 
 // WithDeployedApps lets the checker fail a domain whose app is no longer part
@@ -71,6 +78,9 @@ type DomainHealthCheckerConfig struct {
 	CNAMETarget string        // e.g., "cname.dev.getloopscale.com"
 	GraceDays   int           // CNAME failure grace (default: 14, configurable via DOMAIN_CNAME_GRACE_DAYS)
 	StaleDays   int           // Pending cleanup threshold (default: 7)
+	// CertificateInterval is how often the edge is asked for the certificates not recorded
+	// yet. Default: 30s, so a domain shows its certificate soon after it becomes active.
+	CertificateInterval time.Duration
 	// CellID scopes the checker to a single cell (roadmap 03). Empty means every
 	// cell — how the API runs its loops (#450).
 	CellID string
@@ -103,16 +113,21 @@ func NewDomainHealthChecker(
 	if staleDays == 0 {
 		staleDays = 7
 	}
+	certificateInterval := cfg.CertificateInterval
+	if certificateInterval == 0 {
+		certificateInterval = 30 * time.Second
+	}
 	// Empty means every cell (backgroundloops.Deps) — how the API runs its loops (#450).
 	cellID := cfg.CellID
 	return &DomainHealthChecker{
-		store:       store,
-		cnameTarget: cfg.CNAMETarget,
-		graceDays:   graceDays,
-		staleDays:   staleDays,
-		logger:      logger,
-		interval:    interval,
-		cellID:      cellID,
+		store:               store,
+		cnameTarget:         cfg.CNAMETarget,
+		graceDays:           graceDays,
+		staleDays:           staleDays,
+		logger:              logger,
+		interval:            interval,
+		cellID:              cellID,
+		certificateInterval: certificateInterval,
 	}
 }
 
@@ -120,6 +135,8 @@ func NewDomainHealthChecker(
 func (h *DomainHealthChecker) Start(ctx context.Context) {
 	ticker := time.NewTicker(h.interval)
 	defer ticker.Stop()
+	certificateTicker := time.NewTicker(h.certificateInterval)
+	defer certificateTicker.Stop()
 
 	h.logger.Info("domain health checker started",
 		"interval", h.interval,
@@ -134,6 +151,8 @@ func (h *DomainHealthChecker) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			h.runChecks(ctx)
+		case <-certificateTicker.C:
+			h.recordCertificates(ctx)
 		}
 	}
 }

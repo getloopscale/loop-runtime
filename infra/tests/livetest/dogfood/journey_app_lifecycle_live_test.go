@@ -15,6 +15,8 @@
 //	step 3  a scale through the API changes the running Rollout
 //	step 4  a line the app logs arrives on the runtime log stream
 //	step 5  the metrics endpoint answers the app's ready replicas
+//	step 7  a custom domain goes from added to serving the app over HTTPS, the
+//	        API records its certificate, and a removed domain stops serving
 //
 // The app is fixtures/env-probe, a node server with no dependency. The journey
 // uses its own project (ProbeProject) and creates what it needs, so it runs on
@@ -56,6 +58,16 @@ const (
 	secondSecretName   = "PROBE_BETA"
 	firstSecretName    = "PROBE_ALPHA"
 	replicasReadyQuery = "replicas_ready"
+
+	// The custom domain step. The verification record changes with every run and its
+	// TTL is one minute, so a resolver can answer the value of the run before for that long.
+	dnsTimeout          = 4 * time.Minute
+	verifyTimeout       = 5 * time.Minute
+	verifyInterval      = 31 * time.Second // the API allows one verification every 30 seconds
+	domainActiveTimeout = 2 * time.Minute
+	domainServeTimeout  = 3 * time.Minute // the first request makes the edge obtain the certificate
+	certificateTimeout  = 3 * time.Minute
+	domainGoneTimeout   = 2 * time.Minute
 )
 
 var _ = Describe("App lifecycle", Ordered, Label("live", "dogfood", "app-lifecycle"), func() {
@@ -305,6 +317,131 @@ var _ = Describe("App lifecycle", Ordered, Label("live", "dogfood", "app-lifecyc
 			metrics := strings.Join(state.Metrics, ",")
 			return metrics == "cpu,memory" && state.ScalingActive,
 				fmt.Sprintf("metrics %q, ScalingActive=%v (%s) on %s", metrics, state.ScalingActive, state.Reason, state.Cell)
+		}))
+	})
+
+	It("step 7: serves the app on a custom domain over HTTPS and stops when it is removed", func() {
+		setup, ok := CustomDomainFromEnv()
+		Expect(ok).To(BeTrue(), "step 7: "+CustomDomainEnv+" names no domain; infra/staging/validate.sh sets it")
+		Expect(target.Name).ToNot(BeEmpty(), "step 7 needs the project of step 1")
+		domain := setup.Domain
+		// Certificates are checked against the system's authorities: a certificate the
+		// edge made up for the name fails the request.
+		visitor := &http.Client{Timeout: 60 * time.Second}
+
+		gone := func(step string) {
+			GinkgoHelper()
+			must("", WaitFor(ctx, step, domainGoneTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+				read, err := engine.GetDomain(ctx, domain)
+				if IsNotFound(err) {
+					return true, ""
+				}
+				if err != nil {
+					return false, err.Error()
+				}
+				return false, "status " + read.Status
+			}))
+		}
+
+		// An earlier run that failed half way left the domain behind.
+		if _, err := engine.GetDomain(ctx, domain); err == nil {
+			must("step 7: remove the domain an earlier run left", engine.DeleteDomain(ctx, domain))
+			gone("step 7: the domain an earlier run left is gone")
+		} else if !IsNotFound(err) {
+			must("step 7: read the domain", err)
+		}
+
+		created, err := engine.AddDomain(ctx, domain, target.Name, ProbeApp, ProbeEnvironment)
+		must("step 7: add "+domain, err)
+		removed := false
+		DeferCleanup(func() {
+			if removed {
+				return
+			}
+			cleanup, cancelCleanup := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancelCleanup()
+			if err := engine.DeleteDomain(cleanup, domain); err != nil && !IsNotFound(err) {
+				GinkgoWriter.Printf("cleanup: could not remove %s: %v\n", domain, err)
+			}
+		})
+		Expect(created.Status).To(Equal("pending_verification"), "step 7: a new domain waits for DNS")
+		Expect(created.Verification).ToNot(BeNil(), "step 7: the answer names the verification record")
+		Expect(created.Verification.TXTName).To(Equal("_loopscale-verify."+domain), "step 7: the record carries the product's name")
+		Expect(created.CNAMETarget).ToNot(BeEmpty(), "step 7: the answer names where the domain points")
+
+		// The dashboard shows the records to create from the list.
+		listed, err := engine.ListDomains(ctx)
+		must("step 7: list the domains", err)
+		var row *DomainRecord
+		for i := range listed {
+			if listed[i].Domain == domain {
+				row = &listed[i]
+			}
+		}
+		Expect(row).ToNot(BeNil(), "step 7: the list has "+domain)
+		Expect(row.CNAMETarget).To(Equal(created.CNAMETarget), "step 7: the list names where the domain points")
+		Expect(row.Verification).ToNot(BeNil(), "step 7: the list names the verification record of a pending domain")
+		Expect(row.Verification.TXTValue).To(Equal(created.Verification.TXTValue))
+
+		dns := DNSZone{BaseURL: HostingerAPI, Client: visitor, Zone: setup.Zone, TokenFile: setup.TokenFile}
+		must("step 7: write the verification record", dns.SetTXTRecord(ctx, setup.Record, created.Verification.TXTValue))
+		must("", WaitFor(ctx, "step 7: DNS answers the verification record at "+created.Verification.TXTName, dnsTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			found, err := TXTAnswers(ctx, created.Verification.TXTName, created.Verification.TXTValue)
+			if err != nil {
+				return false, err.Error()
+			}
+			return found, "the lookup does not answer this run's value yet"
+		}))
+
+		must("", WaitFor(ctx, "step 7: the API verifies "+domain, verifyTimeout, verifyInterval, func(ctx context.Context) (bool, string) {
+			verified, err := engine.VerifyDomain(ctx, domain)
+			if err != nil {
+				return false, err.Error()
+			}
+			return verified.Status != "pending_verification", "status " + verified.Status + ": " + verified.VerificationError
+		}))
+		must("", WaitFor(ctx, "step 7: "+domain+" becomes active", domainActiveTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			read, err := engine.GetDomain(ctx, domain)
+			if err != nil {
+				return false, err.Error()
+			}
+			if read.Status == "failed" {
+				Fail("step 7: " + domain + " ended failed")
+			}
+			return read.Status == "active", "status " + read.Status
+		}))
+
+		must("", WaitFor(ctx, "step 7: GET https://"+domain+"/health answers 200 with a valid certificate", domainServeTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			status, err := CallApp(ctx, visitor, "https://"+domain, "/health")
+			if err != nil {
+				return false, err.Error()
+			}
+			return status == http.StatusOK, fmt.Sprintf("HTTP %d", status)
+		}))
+
+		must("", WaitFor(ctx, "step 7: the API records the certificate of "+domain, certificateTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			read, err := engine.GetDomain(ctx, domain)
+			if err != nil {
+				return false, err.Error()
+			}
+			if read.TLS == nil {
+				return false, "no certificate recorded"
+			}
+			if read.TLS.Status != "issued" || read.TLS.ExpiresAt == nil {
+				return false, "tls status " + read.TLS.Status
+			}
+			return read.TLS.ExpiresAt.After(time.Now()), "the recorded certificate expired at " + read.TLS.ExpiresAt.String()
+		}))
+
+		must("step 7: remove "+domain, engine.DeleteDomain(ctx, domain))
+		removed = true
+		gone("step 7: " + domain + " is gone from the API")
+		must("", WaitFor(ctx, "step 7: https://"+domain+" stops serving the app", domainGoneTimeout, pollInterval, func(ctx context.Context) (bool, string) {
+			status, err := CallApp(ctx, visitor, "https://"+domain, "/health")
+			if err != nil {
+				return true, ""
+			}
+			return status != http.StatusOK, "still HTTP 200"
 		}))
 	})
 })

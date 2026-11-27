@@ -73,6 +73,10 @@ export LOOP_RUNTIME_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 #     of the validation tenant, then checks two secrets after a redeploy of the same
 #     image, a scale against the Rollout on its cell, the runtime log stream, the
 #     ready-replicas metric, and an autoscaling range whose HPA reads CPU and memory.
+#     Its last step attaches a custom domain ($LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN) to the
+#     app: the domain is verified through DNS, serves the app over HTTPS with a
+#     certificate the edge obtains, has that certificate recorded by the API, and stops
+#     serving once removed.
 #     It needs kubectl and the cell contexts (run_suite).
 # Left out, because staging does not run what they need:
 #   j06 j08 j09 j17 j19 j20 j21 j23 j25: read the canonical `sample` project, which the
@@ -83,6 +87,17 @@ export LOOP_RUNTIME_DOGFOOD_SESSION_PATH="$STATE_DIR/validate/session"
 #   dp-memory dp-rag dp-lens: the data-plane products are not deployed on staging
 # A scenario that is still a sketch calls Skip; Ginkgo reports it as skipped, not passed.
 JOURNEYS="${VALIDATE_JOURNEYS:-j01 || j02 || j04 || j05 || j07 || j10 || j11 || j14 || j15 || j18 || j22 || app-lifecycle}"
+# The custom domain of the app lifecycle journey: a name in a zone outside the platform, as
+# a customer's is. Two records of that zone are fixed and were created by hand:
+#   <domain>                    CNAME  the edge (cname.staging.getloopscale.com)
+#   _loopscale-verify.<domain>  CNAME  $LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD in the platform zone
+# The journey writes the TXT value of each run at that last name, with the token of the
+# platform zone's DNS API that the edge's wildcard certificate already uses.
+export LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN="${LOOP_RUNTIME_DOGFOOD_CUSTOM_DOMAIN:-staging-validate.theokit.dev}"
+export LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE="${LOOP_RUNTIME_DOGFOOD_VERIFY_ZONE:-getloopscale.com}"
+export LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD="${LOOP_RUNTIME_DOGFOOD_VERIFY_RECORD:-_loopscale-verify.staging-validate.staging}"
+export LOOP_RUNTIME_DOGFOOD_DNS_TOKEN_FILE="${LOOP_RUNTIME_DOGFOOD_DNS_TOKEN_FILE:-/etc/loop-runtime-edge/hostinger-api-token}"
+
 # The kubectl contexts of the cells: the app lifecycle journey reads the app's Rollout
 # from the one that runs it.
 CELL_CONTEXTS="${VALIDATE_CELL_CONTEXTS:-cell-0 cell-1}"
