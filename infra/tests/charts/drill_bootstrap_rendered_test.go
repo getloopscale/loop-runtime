@@ -123,7 +123,7 @@ func TestDrillCloneStepReadsTheDrillSourceBucket(t *testing.T) {
 	if cwt == nil {
 		t.Fatal("no loop-runtime-clone ClusterWorkflowTemplate in the drill render")
 	}
-	if !strings.Contains(renderYAML(t, cwt), "loop-runtime/"+drillSourceBucket+"/") {
+	if !strings.Contains(renderYAML(t, cwt), "storage/"+drillSourceBucket+"/") {
 		t.Errorf("loop-runtime-clone does not read loop-runtime/%s/", drillSourceBucket)
 	}
 }

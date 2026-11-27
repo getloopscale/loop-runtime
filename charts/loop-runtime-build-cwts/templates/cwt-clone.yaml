@@ -59,7 +59,7 @@ spec:
               {{- if .Values.minio.insecure }}
               --insecure \
               {{- end }}
-              "loop-runtime/{{ .Values.sourceBucket }}/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
+              "storage/{{ .Values.sourceBucket }}/${BUNDLE_PATH}" /tmp/source.bundle 2>&1 || {
               echo "ERROR: Failed to download source bundle"
               exit 1
             }

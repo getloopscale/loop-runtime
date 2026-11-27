@@ -501,7 +501,14 @@ func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
 					}
 					return out
 				}(), "\n")
-				for _, want := range []string{"MC_WEB_IDENTITY_TOKEN_FILE_loop-runtime", "MC_ROLE_ARN_loop-runtime", "MC_STS_ENDPOINT_loop-runtime"} {
+				// A shell refuses to export a name with a hyphen, and the step dies before
+				// it reads a byte: the alias, which mc appends to its variables, has none.
+				for _, export := range regexp.MustCompile(`(?m)^\s*export\s+([^=\s]+)=`).FindAllStringSubmatch(script, -1) {
+					if !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`).MatchString(export[1]) {
+						t.Errorf("%s exports %q, which is not a shell variable name", cwt, export[1])
+					}
+				}
+				for _, want := range []string{"MC_WEB_IDENTITY_TOKEN_FILE_storage", "MC_ROLE_ARN_storage", "MC_STS_ENDPOINT_storage"} {
 					if !strings.Contains(script, want) {
 						t.Errorf("%s does not set %s: mc would sign with no credentials", cwt, want)
 					}
@@ -509,7 +516,7 @@ func TestStagingBuildStepsReachS3AsTheBuildWorkflowsRole(t *testing.T) {
 				if regexp.MustCompile(`(?m)^\s*--insecure\b`).MatchString(script) {
 					t.Errorf("%s passes --insecure to mc; staging's S3 has a verifiable certificate", cwt)
 				}
-				if cwt != "loop-runtime-clone" && !strings.Contains(script, "loop-runtime/loop-runtime-staging-artifacts-000000000000/") {
+				if cwt != "loop-runtime-clone" && !strings.Contains(script, "storage/loop-runtime-staging-artifacts-000000000000/") {
 					t.Errorf("%s does not keep the cache in the artifacts bucket, the one the build role can write", cwt)
 				}
 			}
