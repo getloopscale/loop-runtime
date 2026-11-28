@@ -27,9 +27,10 @@ current="$(aws secretsmanager get-secret-value --secret-id "$SECRET_ID" --query 
 
 # key=generator. hex32 is 32 random bytes as hex (the API's AES key format, and a safe
 # password alphabet for URIs); alnum32 is 32 characters for the Ory cookie/cipher keys,
-# which require at least 32; placeholder marks a credential a third party issues.
+# which require at least 32; placeholder marks a credential a third party issues;
+# ed25519 is a signing key pair, made by openssl.
 generated="$(CURRENT="$current" python3 -I - <<'PY'
-import json, os, secrets, string, sys
+import base64, json, os, secrets, string, subprocess, sys
 
 wanted = {
     "database-api-password": "hex32",
@@ -53,7 +54,21 @@ wanted = {
     # Resend's API key is issued by Resend; the placeholder fails loudly on the first
     # send until the operator puts the real key in the secret.
     "resend-api-key": "placeholder",
+    # The key loop-console signs its service calls with (LOOP_RUNTIME_SERVICE_AUTH_ED25519_PRIVATE_KEY):
+    # base64 of the 32-byte seed followed by the 32-byte public key, the form Go's
+    # crypto/ed25519 reads. The public half is stored again under
+    # service-auth-ed25519-public-key, for the services that verify the signature.
+    "service-auth-ed25519-private-key": "ed25519",
 }
+
+
+def ed25519_private_key():
+    # PKCS#8 and SubjectPublicKeyInfo both end with the 32 raw bytes of the key.
+    pkcs8 = subprocess.run(["openssl", "genpkey", "-algorithm", "ed25519", "-outform", "DER"],
+                           check=True, capture_output=True).stdout
+    spki = subprocess.run(["openssl", "pkey", "-inform", "DER", "-pubout", "-outform", "DER"],
+                          input=pkcs8, check=True, capture_output=True).stdout
+    return base64.b64encode(pkcs8[-32:] + spki[-32:]).decode()
 
 try:
     doc = json.loads(os.environ["CURRENT"])
@@ -71,9 +86,17 @@ for key, kind in wanted.items():
         doc[key] = "re_NOT_SET"
     elif kind == "hex32":
         doc[key] = secrets.token_hex(32)
+    elif kind == "ed25519":
+        doc[key] = ed25519_private_key()
     else:
         doc[key] = "".join(secrets.choice(alphabet) for _ in range(32))
     added.append(key)
+
+# The public half follows the private key, also when an operator rotated the private one.
+public = base64.b64encode(base64.b64decode(doc["service-auth-ed25519-private-key"])[32:]).decode()
+if doc.get("service-auth-ed25519-public-key") != public:
+    doc["service-auth-ed25519-public-key"] = public
+    added.append("service-auth-ed25519-public-key")
 
 print(json.dumps({"added": added, "doc": doc}))
 PY

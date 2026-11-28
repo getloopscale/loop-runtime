@@ -30,3 +30,33 @@ tests:
           of: networking.k8s.io/v1
       - isKind:
           of: NetworkPolicy
+
+  - it: adds no policy for the sandbox API when none is named
+    set:
+      networkPolicy.enabled: true
+    asserts:
+      - hasDocuments:
+          count: 1
+
+  - it: lets the console reach a sandbox API outside the cluster
+    set:
+      networkPolicy.enabled: true
+      networkPolicy.sandboxApi.cidr: 10.40.0.1/32
+      networkPolicy.sandboxApi.port: 8090
+    asserts:
+      - hasDocuments:
+          count: 2
+      - documentIndex: 1
+        equal:
+          path: spec.egress[0]
+          value:
+            ports:
+              - protocol: TCP
+                port: 8090
+            to:
+              - ipBlock:
+                  cidr: 10.40.0.1/32
+      - documentIndex: 1
+        equal:
+          path: spec.policyTypes
+          value: [Egress]

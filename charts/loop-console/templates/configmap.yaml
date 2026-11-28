@@ -42,6 +42,9 @@ data:
   {{- with .Values.config.traefikMcpBaseUrl }}
   TRAEFIK_MCP_BASE_URL: {{ . | quote }}
   {{- end }}
+  {{- with .Values.config.sandboxApiUrl }}
+  SANDBOX_API_URL: {{ . | quote }}
+  {{- end }}
   {{- with .Values.config.prometheusUrl }}
   LOOP_RUNTIME_PROMETHEUS_URL: {{ . | quote }}
   {{- end }}

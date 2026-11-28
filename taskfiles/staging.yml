@@ -361,6 +361,17 @@ tasks:
           LOOP_RUNTIME_GITHUB_APP_CLIENT_ID="$(jq -r '."client-id" // ""' /etc/loop-runtime-staging/github-app.json)"
         fi
         export LOOP_RUNTIME_GITHUB_APP_CLIENT_ID
+        # The sandbox service (getloopscale/loop-sandbox), on the host's Docker: its
+        # container driver needs a Docker daemon, and the EKS nodes of the emulator run
+        # containerd. A production environment gives it hosts of its own. It trusts the
+        # public half of the key loop-console signs with, which the seed above wrote, and
+        # it starts before the core sync installs the console that calls it.
+        SANDBOX_GATEWAY_PUBKEY="$(aws secretsmanager get-secret-value --secret-id loop-runtime/staging/platform \
+          --query SecretString --output text | jq -er '."service-auth-ed25519-public-key"')"
+        export SANDBOX_GATEWAY_PUBKEY
+        bash infra/staging/sandbox.sh up
+        LOOP_RUNTIME_SANDBOX_API_URL="$(bash infra/staging/sandbox.sh address)"
+        export LOOP_RUNTIME_SANDBOX_API_URL
         bash infra/helmfile/scripts/bootstrap-aws-clusters.sh pre-core
         # The ServiceMonitor, PodMonitor and PrometheusRule CRDs every cluster's charts
         # create objects of, from the same manifests infra:install:monitoring-crds applies.
@@ -679,6 +690,9 @@ tasks:
   down:
     desc: Stop the emulator and remove the clusters, networks and containers it ran
     cmds:
+      # The sandbox service first: its API is published on the gateway of a VPC network
+      # removed below, and its sandboxes are containers nothing else would remove.
+      - bash infra/staging/sandbox.sh down
       - systemctl stop aws-emulator-eks.service aws-emulator.service
       - |
         set -euo pipefail
@@ -694,3 +708,4 @@ tasks:
       - systemctl is-active aws-emulator.service aws-emulator-eks.service || true
       - kind get clusters
       - docker network ls --filter label=aws-emulator.vpc-id --format '{{"{{"}}.Name{{"}}"}}'
+      - docker ps --filter label=com.docker.compose.project=loop-sandbox --format '{{"{{"}}.Names{{"}}"}} {{"{{"}}.Status{{"}}"}}'

@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The sandbox service of the staging environment (getloopscale/loop-sandbox), run by
+# infra/staging/sandbox.sh on the host's Docker. Its container driver needs a Docker
+# daemon, and the emulator's EKS nodes run containerd, so it cannot be a pod of theirs.
+name: loop-sandbox
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: loopsandbox
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${SANDBOX_DB_PASSWORD:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: ${SANDBOX_IMAGE:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      LOOPSANDBOX_ADDR: ":8080"
+      DATABASE_URL: "postgres://postgres:${SANDBOX_DB_PASSWORD:?}@postgres:5432/loopsandbox?sslmode=disable"
+      LOOPSANDBOX_DRIVER: container
+      # The API runs the reconcile and expiry loops itself: one replica, no worker.
+      LOOPSANDBOX_EMBEDDED_WORKER: "true"
+      # Sandboxes reach the public internet through the guard container of each one.
+      LOOPSANDBOX_CONTAINER_NETWORK: "on"
+      # loop-console authenticates the customer and signs the request; the API trusts
+      # the public half of the console's key and nothing else.
+      LOOPSANDBOX_AUTH: gateway
+      LOOPSANDBOX_GATEWAY_PUBKEYS: ${SANDBOX_GATEWAY_PUBKEY:?}
+      LOOPSANDBOX_GATEWAY_TENANT_PLAN: team
+      LOOPSANDBOX_SECRETS_KEY: ${SANDBOX_SECRETS_KEY:?}
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    # The Docker socket is root's.
+    user: "0:0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      # The gateway of the core VPC's network: the console's pods reach it, the internet
+      # does not, and a sandbox is refused every private address.
+      - "${SANDBOX_BIND:?}:8080"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
