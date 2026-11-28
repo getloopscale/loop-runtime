@@ -35,7 +35,7 @@ vars:
   # The emulator release the environment runs, and the SHA-256 of its Linux binary.
   EMULATOR_REPOSITORY: paulohenriquevn/aws-emulator
   # The emulator release the environment runs, and the SHA-256 of its two Linux binaries.
-  EMULATOR_VERSION: v0.4.3-rc.6
+  EMULATOR_VERSION: v0.4.3-rc.7
   EMULATOR_SHA256: 2102d53d6f0df88e4fe4f823ce53ff67fa42bf31334de37234bc3deb7f83c9b2
   PROVISIONER_SHA256: 5b1a7b200b983948a57cc458d354f65e7624dd63081b5cfea2fbe0bf9f77b7c7
   EMULATOR_DIR: /opt/aws-emulator/{{.EMULATOR_VERSION}}
