@@ -113,7 +113,7 @@ platformImages:
     # getloopscale/loop-console publishes these two (private on GHCR, pulled with
     # aws.imagePullSecret). Required while profile.loopRuntimeCloud is on.
     loop-console: "develop-4c1c5d3"
-    loop-console-dashboard: "develop-6409ac2"
+    loop-console-dashboard: "develop-0eb09e2"
     # getloopscale/loop-sandbox publishes this one, public on GHCR. It is not a chart's
     # image: infra/staging/sandbox.sh runs it on the host's Docker. The first build
     # with the gateway authentication, a plain `pip install` that works and no
