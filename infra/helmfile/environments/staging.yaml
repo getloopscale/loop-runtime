@@ -118,7 +118,7 @@ platformImages:
     # image: infra/staging/sandbox.sh runs it on the host's Docker. The first build
     # with the gateway authentication, a plain `pip install` that works and no
     # process ulimit, which a host shared with pods exceeds.
-    loop-sandbox: "sha-d93f1a8"
+    loop-sandbox: "sha-22723dc"
     # getloopscale/looptrace publishes this one, public on GHCR.
     looptrace: "develop-e98ec23"
 
