@@ -366,9 +366,12 @@ tasks:
         # containerd. A production environment gives it hosts of its own. It trusts the
         # public half of the key loop-console signs with, which the seed above wrote, and
         # it starts before the core sync installs the console that calls it.
-        SANDBOX_GATEWAY_PUBKEY="$(aws secretsmanager get-secret-value --secret-id loop-runtime/staging/platform \
+        LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY="$(aws secretsmanager get-secret-value --secret-id loop-runtime/staging/platform \
           --query SecretString --output text | jq -er '."service-auth-ed25519-public-key"')"
-        export SANDBOX_GATEWAY_PUBKEY
+        # loop-runtime-api trusts the same key: with a signing key the console signs
+        # what it forwards to the API too, and an API that trusts none refuses it all.
+        export LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY
+        export SANDBOX_GATEWAY_PUBKEY="$LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY"
         bash infra/staging/sandbox.sh up
         LOOP_RUNTIME_SANDBOX_API_URL="$(bash infra/staging/sandbox.sh address)"
         export LOOP_RUNTIME_SANDBOX_API_URL

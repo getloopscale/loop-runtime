@@ -245,3 +245,23 @@ func TestStagingValidateSelectsTheSandboxJourney(t *testing.T) {
 		t.Error("the sandbox journey calls Skip: a step that cannot run must fail, not pass as skipped")
 	}
 }
+
+// Once the signing key exists, loop-console signs every call it forwards to
+// loop-runtime-api as well. An API that trusts no key then answers 401 to all of them,
+// which took the whole console down on staging.
+func TestTheStagingAPITrustsTheKeyTheConsoleSignsWith(t *testing.T) {
+	values, err := os.ReadFile(filepath.Join(repoRoot(), "infra/helmfile/values/staging/loop-runtime-api.yaml.gotmpl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`loopRuntimeServiceAuthEd25519PublicCurrent:\s*\{\{\s*requiredEnv "LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY"`).Match(values) {
+		t.Error("values/staging/loop-runtime-api.yaml.gotmpl does not set config.loopRuntimeServiceAuthEd25519PublicCurrent from LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY")
+	}
+	taskfile, err := os.ReadFile(filepath.Join(repoRoot(), "taskfiles", "staging.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(taskfile), "export LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY") {
+		t.Error("staging:platform does not export LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY for the core sync")
+	}
+}

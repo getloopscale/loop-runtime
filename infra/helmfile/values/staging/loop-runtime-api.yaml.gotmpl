@@ -28,6 +28,10 @@ ingressRoute:
 
 config:
   loopRuntimeEnv: "production"
+  # The public half of the key loop-console signs its forwarded calls with
+  # (service-auth-ed25519-public-key of the platform secret, read by staging:platform).
+  # Without it the API refuses every call the console signs.
+  loopRuntimeServiceAuthEd25519PublicCurrent: {{ requiredEnv "LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY" | quote }}
   # Tenant secrets are encrypted by OpenBao's transit engine on the secrets cluster (ADR
   # 2026-11-25 tenant secrets on OpenBao). The name resolves on core to the selector-less
   # Service infra/staging/openbao.sh points at the secrets cluster's NodePort, so the

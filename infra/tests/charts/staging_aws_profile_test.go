@@ -30,7 +30,13 @@ var stagingOutputs = []string{
 	// Not an infra-live output: core's secret-fetch ALB, which the task reads from its
 	// Ingress after the core sync and before the cells (secret_fetch_broker_test.go).
 	"LOOP_RUNTIME_CORE_API_ALB_DNS_NAME=" + stagingCoreAPIALB,
+	// Not an infra-live output either: the public half of the key loop-console signs
+	// with, which the task reads from the platform secret.
+	"LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_KEY=" + stagingServiceAuthPublicKey,
 }
+
+// 32 zero bytes in base64: the form of an Ed25519 public key.
+const stagingServiceAuthPublicKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 
 const stagingEdgeKVSArn = "arn:aws:cloudfront::000000000000:key-value-store/edge-routes-test"
 
@@ -39,6 +45,11 @@ const stagingEdgeKVSArn = "arn:aws:cloudfront::000000000000:key-value-store/edge
 func TestStagingApiPublishesRoutesToTheEdgeKeyValueStore(t *testing.T) {
 	rendered := helmfileTemplate(t, "core.helmfile.yaml.gotmpl", "staging", "loop-runtime-api", "charts/loop-runtime-api", stagingOutputs...)
 	config := renderedObject(t, rendered, "ConfigMap", "loop-runtime-api")
+	// loop-console signs its calls once it holds a key; an API with no trusted key
+	// refuses them all.
+	if got := dig(config, "data", "LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT"); got != stagingServiceAuthPublicKey {
+		t.Errorf("LOOP_RUNTIME_SERVICE_AUTH_ED25519_PUBLIC_CURRENT = %v, want the console's public key", got)
+	}
 	if got := dig(config, "data", "LOOP_RUNTIME_EDGE_KVS_ARN"); got != stagingEdgeKVSArn {
 		t.Errorf("LOOP_RUNTIME_EDGE_KVS_ARN = %v, want %s", got, stagingEdgeKVSArn)
 	}
